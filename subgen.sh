@@ -103,26 +103,21 @@ _install_subgen() {
 
 	# Create pyproject.toml for uv if only requirements.txt exists
 	if [ -f "$app_dir/requirements.txt" ] && [ ! -f "$app_dir/pyproject.toml" ]; then
+		# Build dependencies array from requirements.txt
+		deps_array=$(grep -vE '^\s*#|^\s*$' "$app_dir/requirements.txt" | sed 's/.*/"&",/' | tr '\n' ' ' | sed 's/, $//')
 		cat >"$app_dir/pyproject.toml" <<PYPROJ
 [project]
 name = "subgen"
 version = "0.0.0"
 requires-python = ">=3.9,<3.12"
-dependencies = []
-
-[tool.uv]
+dependencies = [$deps_array]
 PYPROJ
-		# Add dependencies from requirements.txt (filter comments and empty lines)
-		su - "$user" -c "cd '$app_dir' && uv add \$(grep -vE '^\\s*#|^\\s*\$' requirements.txt | tr '\\n' ' ')" >>"$log" 2>&1 || {
-			echo_error "Failed to add ${app_name^} dependencies"
-			exit 1
-		}
-	else
-		su - "$user" -c "cd '$app_dir' && uv sync" >>"$log" 2>&1 || {
-			echo_error "Failed to install ${app_name^} dependencies"
-			exit 1
-		}
 	fi
+
+	su - "$user" -c "cd '$app_dir' && uv sync" >>"$log" 2>&1 || {
+		echo_error "Failed to install ${app_name^} dependencies"
+		exit 1
+	}
 
 	echo_progress_done "Dependencies installed"
 
