@@ -236,12 +236,14 @@ _nginx_seerr() {
 		# If no cert yet, invoke Swizzin's LE helper
 		if [ ! -d "$cert_dir" ]; then
 			echo_info "No Let's Encrypt cert found at $cert_dir, requesting one via box install letsencrypt"
-			echo_info "Please answer the Let's Encrypt prompts..."
 
-			LE_hostname="$le_hostname" box install letsencrypt </dev/tty
+			# Use uppercase variable names as per Swizzin docs
+			LE_HOSTNAME="$le_hostname" LE_DEFAULTCONF=no LE_BOOL_CF=no \
+				box install letsencrypt >>"$log" 2>&1
 			le_result=$?
 			if [ $le_result -ne 0 ]; then
 				echo_error "Failed to obtain Let's Encrypt certificate for $le_hostname"
+				echo_error "Check $log for details or run manually: LE_HOSTNAME=$le_hostname box install letsencrypt"
 				echo_progress_done "Nginx configuration skipped due to LE failure"
 				return 1
 			fi
