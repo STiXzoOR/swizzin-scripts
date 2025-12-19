@@ -243,23 +243,18 @@ _nginx_seerr() {
 			if [ "$le_interactive" = "yes" ]; then
 				# Interactive mode - let user answer prompts (e.g., for CloudFlare DNS)
 				echo_info "Running Let's Encrypt in interactive mode..."
-				export LE_hostname="$le_hostname"
-				box install letsencrypt </dev/tty
+				LE_hostname="$le_hostname" box install letsencrypt </dev/tty
 				le_result=$?
-				unset LE_hostname
 				if [ $le_result -ne 0 ]; then
 					echo_error "Failed to obtain Let's Encrypt certificate for $le_hostname"
 					echo_progress_done "Nginx configuration skipped due to LE failure"
 					return 1
 				fi
 			else
-				# Non-interactive mode - export all variables to skip prompts
-				export LE_hostname="$le_hostname"
-				export LE_defaultconf="no"
-				export LE_bool_cf="no"
-				box install letsencrypt >>"$log" 2>&1
+				# Non-interactive mode - use env to pass variables to skip prompts
+				env LE_hostname="$le_hostname" LE_defaultconf=no LE_bool_cf=no \
+					box install letsencrypt >>"$log" 2>&1
 				le_result=$?
-				unset LE_hostname LE_defaultconf LE_bool_cf
 				if [ $le_result -ne 0 ]; then
 					echo_error "Failed to obtain Let's Encrypt certificate for $le_hostname"
 					echo_error "You may need to run: LE_hostname=$le_hostname box install letsencrypt manually"
