@@ -245,8 +245,10 @@ _nginx_seerr() {
 			echo_info "No Let's Encrypt cert found at $cert_dir, requesting one via box install letsencrypt"
 
 			# We are already root, no need for sudo
+			# Set all LE variables to avoid interactive prompts
 			LE_hostname="$le_hostname" \
 				LE_defaultconf=no \
+				LE_bool_cf=no \
 				box install letsencrypt >>"$log" 2>&1 || {
 				echo_error "Failed to obtain Let's Encrypt certificate for $le_hostname"
 				echo_error "You may need to run: LE_hostname=$le_hostname box install letsencrypt manually"
