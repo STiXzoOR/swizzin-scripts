@@ -104,8 +104,8 @@ _install_huntarr() {
 
 	# Create pyproject.toml for uv if only requirements.txt exists
 	if [ -f "$app_dir/requirements.txt" ] && [ ! -f "$app_dir/pyproject.toml" ]; then
-		# Build dependencies array from requirements.txt
-		deps_array=$(grep -vE '^\s*#|^\s*$' "$app_dir/requirements.txt" | sed 's/.*/"&",/' | tr '\n' ' ' | sed 's/, $//')
+		# Build dependencies array from requirements.txt (strip comments)
+		deps_array=$(grep -vE '^\s*#|^\s*$' "$app_dir/requirements.txt" | sed 's/\s*#.*//' | sed 's/.*/"&",/' | tr '\n' ' ' | sed 's/, $//')
 		cat >"$app_dir/pyproject.toml" <<PYPROJ
 [project]
 name = "huntarr"
