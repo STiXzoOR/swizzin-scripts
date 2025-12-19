@@ -133,6 +133,7 @@ host: "127.0.0.1"
 port: ${app_port}
 
 # How often to check for changes (seconds)
+# Note: This should match --dir-cache-time in rclone mount service
 check_for_changes_every_secs: 10
 
 # Repair settings
@@ -227,12 +228,20 @@ Group=${app_group}
 ExecStartPre=/bin/sleep 2
 ExecStart=/usr/bin/rclone mount zurg: $app_mount_point \\
     --config /home/${user}/.config/rclone/rclone.conf \\
-    --dir-cache-time 30s \\
+    --read-only \\
+    --no-modtime \\
+    --no-checksum \\
+    --poll-interval 0 \\
+    --dir-cache-time 10s \\
+    --attr-timeout 15s \\
+    --vfs-read-wait 75ms \\
     --vfs-cache-mode full \\
-    --vfs-cache-max-age 24h \\
-    --vfs-read-chunk-size 64M \\
-    --vfs-read-chunk-size-limit 2G \\
-    --buffer-size 64M \\
+    --vfs-cache-max-size 256G \\
+    --vfs-cache-max-age 72h \\
+    --vfs-cache-poll-interval 10m \\
+    --buffer-size 32M \\
+    --vfs-read-chunk-size 2M \\
+    --vfs-read-chunk-size-limit 64M \\
     --allow-other \\
     --uid $(id -u "$user") \\
     --gid $(id -g "$user") \\
