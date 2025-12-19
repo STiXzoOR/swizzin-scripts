@@ -388,7 +388,6 @@ _protect_app() {
 _unprotect_app() {
 	local app="$1"
 	local conf="/etc/nginx/apps/${app}.conf"
-	local backup="$backup_dir/${app}.conf.bak"
 
 	if [ ! -f "$conf" ]; then
 		return
@@ -448,7 +447,7 @@ _install() {
 	case "$state" in
 	"not_installed")
 		_install_organizr
-		;&  # fallthrough
+		;& # fallthrough
 	"subfolder")
 		_request_certificate "$domain"
 		_create_subdomain_vhost "$domain" "$le_hostname"
