@@ -52,6 +52,9 @@ if [ "$1" != "--remove" ]; then
 
 	# LE hostname used with box install letsencrypt
 	le_hostname="${SEERR_LE_HOSTNAME:-$app_domain}"
+
+	# Set to "yes" to run Let's Encrypt interactively
+	le_interactive="${SEERR_LE_INTERACTIVE:-no}"
 fi
 
 fnm_install_url="https://fnm.vercel.app/install"
@@ -236,10 +239,18 @@ _nginx_seerr() {
 		if [ ! -d "$cert_dir" ]; then
 			echo_info "No Let's Encrypt cert found at $cert_dir, requesting one via box install letsencrypt"
 
-			# Use uppercase variable names as per Swizzin docs
-			LE_HOSTNAME="$le_hostname" LE_DEFAULTCONF=no LE_BOOL_CF=no \
-				box install letsencrypt >>"$log" 2>&1
-			le_result=$?
+			if [ "$le_interactive" = "yes" ]; then
+				# Interactive mode - let user answer prompts (e.g., for CloudFlare DNS)
+				echo_info "Running Let's Encrypt in interactive mode..."
+				LE_HOSTNAME="$le_hostname" box install letsencrypt </dev/tty
+				le_result=$?
+			else
+				# Non-interactive mode - use uppercase variable names as per Swizzin docs
+				LE_HOSTNAME="$le_hostname" LE_DEFAULTCONF=no LE_BOOL_CF=no \
+					box install letsencrypt >>"$log" 2>&1
+				le_result=$?
+			fi
+
 			if [ $le_result -ne 0 ]; then
 				echo_error "Failed to obtain Let's Encrypt certificate for $le_hostname"
 				echo_error "Check $log for details or run manually: LE_HOSTNAME=$le_hostname box install letsencrypt"
