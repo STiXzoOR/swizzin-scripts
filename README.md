@@ -22,22 +22,18 @@ A collection of installer scripts for integrating additional applications into [
 
 ## Installation
 
-### Quick Install
-
 ```bash
-# Download and run a script directly
-curl -fsSL https://raw.githubusercontent.com/STiXzoOR/swizzin-scripts/main/<script>.sh | bash
-```
+# Switch to root
+sudo su -
 
-### Manual Install
+# Download the script
+wget https://raw.githubusercontent.com/STiXzoOR/swizzin-scripts/main/<script>.sh
+# or
+curl -O https://raw.githubusercontent.com/STiXzoOR/swizzin-scripts/main/<script>.sh
 
-```bash
-# Clone the repository
-git clone https://github.com/STiXzoOR/swizzin-scripts.git
-cd swizzin-scripts
-
-# Run the desired installer
-bash <script>.sh
+# Make executable and run
+chmod +x ~/<script>.sh
+~/<script>.sh
 ```
 
 ## Scripts
