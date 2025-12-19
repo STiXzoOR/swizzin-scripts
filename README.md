@@ -8,6 +8,7 @@ A collection of installer scripts for integrating additional applications into [
 |--------|-------------|-------------|
 | [decypharr.sh](#decypharr) | [Decypharr](https://github.com/sirrobot01/decypharr) | Encrypted file/torrent management via rclone and qBittorrent |
 | [notifiarr.sh](#notifiarr) | [Notifiarr](https://github.com/Notifiarr/notifiarr) | Notification relay client for *arr apps and Plex |
+| [organizr-subdomain.sh](#organizr-subdomain) | [Organizr](https://github.com/causefx/Organizr) | Convert Organizr to subdomain with SSO authentication |
 | [seerr.sh](#seerr) | [Seerr](https://github.com/seerr-team/seerr) | Media request platform (Overseerr fork) |
 | [byparr.sh](#byparr) | [Byparr](https://github.com/ThePhaseless/Byparr) | FlareSolverr alternative for bypassing anti-bot protections |
 | [huntarr.sh](#huntarr) | [Huntarr](https://github.com/plexguide/Huntarr.io) | Automated media discovery for Sonarr, Radarr, Lidarr, etc. |
@@ -72,6 +73,44 @@ bash notifiarr.sh
 **Config:** `/home/<user>/.config/Notifiarr/notifiarr.conf`
 
 **Login:** Username: `admin` | Password: your API key (can be changed in Profile page)
+
+---
+
+### Organizr Subdomain
+
+Converts Swizzin's default Organizr installation from subfolder (`/organizr`) to subdomain mode with SSO authentication for other apps.
+
+```bash
+# Required: Set the public domain for Organizr
+export ORGANIZR_DOMAIN="organizr.example.com"
+
+bash organizr-subdomain.sh
+```
+
+**Access:** `https://organizr.example.com/`
+
+**Config:** `/opt/swizzin/organizr-auth.conf`
+
+**Features:**
+- Automatic Let's Encrypt certificate
+- SSO authentication for selected apps (replaces htpasswd)
+- Interactive app selection menu
+- Configurable auth levels per app (Admin, User, etc.)
+
+**Additional Commands:**
+
+```bash
+# Modify which apps are protected
+bash organizr-subdomain.sh --configure
+
+# Revert to subfolder mode
+bash organizr-subdomain.sh --revert
+
+# Complete removal
+bash organizr-subdomain.sh --remove
+```
+
+**Note:** This script runs `box install organizr` first if Organizr isn't already installed.
 
 ---
 
@@ -199,6 +238,7 @@ All scripts support an optional `<APP>_OWNER` variable to specify the user accou
 
 | Variable | Script | Required | Description |
 |----------|--------|----------|-------------|
+| `ORGANIZR_DOMAIN` | organizr-subdomain.sh | **Yes** | Public FQDN for Organizr |
 | `SEERR_DOMAIN` | seerr.sh | **Yes** | Public FQDN for Seerr |
 | `SEERR_LE_HOSTNAME` | seerr.sh | No | Let's Encrypt hostname |
 | `DN_API_KEY` | notifiarr.sh | No* | Notifiarr.com API key (prompted if not set) |
