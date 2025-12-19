@@ -215,6 +215,13 @@ _remove_decypharr() {
 
 	echo_info "Removing ${app_name^}..."
 
+	# Ask about purging configuration
+	if ask "Would you like to purge the configuration?" N; then
+		purgeconfig="true"
+	else
+		purgeconfig="false"
+	fi
+
 	# Stop and disable service
 	echo_progress_start "Stopping and disabling ${app_name^} service"
 	systemctl stop "$app_servicefile" 2>/dev/null || true
@@ -244,18 +251,21 @@ _remove_decypharr() {
 		echo_progress_done "Removed from panel"
 	fi
 
-	# Remove config directory
-	echo_progress_start "Removing configuration files"
-	rm -rf "$app_configdir"
-	echo_progress_done "Configuration removed"
-
-	# Remove swizdb entry
-	swizdb clear "$app_name/owner" 2>/dev/null || true
+	# Remove config directory if purging
+	if [ "$purgeconfig" = "true" ]; then
+		echo_progress_start "Purging configuration files"
+		rm -rf "$app_configdir"
+		echo_progress_done "Configuration purged"
+		# Remove swizdb entry
+		swizdb clear "$app_name/owner" 2>/dev/null || true
+	else
+		echo_info "Configuration files kept at: $app_configdir"
+	fi
 
 	# Remove lock file
 	rm -f "/install/.$app_lockname.lock"
 
-	echo_success "${app_name^} has been completely removed"
+	echo_success "${app_name^} has been removed"
 	exit 0
 }
 

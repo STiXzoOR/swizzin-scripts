@@ -199,6 +199,13 @@ _remove_zurg() {
 
 	echo_info "Removing ${app_name^}..."
 
+	# Ask about purging configuration
+	if ask "Would you like to purge the configuration?" N; then
+		purgeconfig="true"
+	else
+		purgeconfig="false"
+	fi
+
 	# Stop and disable rclone mount service first
 	echo_progress_start "Stopping and disabling rclone mount service"
 	systemctl stop "$app_mount_servicefile" 2>/dev/null || true
@@ -234,23 +241,26 @@ _remove_zurg() {
 		echo_progress_done "Removed from panel"
 	fi
 
-	# Remove config directory
-	echo_progress_start "Removing configuration files"
-	rm -rf "$app_configdir"
-	echo_progress_done "Configuration removed"
+	# Remove config directory if purging
+	if [ "$purgeconfig" = "true" ]; then
+		echo_progress_start "Purging configuration files"
+		rm -rf "$app_configdir"
+		echo_progress_done "Configuration purged"
+		# Remove swizdb entry
+		swizdb clear "$app_name/owner" 2>/dev/null || true
+	else
+		echo_info "Configuration files kept at: $app_configdir"
+	fi
 
 	# Remove mount point
 	if [ -d "$app_mount_point" ]; then
 		rmdir "$app_mount_point" 2>/dev/null || true
 	fi
 
-	# Remove swizdb entry
-	swizdb clear "$app_name/owner" 2>/dev/null || true
-
 	# Remove lock file
 	rm -f "/install/.$app_lockname.lock"
 
-	echo_success "${app_name^} has been completely removed"
+	echo_success "${app_name^} has been removed"
 	exit 0
 }
 

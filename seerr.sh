@@ -243,22 +243,29 @@ _nginx_seerr() {
 			if [ "$le_interactive" = "yes" ]; then
 				# Interactive mode - let user answer prompts (e.g., for CloudFlare DNS)
 				echo_info "Running Let's Encrypt in interactive mode..."
-				LE_hostname="$le_hostname" box install letsencrypt </dev/tty || {
+				export LE_hostname="$le_hostname"
+				box install letsencrypt </dev/tty
+				le_result=$?
+				unset LE_hostname
+				if [ $le_result -ne 0 ]; then
 					echo_error "Failed to obtain Let's Encrypt certificate for $le_hostname"
 					echo_progress_done "Nginx configuration skipped due to LE failure"
 					return 1
-				}
+				fi
 			else
-				# Non-interactive mode - set all variables to skip prompts
-				LE_hostname="$le_hostname" \
-					LE_defaultconf=no \
-					LE_bool_cf=no \
-					box install letsencrypt >>"$log" 2>&1 || {
+				# Non-interactive mode - export all variables to skip prompts
+				export LE_hostname="$le_hostname"
+				export LE_defaultconf="no"
+				export LE_bool_cf="no"
+				box install letsencrypt >>"$log" 2>&1
+				le_result=$?
+				unset LE_hostname LE_defaultconf LE_bool_cf
+				if [ $le_result -ne 0 ]; then
 					echo_error "Failed to obtain Let's Encrypt certificate for $le_hostname"
 					echo_error "You may need to run: LE_hostname=$le_hostname box install letsencrypt manually"
 					echo_progress_done "Nginx configuration skipped due to LE failure"
 					return 1
-				}
+				fi
 			fi
 
 			echo_info "Let's Encrypt certificate issued for $le_hostname"
@@ -321,6 +328,13 @@ _remove_seerr() {
 
 	echo_info "Removing ${app_name^}..."
 
+	# Ask about purging configuration
+	if ask "Would you like to purge the configuration?" N; then
+		purgeconfig="true"
+	else
+		purgeconfig="false"
+	fi
+
 	# Stop and disable service
 	echo_progress_start "Stopping and disabling ${app_name^} service"
 	systemctl stop "$app_servicefile" 2>/dev/null || true
@@ -353,18 +367,21 @@ _remove_seerr() {
 		echo_progress_done "Removed from panel"
 	fi
 
-	# Remove config directory
-	echo_progress_start "Removing configuration files"
-	rm -rf "$app_configdir"
-	echo_progress_done "Configuration removed"
-
-	# Remove swizdb entry
-	swizdb clear "$app_name/owner" 2>/dev/null || true
+	# Remove config directory if purging
+	if [ "$purgeconfig" = "true" ]; then
+		echo_progress_start "Purging configuration files"
+		rm -rf "$app_configdir"
+		echo_progress_done "Configuration purged"
+		# Remove swizdb entry
+		swizdb clear "$app_name/owner" 2>/dev/null || true
+	else
+		echo_info "Configuration files kept at: $app_configdir"
+	fi
 
 	# Remove lock file
 	rm -f "/install/.$app_lockname.lock"
 
-	echo_success "${app_name^} has been completely removed"
+	echo_success "${app_name^} has been removed"
 	echo_info "Note: Let's Encrypt certificate was not removed. Remove manually if needed."
 	exit 0
 }
