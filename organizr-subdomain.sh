@@ -164,6 +164,8 @@ server {
     ssl_certificate_key ${cert_dir}/key.pem;
     include snippets/ssl-params.conf;
 
+    include /etc/nginx/apps/*.conf;
+
     root /srv/organizr;
     index index.php;
 
@@ -181,6 +183,10 @@ server {
 
     location /api/v2 {
         try_files \$uri /api/v2/index.php\$is_args\$args;
+    }
+
+    location ~ /\.ht {
+        deny all;
     }
 }
 VHOST
