@@ -197,7 +197,6 @@ SyslogIdentifier=$app_name
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=full
-ProtectHome=read-only
 ProtectClock=true
 ProtectControlGroups=true
 ProtectHostname=true
