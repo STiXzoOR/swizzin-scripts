@@ -97,15 +97,16 @@ _install_seerr() {
 	fi
 
 	# Source fnm environment and install Node LTS + pnpm
-	su - "$user" -c 'export FNM_PATH="$HOME/.local/share/fnm"; export PATH="$FNM_PATH:$PATH"; eval "$(fnm env)"; fnm install --lts && fnm use --lts && npm install -g pnpm@9' >>"$log" 2>&1 || {
+	fnm_env='export FNM_PATH="$HOME/.local/share/fnm"; export PATH="$FNM_PATH:$PATH"; eval "$(fnm env)"'
+	su - "$user" -c "$fnm_env; fnm install lts-latest && fnm use lts-latest && fnm default lts-latest && npm install -g pnpm@9" >>"$log" 2>&1 || {
 		echo_error "Failed to install Node LTS and pnpm via fnm"
 		exit 1
 	}
 
-	# Resolve absolute Node path for LTS and bake into systemd
-	node_path="$(su - "$user" -c 'export FNM_PATH="$HOME/.local/share/fnm"; export PATH="$FNM_PATH:$PATH"; eval "$(fnm env)"; fnm which --lts' 2>>"$log")"
+	# Resolve absolute Node path and bake into systemd
+	node_path="$(su - "$user" -c "$fnm_env; which node" 2>>"$log")"
 	if [ -z "$node_path" ]; then
-		echo_error "Could not resolve Node LTS path via fnm"
+		echo_error "Could not resolve Node path"
 		exit 1
 	fi
 	echo_info "Using Node binary at: $node_path"
@@ -145,8 +146,7 @@ _install_seerr() {
 		sed -i "s|256000,|256000,\n    cpus: 6,|g" "$app_dir/next.config.js" || true
 	fi
 
-	# Install deps + build using pnpm as the app user (source fnm environment)
-	fnm_env='export FNM_PATH="$HOME/.local/share/fnm"; export PATH="$FNM_PATH:$PATH"; eval "$(fnm env)"'
+	# Install deps + build using pnpm as the app user
 	su - "$user" -c "$fnm_env; cd '$app_dir' && pnpm install" >>"$log" 2>&1 || {
 		echo_error "Failed to install Seerr dependencies"
 		exit 1
