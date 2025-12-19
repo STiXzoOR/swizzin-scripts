@@ -113,8 +113,8 @@ dependencies = []
 
 [tool.uv]
 PYPROJ
-		# Add dependencies from requirements.txt
-		su - "$user" -c "cd '$app_dir' && uv add \$(cat requirements.txt | grep -v '^#' | grep -v '^\$' | tr '\n' ' ')" >>"$log" 2>&1 || {
+		# Add dependencies from requirements.txt (filter comments and empty lines)
+		su - "$user" -c "cd '$app_dir' && uv add \$(grep -vE '^\\s*#|^\\s*\$' requirements.txt | tr '\\n' ' ')" >>"$log" 2>&1 || {
 			echo_error "Failed to add ${app_name^} dependencies"
 			exit 1
 		}
