@@ -76,11 +76,16 @@ _install_notifiarr() {
 
 	echo_info "Checking for ${app_name} API Key"
 	if ! grep -qE 'Environment=DN_API_KEY=[0-9a-fA-F-]{36}' "/etc/systemd/system/$app_servicefile" 2>/dev/null; then
-		echo_query "Paste your 'All' API Key from notifiarr.com profile page: "
+		echo_query "Paste your 'All' API Key from notifiarr.com profile page"
 		read -r API_KEY
 
+		if [ -z "$API_KEY" ]; then
+			echo_error "API Key is required. Cannot continue!"
+			exit 1
+		fi
+
 		if ! echo "$API_KEY" | grep -q '^[0-9a-fA-F-]\{36\}$'; then
-			echo_error "Invalid API Key format. Must be 36 hexadecimal characters. Cannot continue!"
+			echo_error "Invalid API Key format. Must be 36 characters (hexadecimal with dashes). Cannot continue!"
 			exit 1
 		fi
 	fi
