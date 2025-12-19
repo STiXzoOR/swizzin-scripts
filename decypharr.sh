@@ -107,7 +107,7 @@ _install_decypharr() {
 	echo_progress_start "Creating default config"
 	cat >"$app_configdir/config.json" <<CFG
 {
-  "url_base": "/",
+  "url_base": "/${app_baseurl}/",
   "port": "${app_port}",
   "log_level": "info",
   "qbittorrent": {
@@ -258,7 +258,7 @@ _nginx_decypharr() {
 			}
 
 			location ^~ /$app_baseurl/ {
-			    proxy_pass http://127.0.0.1:$app_port;
+			    proxy_pass http://127.0.0.1:$app_port/$app_baseurl/;
 			    proxy_set_header Host \$host;
 			    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
 			    proxy_set_header X-Forwarded-Host \$host;
@@ -270,14 +270,11 @@ _nginx_decypharr() {
 
 			    auth_basic "What's the password?";
 			    auth_basic_user_file /etc/htpasswd.d/htpasswd.${user};
-
-			    rewrite ^/$app_baseurl/(.*) /\$1 break;
 			}
 
 			location ^~ /$app_baseurl/api {
 			    auth_request off;
-			    proxy_pass http://127.0.0.1:$app_port;
-			    rewrite ^/$app_baseurl/(.*) /\$1 break;
+			    proxy_pass http://127.0.0.1:$app_port/$app_baseurl/api;
 			}
 		NGX
 
