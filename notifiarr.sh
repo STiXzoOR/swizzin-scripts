@@ -77,7 +77,7 @@ _install_notifiarr() {
 	echo_info "Checking for ${app_name} API Key"
 	if ! grep -qE 'Environment=DN_API_KEY=[0-9a-fA-F-]{36}' "/etc/systemd/system/$app_servicefile" 2>/dev/null; then
 		echo_query "Paste your 'All' API Key from notifiarr.com profile page"
-		read -r API_KEY
+		read -r API_KEY </dev/tty
 
 		if [ -z "$API_KEY" ]; then
 			echo_error "API Key is required. Cannot continue!"

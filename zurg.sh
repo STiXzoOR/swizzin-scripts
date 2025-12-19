@@ -76,7 +76,7 @@ _install_zurg() {
 	echo_info "Checking for Real-Debrid API token"
 	if [ ! -f "$app_configdir/config.yml" ] || ! grep -qE '^token: .+' "$app_configdir/config.yml" 2>/dev/null; then
 		echo_query "Paste your Real-Debrid API token" "from https://real-debrid.com/apitoken"
-		read -r RD_TOKEN
+		read -r RD_TOKEN </dev/tty
 
 		if [ -z "$RD_TOKEN" ]; then
 			echo_error "Real-Debrid API token is required. Cannot continue!"
