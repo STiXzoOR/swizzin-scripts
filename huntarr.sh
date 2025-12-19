@@ -110,7 +110,7 @@ _install_huntarr() {
 [project]
 name = "huntarr"
 version = "0.0.0"
-requires-python = ">=3.11"
+requires-python = ">=3.11,<3.13"
 dependencies = [$deps_array]
 PYPROJ
 	fi
