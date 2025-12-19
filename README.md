@@ -84,6 +84,12 @@ Converts Swizzin's default Organizr installation from subfolder (`/organizr`) to
 # Required: Set the public domain for Organizr
 export ORGANIZR_DOMAIN="organizr.example.com"
 
+# Optional: Custom Let's Encrypt hostname (defaults to ORGANIZR_DOMAIN)
+export ORGANIZR_LE_HOSTNAME="example.com"
+
+# Optional: Interactive Let's Encrypt (for CloudFlare DNS validation)
+export ORGANIZR_LE_INTERACTIVE="yes"
+
 bash organizr-subdomain.sh
 ```
 
@@ -239,6 +245,8 @@ All scripts support an optional `<APP>_OWNER` variable to specify the user accou
 | Variable | Script | Required | Description |
 |----------|--------|----------|-------------|
 | `ORGANIZR_DOMAIN` | organizr-subdomain.sh | **Yes** | Public FQDN for Organizr |
+| `ORGANIZR_LE_HOSTNAME` | organizr-subdomain.sh | No | Let's Encrypt hostname |
+| `ORGANIZR_LE_INTERACTIVE` | organizr-subdomain.sh | No | Set to `yes` for interactive LE |
 | `SEERR_DOMAIN` | seerr.sh | **Yes** | Public FQDN for Seerr |
 | `SEERR_LE_HOSTNAME` | seerr.sh | No | Let's Encrypt hostname |
 | `DN_API_KEY` | notifiarr.sh | No* | Notifiarr.com API key (prompted if not set) |

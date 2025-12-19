@@ -83,25 +83,37 @@ _install_organizr() {
 # Request Let's Encrypt certificate
 _request_certificate() {
 	local domain="$1"
-	local cert_dir="/etc/nginx/ssl/$domain"
+	# Allow custom LE hostname (e.g., for wildcard certs)
+	local le_hostname="${ORGANIZR_LE_HOSTNAME:-$domain}"
+	local cert_dir="/etc/nginx/ssl/$le_hostname"
+	local le_interactive="${ORGANIZR_LE_INTERACTIVE:-no}"
 
 	if [ -d "$cert_dir" ]; then
-		echo_info "Let's Encrypt certificate already exists for $domain"
+		echo_info "Let's Encrypt certificate already exists for $le_hostname"
 		return 0
 	fi
 
-	echo_info "Requesting Let's Encrypt certificate for $domain"
-	LE_HOSTNAME="$domain" LE_DEFAULTCONF=no LE_BOOL_CF=no \
-		box install letsencrypt >>"$log" 2>&1
-	local result=$?
+	echo_info "Requesting Let's Encrypt certificate for $le_hostname"
+
+	if [ "$le_interactive" = "yes" ]; then
+		# Interactive mode - let user answer prompts (e.g., for CloudFlare DNS)
+		echo_info "Running Let's Encrypt in interactive mode..."
+		LE_HOSTNAME="$le_hostname" box install letsencrypt </dev/tty
+		local result=$?
+	else
+		# Non-interactive mode
+		LE_HOSTNAME="$le_hostname" LE_DEFAULTCONF=no LE_BOOL_CF=no \
+			box install letsencrypt >>"$log" 2>&1
+		local result=$?
+	fi
 
 	if [ $result -ne 0 ]; then
-		echo_error "Failed to obtain Let's Encrypt certificate for $domain"
-		echo_error "Check $log for details or run manually: LE_HOSTNAME=$domain box install letsencrypt"
+		echo_error "Failed to obtain Let's Encrypt certificate for $le_hostname"
+		echo_error "Check $log for details or run manually: LE_HOSTNAME=$le_hostname box install letsencrypt"
 		exit 1
 	fi
 
-	echo_info "Let's Encrypt certificate issued for $domain"
+	echo_info "Let's Encrypt certificate issued for $le_hostname"
 }
 
 # Create backup directory
@@ -125,9 +137,10 @@ _backup_file() {
 # Create subdomain nginx vhost
 _create_subdomain_vhost() {
 	local domain="$1"
+	local le_hostname="${2:-$domain}"
 	local phpv
 	phpv=$(php_service_version)
-	local cert_dir="/etc/nginx/ssl/$domain"
+	local cert_dir="/etc/nginx/ssl/$le_hostname"
 
 	echo_progress_start "Creating subdomain nginx vhost"
 
@@ -426,11 +439,13 @@ _remove_all_protection() {
 _install() {
 	local domain
 	domain=$(_get_domain)
+	local le_hostname="${ORGANIZR_LE_HOSTNAME:-$domain}"
 	local state
 	state=$(_get_install_state)
 
 	echo_info "Organizr Subdomain Setup"
 	echo_info "Domain: $domain"
+	[ "$le_hostname" != "$domain" ] && echo_info "LE Hostname: $le_hostname"
 	echo_info "Current state: $state"
 
 	case "$state" in
@@ -439,7 +454,7 @@ _install() {
 		;&  # fallthrough
 	"subfolder")
 		_request_certificate "$domain"
-		_create_subdomain_vhost "$domain"
+		_create_subdomain_vhost "$domain" "$le_hostname"
 		_create_auth_snippet "$domain"
 		_select_apps
 		_apply_protection
