@@ -199,9 +199,11 @@ All scripts support an optional `<APP>_OWNER` variable to specify the user accou
 |----------|--------|----------|-------------|
 | `SEERR_DOMAIN` | seerr.sh | **Yes** | Public FQDN for Seerr |
 | `SEERR_LE_HOSTNAME` | seerr.sh | No | Let's Encrypt hostname |
-| `DN_API_KEY` | notifiarr.sh | Interactive | Notifiarr.com API key |
-| Real-Debrid token | zurg.sh | Interactive | Real-Debrid API token |
+| `DN_API_KEY` | notifiarr.sh | No* | Notifiarr.com API key (prompted if not set) |
+| `RD_TOKEN` | zurg.sh | No* | Real-Debrid API token (prompted if not set) |
 | `<APP>_OWNER` | All | No | Application owner username |
+
+*Required for non-interactive installs (e.g., when piping to bash)
 
 ## Panel Integration
 
