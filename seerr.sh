@@ -42,6 +42,9 @@ app_domain="$SEERR_DOMAIN"
 # - for wildcard: could be example.com if you issued *.example.com manually
 le_hostname="${SEERR_LE_HOSTNAME:-$app_domain}"
 
+# Set to "yes" to run Let's Encrypt interactively (e.g., for CloudFlare DNS validation)
+le_interactive="${SEERR_LE_INTERACTIVE:-no}"
+
 # Resolve owner (same pattern as decypharr/notifiarr)
 if [ -z "$SEERR_OWNER" ]; then
 	if ! SEERR_OWNER="$(swizdb get "$app_name/owner")"; then
@@ -244,17 +247,26 @@ _nginx_seerr() {
 		if [ ! -d "$cert_dir" ]; then
 			echo_info "No Let's Encrypt cert found at $cert_dir, requesting one via box install letsencrypt"
 
-			# We are already root, no need for sudo
-			# Set all LE variables to avoid interactive prompts
-			LE_hostname="$le_hostname" \
-				LE_defaultconf=no \
-				LE_bool_cf=no \
-				box install letsencrypt >>"$log" 2>&1 || {
-				echo_error "Failed to obtain Let's Encrypt certificate for $le_hostname"
-				echo_error "You may need to run: LE_hostname=$le_hostname box install letsencrypt manually"
-				echo_progress_done "Nginx configuration skipped due to LE failure"
-				return 1
-			}
+			if [ "$le_interactive" = "yes" ]; then
+				# Interactive mode - let user answer prompts (e.g., for CloudFlare DNS)
+				echo_info "Running Let's Encrypt in interactive mode..."
+				LE_hostname="$le_hostname" box install letsencrypt </dev/tty || {
+					echo_error "Failed to obtain Let's Encrypt certificate for $le_hostname"
+					echo_progress_done "Nginx configuration skipped due to LE failure"
+					return 1
+				}
+			else
+				# Non-interactive mode - set all variables to skip prompts
+				LE_hostname="$le_hostname" \
+					LE_defaultconf=no \
+					LE_bool_cf=no \
+					box install letsencrypt >>"$log" 2>&1 || {
+					echo_error "Failed to obtain Let's Encrypt certificate for $le_hostname"
+					echo_error "You may need to run: LE_hostname=$le_hostname box install letsencrypt manually"
+					echo_progress_done "Nginx configuration skipped due to LE failure"
+					return 1
+				}
+			fi
 
 			echo_info "Let's Encrypt certificate issued for $le_hostname"
 		fi

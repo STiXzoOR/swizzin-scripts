@@ -86,6 +86,9 @@ export SEERR_DOMAIN="seerr.example.com"
 # Optional: Custom Let's Encrypt hostname (defaults to SEERR_DOMAIN)
 export SEERR_LE_HOSTNAME="example.com"
 
+# Optional: Interactive Let's Encrypt (for CloudFlare DNS validation)
+export SEERR_LE_INTERACTIVE="yes"
+
 # Optional: Set custom owner
 export SEERR_OWNER="username"
 
@@ -96,7 +99,7 @@ bash seerr.sh
 
 **Config:** `/home/<user>/.config/Seerr/`
 
-**Note:** Seerr requires a dedicated subdomain and automatically requests a Let's Encrypt certificate.
+**Note:** Seerr requires a dedicated subdomain and automatically requests a Let's Encrypt certificate. Set `SEERR_LE_INTERACTIVE=yes` to use CloudFlare DNS validation or other interactive options.
 
 ---
 
@@ -201,6 +204,7 @@ All scripts support an optional `<APP>_OWNER` variable to specify the user accou
 |----------|--------|----------|-------------|
 | `SEERR_DOMAIN` | seerr.sh | **Yes** | Public FQDN for Seerr |
 | `SEERR_LE_HOSTNAME` | seerr.sh | No | Let's Encrypt hostname |
+| `SEERR_LE_INTERACTIVE` | seerr.sh | No | Set to `yes` for interactive LE (CloudFlare DNS) |
 | `DN_API_KEY` | notifiarr.sh | No* | Notifiarr.com API key (prompted if not set) |
 | `RD_TOKEN` | zurg.sh | No* | Real-Debrid API token (prompted if not set) |
 | `<APP>_OWNER` | All | No | Application owner username |
