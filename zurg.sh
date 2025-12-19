@@ -1,6 +1,7 @@
 #!/bin/bash
 # zurg installer
 # STiXzoOR 2025
+# Usage: bash zurg.sh [--remove]
 
 . /etc/swizzin/sources/globals.sh
 
@@ -33,17 +34,10 @@ touch "$log"
 
 app_name="zurg"
 
-if [ -z "$ZURG_OWNER" ]; then
-	if ! ZURG_OWNER="$(swizdb get "$app_name/owner")"; then
-		ZURG_OWNER="$(_get_master_username)"
-		echo_info "Setting ${app_name^} owner = $ZURG_OWNER"
-		swizdb set "$app_name/owner" "$ZURG_OWNER"
-	fi
-else
-	echo_info "Setting ${app_name^} owner = $ZURG_OWNER"
-	swizdb set "$app_name/owner" "$ZURG_OWNER"
+# Get owner from swizdb (needed for both install and remove)
+if ! ZURG_OWNER="$(swizdb get "$app_name/owner" 2>/dev/null)"; then
+	ZURG_OWNER="$(_get_master_username)"
 fi
-
 user="$ZURG_OWNER"
 swiz_configdir="/home/$user/.config"
 app_configdir="$swiz_configdir/${app_name}"
@@ -197,6 +191,69 @@ RCLONE
 	echo_progress_done "Configuration created"
 }
 
+_remove_zurg() {
+	if [ ! -f "/install/.$app_lockname.lock" ]; then
+		echo_error "${app_name^} is not installed"
+		exit 1
+	fi
+
+	echo_info "Removing ${app_name^}..."
+
+	# Stop and disable rclone mount service first
+	echo_progress_start "Stopping and disabling rclone mount service"
+	systemctl stop "$app_mount_servicefile" 2>/dev/null || true
+	systemctl disable "$app_mount_servicefile" 2>/dev/null || true
+	rm -f "/etc/systemd/system/$app_mount_servicefile"
+	echo_progress_done "Rclone mount service removed"
+
+	# Unmount if still mounted
+	if mountpoint -q "$app_mount_point" 2>/dev/null; then
+		echo_progress_start "Unmounting $app_mount_point"
+		fusermount -uz "$app_mount_point" 2>/dev/null || umount -f "$app_mount_point" 2>/dev/null || true
+		echo_progress_done "Mount point unmounted"
+	fi
+
+	# Stop and disable zurg service
+	echo_progress_start "Stopping and disabling ${app_name^} service"
+	systemctl stop "$app_servicefile" 2>/dev/null || true
+	systemctl disable "$app_servicefile" 2>/dev/null || true
+	rm -f "/etc/systemd/system/$app_servicefile"
+	systemctl daemon-reload
+	echo_progress_done "Service removed"
+
+	# Remove binary
+	echo_progress_start "Removing ${app_name^} binary"
+	rm -f "$app_dir/$app_binary"
+	echo_progress_done "Binary removed"
+
+	# Remove from panel
+	_load_panel_helper
+	if command -v panel_unregister_app >/dev/null 2>&1; then
+		echo_progress_start "Removing from panel"
+		panel_unregister_app "$app_name"
+		echo_progress_done "Removed from panel"
+	fi
+
+	# Remove config directory
+	echo_progress_start "Removing configuration files"
+	rm -rf "$app_configdir"
+	echo_progress_done "Configuration removed"
+
+	# Remove mount point
+	if [ -d "$app_mount_point" ]; then
+		rmdir "$app_mount_point" 2>/dev/null || true
+	fi
+
+	# Remove swizdb entry
+	swizdb clear "$app_name/owner" 2>/dev/null || true
+
+	# Remove lock file
+	rm -f "/install/.$app_lockname.lock"
+
+	echo_success "${app_name^} has been completely removed"
+	exit 0
+}
+
 _systemd_zurg() {
 	echo_progress_start "Installing Systemd services"
 
@@ -276,6 +333,17 @@ EOF
 	echo_info "${app_name^} WebDAV running on http://127.0.0.1:$app_port"
 	echo_info "Real-Debrid content mounted at $app_mount_point"
 }
+
+# Handle --remove flag
+if [ "$1" = "--remove" ]; then
+	_remove_zurg
+fi
+
+# Set owner for install
+if [ -n "$ZURG_OWNER" ]; then
+	echo_info "Setting ${app_name^} owner = $ZURG_OWNER"
+	swizdb set "$app_name/owner" "$ZURG_OWNER"
+fi
 
 _install_zurg
 _systemd_zurg

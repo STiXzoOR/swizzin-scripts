@@ -61,3 +61,40 @@ panel_register_app() {
 	# Try to restart panel to pick up changes (if present)
 	systemctl restart panel >/dev/null 2>&1 || true
 }
+
+panel_unregister_app() {
+	local name="$1"
+	local profiles="/opt/swizzin/core/custom/profiles.py"
+	local classname="${name}_meta"
+
+	# Panel not installed? bail quietly
+	[ ! -f "$profiles" ] && return 0
+
+	# Remove the class block from profiles.py
+	# This removes from "class <name>_meta:" until the next "class " or end of file
+	if grep -q "class ${classname}" "$profiles"; then
+		# Use sed to remove the class block
+		sed -i "/^class ${classname}:/,/^class \|^$/{ /^class ${classname}:/d; /^class /!d; }" "$profiles" 2>/dev/null || true
+		# Simpler approach: use Python to remove the class
+		python3 - "$profiles" "$classname" <<'PYTHON' 2>/dev/null || true
+import sys
+import re
+
+profiles_path = sys.argv[1]
+classname = sys.argv[2]
+
+with open(profiles_path, 'r') as f:
+    content = f.read()
+
+# Remove the class block (class name_meta: ... until next class or end)
+pattern = rf'\n*class {classname}:.*?(?=\nclass |\Z)'
+content = re.sub(pattern, '', content, flags=re.DOTALL)
+
+with open(profiles_path, 'w') as f:
+    f.write(content)
+PYTHON
+	fi
+
+	# Try to restart panel to pick up changes
+	systemctl restart panel >/dev/null 2>&1 || true
+}

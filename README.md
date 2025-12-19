@@ -217,28 +217,28 @@ All scripts automatically register with the Swizzin panel if installed. Apps app
 
 ## Uninstallation
 
-To remove an installed application:
+All scripts support the `--remove` flag for complete uninstallation:
 
 ```bash
-# Stop and disable the service
-systemctl stop <appname>
-systemctl disable <appname>
+# Switch to root
+sudo su -
 
-# Remove files
-rm -rf /opt/<appname>                          # Application files
-rm -rf /home/<user>/.config/<Appname>          # Configuration
-rm /etc/systemd/system/<appname>.service       # Systemd service
-rm /etc/nginx/apps/<appname>.conf              # Nginx config (if exists)
-rm /install/.<appname>.lock                    # Lock file
+# Download the script (if not already present)
+wget https://raw.githubusercontent.com/STiXzoOR/swizzin-scripts/main/<script>.sh
 
-# Reload services
-systemctl daemon-reload
-systemctl reload nginx  # If nginx config was removed
-
-# Remove from panel (manual step)
-# Edit /opt/swizzin/core/custom/profiles.py and remove the app's class
-systemctl restart panel
+# Run with --remove flag
+bash <script>.sh --remove
 ```
+
+This will:
+- Stop and disable all related services
+- Remove the application binary/directory
+- Remove nginx configuration
+- Remove from Swizzin panel
+- Remove configuration files
+- Clean up lock files
+
+**Note:** For Seerr, the Let's Encrypt certificate is not removed automatically.
 
 ## Architecture
 

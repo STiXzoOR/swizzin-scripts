@@ -1,6 +1,7 @@
 #!/bin/bash
 # notifiarr installer
 # STiXzoOR 2025
+# Usage: bash notifiarr.sh [--remove]
 
 . /etc/swizzin/sources/globals.sh
 
@@ -32,15 +33,10 @@ export log=/root/logs/swizzin.log
 touch $log
 
 app_name="notifiarr"
-if [ -z "$NOTIFIARR_OWNER" ]; then
-	if ! NOTIFIARR_OWNER="$(swizdb get "$app_name/owner")"; then
-		NOTIFIARR_OWNER="$(_get_master_username)"
-		echo_info "Setting ${app_name^} owner = $NOTIFIARR_OWNER"
-		swizdb set "$app_name/owner" "$NOTIFIARR_OWNER"
-	fi
-else
-	echo_info "Setting ${app_name^} owner = $NOTIFIARR_OWNER"
-	swizdb set "$app_name/owner" "$NOTIFIARR_OWNER"
+
+# Get owner from swizdb (needed for both install and remove)
+if ! NOTIFIARR_OWNER="$(swizdb get "$app_name/owner" 2>/dev/null)"; then
+	NOTIFIARR_OWNER="$(_get_master_username)"
 fi
 user="$NOTIFIARR_OWNER"
 swiz_configdir="/home/$user/.config"
@@ -433,6 +429,58 @@ CFG
 	echo_progress_done "Default config created"
 }
 
+_remove_notifiarr() {
+	if [ ! -f "/install/.$app_lockname.lock" ]; then
+		echo_error "${app_name^} is not installed"
+		exit 1
+	fi
+
+	echo_info "Removing ${app_name^}..."
+
+	# Stop and disable service
+	echo_progress_start "Stopping and disabling ${app_name^} service"
+	systemctl stop "$app_servicefile" 2>/dev/null || true
+	systemctl disable "$app_servicefile" 2>/dev/null || true
+	rm -f "/etc/systemd/system/$app_servicefile"
+	systemctl daemon-reload
+	echo_progress_done "Service removed"
+
+	# Remove binary
+	echo_progress_start "Removing ${app_name^} binary"
+	rm -f "$app_dir/$app_binary"
+	echo_progress_done "Binary removed"
+
+	# Remove nginx config
+	if [ -f "/etc/nginx/apps/$app_name.conf" ]; then
+		echo_progress_start "Removing nginx configuration"
+		rm -f "/etc/nginx/apps/$app_name.conf"
+		systemctl reload nginx 2>/dev/null || true
+		echo_progress_done "Nginx configuration removed"
+	fi
+
+	# Remove from panel
+	_load_panel_helper
+	if command -v panel_unregister_app >/dev/null 2>&1; then
+		echo_progress_start "Removing from panel"
+		panel_unregister_app "$app_name"
+		echo_progress_done "Removed from panel"
+	fi
+
+	# Remove config directory
+	echo_progress_start "Removing configuration files"
+	rm -rf "$app_configdir"
+	echo_progress_done "Configuration removed"
+
+	# Remove swizdb entry
+	swizdb clear "$app_name/owner" 2>/dev/null || true
+
+	# Remove lock file
+	rm -f "/install/.$app_lockname.lock"
+
+	echo_success "${app_name^} has been completely removed"
+	exit 0
+}
+
 _systemd_notifiarr() {
 	echo_progress_start "Installing Systemd service"
 	cat >"/etc/systemd/system/$app_servicefile" <<EOF
@@ -498,6 +546,17 @@ _nginx_notifiarr() {
 		echo_info "$app_name will run on port $app_port"
 	fi
 }
+
+# Handle --remove flag
+if [ "$1" = "--remove" ]; then
+	_remove_notifiarr
+fi
+
+# Set owner for install
+if [ -n "$NOTIFIARR_OWNER" ]; then
+	echo_info "Setting ${app_name^} owner = $NOTIFIARR_OWNER"
+	swizdb set "$app_name/owner" "$NOTIFIARR_OWNER"
+fi
 
 _install_notifiarr
 _systemd_notifiarr

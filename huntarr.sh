@@ -1,6 +1,7 @@
 #!/bin/bash
 # huntarr installer
 # STiXzoOR 2025
+# Usage: bash huntarr.sh [--remove]
 
 . /etc/swizzin/sources/globals.sh
 
@@ -33,17 +34,10 @@ touch "$log"
 
 app_name="huntarr"
 
-if [ -z "$HUNTARR_OWNER" ]; then
-	if ! HUNTARR_OWNER="$(swizdb get "$app_name/owner")"; then
-		HUNTARR_OWNER="$(_get_master_username)"
-		echo_info "Setting ${app_name^} owner = $HUNTARR_OWNER"
-		swizdb set "$app_name/owner" "$HUNTARR_OWNER"
-	fi
-else
-	echo_info "Setting ${app_name^} owner = $HUNTARR_OWNER"
-	swizdb set "$app_name/owner" "$HUNTARR_OWNER"
+# Get owner from swizdb (needed for both install and remove)
+if ! HUNTARR_OWNER="$(swizdb get "$app_name/owner" 2>/dev/null)"; then
+	HUNTARR_OWNER="$(_get_master_username)"
 fi
-
 user="$HUNTARR_OWNER"
 swiz_configdir="/home/$user/.config"
 app_configdir="$swiz_configdir/${app_name^}"
@@ -141,6 +135,58 @@ EOF
 	chown -R "$user":"$user" "$app_configdir"
 }
 
+_remove_huntarr() {
+	if [ ! -f "/install/.$app_lockname.lock" ]; then
+		echo_error "${app_name^} is not installed"
+		exit 1
+	fi
+
+	echo_info "Removing ${app_name^}..."
+
+	# Stop and disable service
+	echo_progress_start "Stopping and disabling ${app_name^} service"
+	systemctl stop "$app_servicefile" 2>/dev/null || true
+	systemctl disable "$app_servicefile" 2>/dev/null || true
+	rm -f "/etc/systemd/system/$app_servicefile"
+	systemctl daemon-reload
+	echo_progress_done "Service removed"
+
+	# Remove application directory
+	echo_progress_start "Removing ${app_name^} application"
+	rm -rf "$app_dir"
+	echo_progress_done "Application removed"
+
+	# Remove nginx config
+	if [ -f "/etc/nginx/apps/$app_name.conf" ]; then
+		echo_progress_start "Removing nginx configuration"
+		rm -f "/etc/nginx/apps/$app_name.conf"
+		systemctl reload nginx 2>/dev/null || true
+		echo_progress_done "Nginx configuration removed"
+	fi
+
+	# Remove from panel
+	_load_panel_helper
+	if command -v panel_unregister_app >/dev/null 2>&1; then
+		echo_progress_start "Removing from panel"
+		panel_unregister_app "$app_name"
+		echo_progress_done "Removed from panel"
+	fi
+
+	# Remove config directory
+	echo_progress_start "Removing configuration files"
+	rm -rf "$app_configdir"
+	echo_progress_done "Configuration removed"
+
+	# Remove swizdb entry
+	swizdb clear "$app_name/owner" 2>/dev/null || true
+
+	# Remove lock file
+	rm -f "/install/.$app_lockname.lock"
+
+	echo_success "${app_name^} has been completely removed"
+	exit 0
+}
+
 _systemd_huntarr() {
 	echo_progress_start "Installing Systemd service"
 
@@ -211,6 +257,17 @@ _nginx_huntarr() {
 		echo_info "${app_name^} will run on port $app_port"
 	fi
 }
+
+# Handle --remove flag
+if [ "$1" = "--remove" ]; then
+	_remove_huntarr
+fi
+
+# Set owner for install
+if [ -n "$HUNTARR_OWNER" ]; then
+	echo_info "Setting ${app_name^} owner = $HUNTARR_OWNER"
+	swizdb set "$app_name/owner" "$HUNTARR_OWNER"
+fi
 
 _install_huntarr
 _systemd_huntarr

@@ -1,6 +1,7 @@
 #!/bin/bash
 # subgen installer
 # STiXzoOR 2025
+# Usage: bash subgen.sh [--remove]
 
 . /etc/swizzin/sources/globals.sh
 
@@ -33,17 +34,10 @@ touch "$log"
 
 app_name="subgen"
 
-if [ -z "$SUBGEN_OWNER" ]; then
-	if ! SUBGEN_OWNER="$(swizdb get "$app_name/owner")"; then
-		SUBGEN_OWNER="$(_get_master_username)"
-		echo_info "Setting ${app_name^} owner = $SUBGEN_OWNER"
-		swizdb set "$app_name/owner" "$SUBGEN_OWNER"
-	fi
-else
-	echo_info "Setting ${app_name^} owner = $SUBGEN_OWNER"
-	swizdb set "$app_name/owner" "$SUBGEN_OWNER"
+# Get owner from swizdb (needed for both install and remove)
+if ! SUBGEN_OWNER="$(swizdb get "$app_name/owner" 2>/dev/null)"; then
+	SUBGEN_OWNER="$(_get_master_username)"
 fi
-
 user="$SUBGEN_OWNER"
 swiz_configdir="/home/$user/.config"
 app_configdir="$swiz_configdir/${app_name^}"
@@ -150,6 +144,50 @@ EOF
 	echo_info "Configure Plex/Jellyfin/Emby webhook to: http://<server>:$app_port/webhook"
 }
 
+_remove_subgen() {
+	if [ ! -f "/install/.$app_lockname.lock" ]; then
+		echo_error "${app_name^} is not installed"
+		exit 1
+	fi
+
+	echo_info "Removing ${app_name^}..."
+
+	# Stop and disable service
+	echo_progress_start "Stopping and disabling ${app_name^} service"
+	systemctl stop "$app_servicefile" 2>/dev/null || true
+	systemctl disable "$app_servicefile" 2>/dev/null || true
+	rm -f "/etc/systemd/system/$app_servicefile"
+	systemctl daemon-reload
+	echo_progress_done "Service removed"
+
+	# Remove application directory
+	echo_progress_start "Removing ${app_name^} application"
+	rm -rf "$app_dir"
+	echo_progress_done "Application removed"
+
+	# Remove from panel
+	_load_panel_helper
+	if command -v panel_unregister_app >/dev/null 2>&1; then
+		echo_progress_start "Removing from panel"
+		panel_unregister_app "$app_name"
+		echo_progress_done "Removed from panel"
+	fi
+
+	# Remove config directory
+	echo_progress_start "Removing configuration files"
+	rm -rf "$app_configdir"
+	echo_progress_done "Configuration removed"
+
+	# Remove swizdb entry
+	swizdb clear "$app_name/owner" 2>/dev/null || true
+
+	# Remove lock file
+	rm -f "/install/.$app_lockname.lock"
+
+	echo_success "${app_name^} has been completely removed"
+	exit 0
+}
+
 _systemd_subgen() {
 	echo_progress_start "Installing Systemd service"
 
@@ -179,6 +217,17 @@ EOF
 	echo_progress_done "${app_name^} service installed and enabled"
 	echo_info "${app_name^} webhook available at http://127.0.0.1:$app_port/webhook"
 }
+
+# Handle --remove flag
+if [ "$1" = "--remove" ]; then
+	_remove_subgen
+fi
+
+# Set owner for install
+if [ -n "$SUBGEN_OWNER" ]; then
+	echo_info "Setting ${app_name^} owner = $SUBGEN_OWNER"
+	swizdb set "$app_name/owner" "$SUBGEN_OWNER"
+fi
 
 _install_subgen
 _systemd_subgen

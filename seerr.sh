@@ -1,6 +1,7 @@
 #!/bin/bash
 # seerr installer
 # STiXzoOR 2025
+# Usage: bash seerr.sh [--remove]
 
 . /etc/swizzin/sources/globals.sh
 
@@ -33,43 +34,35 @@ touch "$log"
 
 app_name="seerr"
 
-# REQUIRED: public FQDN for Seerr, e.g. seerr.example.com
-: "${SEERR_DOMAIN:?SEERR_DOMAIN must be set to the FQDN for Seerr (e.g. seerr.example.com)}"
-app_domain="$SEERR_DOMAIN"
-
-# LE hostname used with box install letsencrypt
-# - simplest: same as Seerr domain (seerr.example.com)
-# - for wildcard: could be example.com if you issued *.example.com manually
-le_hostname="${SEERR_LE_HOSTNAME:-$app_domain}"
-
-# Set to "yes" to run Let's Encrypt interactively (e.g., for CloudFlare DNS validation)
-le_interactive="${SEERR_LE_INTERACTIVE:-no}"
-
-# Resolve owner (same pattern as decypharr/notifiarr)
-if [ -z "$SEERR_OWNER" ]; then
-	if ! SEERR_OWNER="$(swizdb get "$app_name/owner")"; then
-		SEERR_OWNER="$(_get_master_username)"
-		echo_info "Setting ${app_name^} owner = $SEERR_OWNER"
-		swizdb set "$app_name/owner" "$SEERR_OWNER"
-	fi
-else
-	echo_info "Setting ${app_name^} owner = $SEERR_OWNER"
-	swizdb set "$app_name/owner" "$SEERR_OWNER"
+# Get owner from swizdb (needed for both install and remove)
+if ! SEERR_OWNER="$(swizdb get "$app_name/owner" 2>/dev/null)"; then
+	SEERR_OWNER="$(_get_master_username)"
 fi
-
-fnm_install_url="https://fnm.vercel.app/install"
 user="$SEERR_OWNER"
 swiz_configdir="/home/$user/.config"
 app_configdir="$swiz_configdir/${app_name^}"
-app_group="$user"
-app_port=$(port 10000 12000)
-app_reqs=("curl" "jq" "wget")
 app_servicefile="$app_name.service"
 app_dir="/opt/$app_name"
 app_lockname="${app_name//-/}"
+
+# Only require SEERR_DOMAIN for install (not remove)
+if [ "$1" != "--remove" ]; then
+	: "${SEERR_DOMAIN:?SEERR_DOMAIN must be set to the FQDN for Seerr (e.g. seerr.example.com)}"
+	app_domain="$SEERR_DOMAIN"
+
+	# LE hostname used with box install letsencrypt
+	le_hostname="${SEERR_LE_HOSTNAME:-$app_domain}"
+
+	# Set to "yes" to run Let's Encrypt interactively
+	le_interactive="${SEERR_LE_INTERACTIVE:-no}"
+fi
+
+fnm_install_url="https://fnm.vercel.app/install"
+app_group="$user"
+app_port=$(port 10000 12000)
+app_reqs=("curl" "jq" "wget")
 app_icon_name="$app_name"
 app_icon_url="https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/overseerr.png"
-app_panel_urloverride="https://${app_domain}"
 
 if [ ! -d "$swiz_configdir" ]; then
 	mkdir -p "$swiz_configdir"
@@ -319,6 +312,76 @@ _nginx_seerr() {
 		echo_info "${app_name^} will run on port $app_port (no nginx configured)"
 	fi
 }
+
+_remove_seerr() {
+	if [ ! -f "/install/.$app_lockname.lock" ]; then
+		echo_error "${app_name^} is not installed"
+		exit 1
+	fi
+
+	echo_info "Removing ${app_name^}..."
+
+	# Stop and disable service
+	echo_progress_start "Stopping and disabling ${app_name^} service"
+	systemctl stop "$app_servicefile" 2>/dev/null || true
+	systemctl disable "$app_servicefile" 2>/dev/null || true
+	rm -f "/etc/systemd/system/$app_servicefile"
+	systemctl daemon-reload
+	echo_progress_done "Service removed"
+
+	# Remove application directory
+	echo_progress_start "Removing ${app_name^} application"
+	rm -rf "$app_dir"
+	echo_progress_done "Application removed"
+
+	# Remove nginx vhost
+	local vhost_file="/etc/nginx/sites-available/$app_name"
+	local enabled_link="/etc/nginx/sites-enabled/$app_name"
+	if [ -f "$vhost_file" ] || [ -L "$enabled_link" ]; then
+		echo_progress_start "Removing nginx configuration"
+		rm -f "$enabled_link"
+		rm -f "$vhost_file"
+		systemctl reload nginx 2>/dev/null || true
+		echo_progress_done "Nginx configuration removed"
+	fi
+
+	# Remove from panel
+	_load_panel_helper
+	if command -v panel_unregister_app >/dev/null 2>&1; then
+		echo_progress_start "Removing from panel"
+		panel_unregister_app "$app_name"
+		echo_progress_done "Removed from panel"
+	fi
+
+	# Remove config directory
+	echo_progress_start "Removing configuration files"
+	rm -rf "$app_configdir"
+	echo_progress_done "Configuration removed"
+
+	# Remove swizdb entry
+	swizdb clear "$app_name/owner" 2>/dev/null || true
+
+	# Remove lock file
+	rm -f "/install/.$app_lockname.lock"
+
+	echo_success "${app_name^} has been completely removed"
+	echo_info "Note: Let's Encrypt certificate was not removed. Remove manually if needed."
+	exit 0
+}
+
+# Handle --remove flag
+if [ "$1" = "--remove" ]; then
+	_remove_seerr
+fi
+
+# Set owner for install
+if [ -n "$SEERR_OWNER" ]; then
+	echo_info "Setting ${app_name^} owner = $SEERR_OWNER"
+	swizdb set "$app_name/owner" "$SEERR_OWNER"
+fi
+
+# Set panel URL override (needs app_domain which is only set for install)
+app_panel_urloverride="https://${app_domain}"
 
 _install_seerr
 _systemd_seerr
