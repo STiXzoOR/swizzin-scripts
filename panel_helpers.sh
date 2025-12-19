@@ -1,6 +1,20 @@
 #!/bin/bash
 # Swizzin panel helper
-# Defines: panel_register_app
+# Defines: panel_register_app, ensures placeholder icon exists
+
+PLACEHOLDER_ICON_URL="https://raw.githubusercontent.com/swizzin/swizzin_dashboard/refs/heads/master/static/img/favicon/android-chrome-192x192.png"
+
+# Ensure placeholder icon is available
+_ensure_placeholder_icon() {
+	local icons_dir="/opt/swizzin/static/img/apps"
+	mkdir -p "$icons_dir"
+	if [ ! -f "$icons_dir/placeholder.png" ]; then
+		curl -fsSL "$PLACEHOLDER_ICON_URL" -o "$icons_dir/placeholder.png" >/dev/null 2>&1 || true
+	fi
+}
+
+# Download placeholder on source
+_ensure_placeholder_icon
 
 panel_register_app() {
 	local name="$1"           # e.g. "seerr"
