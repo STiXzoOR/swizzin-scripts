@@ -1,7 +1,7 @@
 #!/bin/bash
 # decypharr installer
 # STiXzoOR 2025
-# Usage: bash decypharr.sh [--remove]
+# Usage: bash decypharr.sh [--remove [--force]]
 
 . /etc/swizzin/sources/globals.sh
 
@@ -208,8 +208,9 @@ CFG
 }
 
 _remove_decypharr() {
-	if [ ! -f "/install/.$app_lockname.lock" ]; then
-		echo_error "${app_name^} is not installed"
+	local force="$1"
+	if [ "$force" != "--force" ] && [ ! -f "/install/.$app_lockname.lock" ]; then
+		echo_error "${app_name^} is not installed (use --force to override)"
 		exit 1
 	fi
 
@@ -344,7 +345,7 @@ _nginx_decypharr() {
 
 # Handle --remove flag
 if [ "$1" = "--remove" ]; then
-	_remove_decypharr
+	_remove_decypharr "$2"
 fi
 
 # Set owner for install

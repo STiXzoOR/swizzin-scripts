@@ -1,7 +1,7 @@
 #!/bin/bash
 # notifiarr installer
 # STiXzoOR 2025
-# Usage: bash notifiarr.sh [--remove]
+# Usage: bash notifiarr.sh [--remove [--force]]
 
 . /etc/swizzin/sources/globals.sh
 
@@ -430,8 +430,9 @@ CFG
 }
 
 _remove_notifiarr() {
-	if [ ! -f "/install/.$app_lockname.lock" ]; then
-		echo_error "${app_name^} is not installed"
+	local force="$1"
+	if [ "$force" != "--force" ] && [ ! -f "/install/.$app_lockname.lock" ]; then
+		echo_error "${app_name^} is not installed (use --force to override)"
 		exit 1
 	fi
 
@@ -559,7 +560,7 @@ _nginx_notifiarr() {
 
 # Handle --remove flag
 if [ "$1" = "--remove" ]; then
-	_remove_notifiarr
+	_remove_notifiarr "$2"
 fi
 
 # Set owner for install

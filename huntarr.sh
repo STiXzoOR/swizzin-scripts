@@ -1,7 +1,7 @@
 #!/bin/bash
 # huntarr installer
 # STiXzoOR 2025
-# Usage: bash huntarr.sh [--remove]
+# Usage: bash huntarr.sh [--remove [--force]]
 
 . /etc/swizzin/sources/globals.sh
 
@@ -136,8 +136,9 @@ EOF
 }
 
 _remove_huntarr() {
-	if [ ! -f "/install/.$app_lockname.lock" ]; then
-		echo_error "${app_name^} is not installed"
+	local force="$1"
+	if [ "$force" != "--force" ] && [ ! -f "/install/.$app_lockname.lock" ]; then
+		echo_error "${app_name^} is not installed (use --force to override)"
 		exit 1
 	fi
 
@@ -270,7 +271,7 @@ _nginx_huntarr() {
 
 # Handle --remove flag
 if [ "$1" = "--remove" ]; then
-	_remove_huntarr
+	_remove_huntarr "$2"
 fi
 
 # Set owner for install

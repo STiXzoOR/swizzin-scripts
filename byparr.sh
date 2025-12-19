@@ -1,7 +1,7 @@
 #!/bin/bash
 # byparr installer
 # STiXzoOR 2025
-# Usage: bash byparr.sh [--remove]
+# Usage: bash byparr.sh [--remove [--force]]
 
 . /etc/swizzin/sources/globals.sh
 
@@ -111,8 +111,9 @@ EOF
 }
 
 _remove_byparr() {
-	if [ ! -f "/install/.$app_lockname.lock" ]; then
-		echo_error "${app_name^} is not installed"
+	local force="$1"
+	if [ "$force" != "--force" ] && [ ! -f "/install/.$app_lockname.lock" ]; then
+		echo_error "${app_name^} is not installed (use --force to override)"
 		exit 1
 	fi
 
@@ -196,7 +197,7 @@ EOF
 
 # Handle --remove flag
 if [ "$1" = "--remove" ]; then
-	_remove_byparr
+	_remove_byparr "$2"
 fi
 
 # Set owner for install

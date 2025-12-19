@@ -1,7 +1,7 @@
 #!/bin/bash
 # seerr installer
 # STiXzoOR 2025
-# Usage: bash seerr.sh [--remove]
+# Usage: bash seerr.sh [--remove [--force]]
 
 . /etc/swizzin/sources/globals.sh
 
@@ -321,8 +321,9 @@ _nginx_seerr() {
 }
 
 _remove_seerr() {
-	if [ ! -f "/install/.$app_lockname.lock" ]; then
-		echo_error "${app_name^} is not installed"
+	local force="$1"
+	if [ "$force" != "--force" ] && [ ! -f "/install/.$app_lockname.lock" ]; then
+		echo_error "${app_name^} is not installed (use --force to override)"
 		exit 1
 	fi
 
@@ -388,7 +389,7 @@ _remove_seerr() {
 
 # Handle --remove flag
 if [ "$1" = "--remove" ]; then
-	_remove_seerr
+	_remove_seerr "$2"
 fi
 
 # Set owner for install

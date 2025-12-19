@@ -1,7 +1,7 @@
 #!/bin/bash
 # zurg installer
 # STiXzoOR 2025
-# Usage: bash zurg.sh [--remove]
+# Usage: bash zurg.sh [--remove [--force]]
 
 . /etc/swizzin/sources/globals.sh
 
@@ -192,8 +192,9 @@ RCLONE
 }
 
 _remove_zurg() {
-	if [ ! -f "/install/.$app_lockname.lock" ]; then
-		echo_error "${app_name^} is not installed"
+	local force="$1"
+	if [ "$force" != "--force" ] && [ ! -f "/install/.$app_lockname.lock" ]; then
+		echo_error "${app_name^} is not installed (use --force to override)"
 		exit 1
 	fi
 
@@ -346,7 +347,7 @@ EOF
 
 # Handle --remove flag
 if [ "$1" = "--remove" ]; then
-	_remove_zurg
+	_remove_zurg "$2"
 fi
 
 # Set owner for install
