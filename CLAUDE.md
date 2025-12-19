@@ -22,6 +22,11 @@ Each installer script follows a consistent pattern:
 5. Register with Swizzin panel via `panel_register_app()`
 6. Create lock file at `/install/.<appname>.lock`
 
+### Binary Placement
+
+- **Single-file binaries** → `/usr/bin/<appname>` (e.g., decypharr, notifiarr, zurg)
+- **Multi-file apps** → `/opt/<appname>/` (e.g., seerr, byparr, huntarr, subgen)
+
 ### Files
 
 - **decypharr.sh** - Installs Decypharr (encrypted file/torrent management via rclone)

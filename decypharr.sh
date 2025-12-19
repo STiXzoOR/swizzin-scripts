@@ -80,7 +80,7 @@ _install_decypharr() {
 		;;
 	esac
 
-  # Using my fork of decypharr until original author fixes base URL issue
+	# Using my fork of decypharr until original author fixes base URL issue
 	latest=$(curl -sL https://api.github.com/repos/STiXzoOR/decypharr/releases/latest | grep "Linux_$arch" | grep browser_download_url | grep ".tar.gz" | cut -d \" -f4) || {
 		echo_error "Failed to query GitHub for latest version"
 		exit 1

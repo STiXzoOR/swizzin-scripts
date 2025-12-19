@@ -50,7 +50,7 @@ app_port=9999
 app_reqs=("curl" "rclone" "unzip" "fuse3")
 app_servicefile="$app_name.service"
 app_mount_servicefile="rclone-$app_name.service"
-app_dir="/opt/$app_name"
+app_dir="/usr/bin"
 app_binary="$app_name"
 app_lockname="${app_name//-/}"
 app_mount_point="/mnt/$app_name"
@@ -110,18 +110,13 @@ _install_zurg() {
 
 	echo_progress_start "Extracting archive"
 
-	if [ -d "$app_dir" ]; then
-		rm -rf "$app_dir"
-	fi
-	mkdir -p "$app_dir"
-
-	unzip -o "/tmp/$app_name.zip" -d "$app_dir" >>"$log" 2>&1 || {
+	unzip -o "/tmp/$app_name.zip" -d "/tmp/$app_name" >>"$log" 2>&1 || {
 		echo_error "Failed to extract"
 		exit 1
 	}
-	rm -rf "/tmp/$app_name.zip"
+	mv "/tmp/$app_name/$app_binary" "$app_dir/$app_binary"
+	rm -rf "/tmp/$app_name.zip" "/tmp/$app_name"
 	chmod +x "$app_dir/$app_binary"
-	chown -R "$user":"$user" "$app_dir"
 	echo_progress_done "Archive extracted"
 
 	echo_progress_start "Creating configuration"
@@ -252,7 +247,7 @@ EOF
 
 	# Ensure allow_other is enabled in fuse.conf
 	if ! grep -q "^user_allow_other" /etc/fuse.conf 2>/dev/null; then
-		echo "user_allow_other" >> /etc/fuse.conf
+		echo "user_allow_other" >>/etc/fuse.conf
 	fi
 
 	systemctl -q daemon-reload

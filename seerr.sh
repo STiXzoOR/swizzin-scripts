@@ -242,8 +242,8 @@ _nginx_seerr() {
 
 			# We are already root, no need for sudo
 			LE_hostname="$le_hostname" \
-			LE_defaultconf=no \
-			box install letsencrypt >>"$log" 2>&1 || {
+				LE_defaultconf=no \
+				box install letsencrypt >>"$log" 2>&1 || {
 				echo_error "Failed to obtain Let's Encrypt certificate for $le_hostname"
 				echo_error "You may need to run: LE_hostname=$le_hostname box install letsencrypt manually"
 				echo_progress_done "Nginx configuration skipped due to LE failure"
