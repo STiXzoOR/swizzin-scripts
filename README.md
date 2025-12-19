@@ -71,6 +71,8 @@ bash notifiarr.sh
 
 **Config:** `/home/<user>/.config/Notifiarr/notifiarr.conf`
 
+**Login:** Username: `admin` | Password: your API key (can be changed in Profile page)
+
 ---
 
 ### Seerr
