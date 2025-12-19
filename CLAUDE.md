@@ -36,6 +36,7 @@ Each installer script follows a consistent pattern:
 - **huntarr.sh** - Installs Huntarr (automated media discovery for *arr apps, uses uv)
 - **subgen.sh** - Installs Subgen (Whisper-based subtitle generation, uses uv + ffmpeg)
 - **zurg.sh** - Installs Zurg (Real-Debrid WebDAV server + rclone mount)
+- **organizr-subdomain.sh** - Converts Organizr to subdomain mode with SSO authentication
 - **panel_helpers.sh** - Shared utility for Swizzin panel app registration
 
 ### Python Apps (uv-based)
@@ -51,6 +52,22 @@ Byparr, Huntarr, and Subgen use `uv` for Python version and dependency managemen
 Zurg creates two systemd services:
 - `zurg.service` - The WebDAV server
 - `rclone-zurg.service` - The rclone filesystem mount at `/mnt/zurg`
+
+### Organizr Subdomain (SSO Gateway)
+
+organizr-subdomain.sh is an extension script (not a standalone installer) that:
+- Runs `box install organizr` first if Organizr isn't installed
+- Converts from subfolder (`/organizr`) to subdomain mode
+- Uses Organizr as SSO authentication gateway for other apps via `auth_request`
+- Stores config at `/opt/swizzin/organizr-auth.conf`
+- Backups at `/opt/swizzin/organizr-backups/`
+
+**Flags:**
+- `--configure` - Modify which apps are protected
+- `--revert` - Revert to subfolder mode (preserves config)
+- `--remove` - Complete removal (runs `box remove organizr`)
+
+**Auth levels:** 0=Admin, 1=Co-Admin, 2=Super User, 3=Power User, 4=User, 998=Logged In
 
 ### Key Swizzin Functions Used
 
@@ -70,6 +87,10 @@ echo_error, echo_info        # Status logging
 |--------|----------|----------|-------------|
 | seerr.sh | `SEERR_DOMAIN` | **Yes** | Public FQDN for the Seerr instance |
 | seerr.sh | `SEERR_LE_HOSTNAME` | No | Let's Encrypt hostname (defaults to SEERR_DOMAIN) |
+| seerr.sh | `SEERR_LE_INTERACTIVE` | No | Set to `yes` for interactive Let's Encrypt (CloudFlare DNS) |
+| organizr-subdomain.sh | `ORGANIZR_DOMAIN` | **Yes** | Public FQDN for Organizr subdomain |
+| organizr-subdomain.sh | `ORGANIZR_LE_HOSTNAME` | No | Let's Encrypt hostname (defaults to ORGANIZR_DOMAIN) |
+| organizr-subdomain.sh | `ORGANIZR_LE_INTERACTIVE` | No | Set to `yes` for interactive Let's Encrypt (CloudFlare DNS) |
 | notifiarr.sh | `DN_API_KEY` | Interactive | Notifiarr.com API key (prompted if not set) |
 | zurg.sh | Real-Debrid token | Interactive | Real-Debrid API token (prompted if not set) |
 | All scripts | `<APP>_OWNER` | No | App owner username (defaults to master user) |
@@ -94,6 +115,7 @@ Most installers use `port 10000 12000` to find an available port in the 10000-12
 
 - **Decypharr/Notifiarr/Huntarr**: Location-based routing at `/<appname>/`
 - **Seerr**: Dedicated vhost file for subdomain-based access
+- **Organizr Subdomain**: Dedicated vhost with SSO auth snippet at `/etc/nginx/snippets/organizr-auth.conf`
 - **Byparr/Subgen/Zurg**: No nginx (internal API/webhook services)
 - API endpoints bypass htpasswd authentication
 
