@@ -1,0 +1,303 @@
+#!/bin/bash
+# decypharr installer
+# STiXzoOR 2025
+
+#shellcheck source=sources/functions/utils
+. /etc/swizzin/sources/functions/utils
+
+PANEL_HELPER_LOCAL="/opt/swizzin/panel_helper.sh"
+PANEL_HELPER_URL="https://raw.githubusercontent.com/STiXzoOR/swizzin-scripts/main/panel_helper.sh"
+
+_load_panel_helper() {
+	# If already on disk, just source it
+	if [ -f "$PANEL_HELPER_LOCAL" ]; then
+		. "$PANEL_HELPER_LOCAL"
+		return
+	fi
+
+	# Try to fetch from GitHub and save permanently
+	mkdir -p "$(dirname "$PANEL_HELPER_LOCAL")"
+	if curl -fsSL "$PANEL_HELPER_URL" -o "$PANEL_HELPER_LOCAL" >>"$log" 2>&1; then
+		chmod +x "$PANEL_HELPER_LOCAL" || true
+		. "$PANEL_HELPER_LOCAL"
+	else
+		echo_info "Could not fetch panel helper from $PANEL_HELPER_URL; skipping panel integration"
+	fi
+}
+
+# Log to Swizzin.log
+export log=/root/logs/swizzin.log
+touch $log
+
+app_name="decypharr"
+
+if [ -z "$DECYPHARR_OWNER" ]; then
+	if ! DECYPHARR_OWNER="$(swizdb get "$app_name/owner")"; then
+		DECYPHARR_OWNER="$(_get_master_username)"
+		echo_info "Setting ${app_name^} owner = $DECYPHARR_OWNER"
+		swizdb set "$app_name/owner" "$DECYPHARR_OWNER"
+	fi
+else
+	echo_info "Setting ${app_name^} owner = $DECYPHARR_OWNER"
+	swizdb set "$app_name/owner" "$DECYPHARR_OWNER"
+fi
+user="$DECYPHARR_OWNER"
+swiz_configdir="/home/$user/.config"
+app_configdir="$swiz_configdir/${app_name^}"
+app_group="$user"
+app_port=$(port 10000 12000)
+app_reqs=("curl" "rclone")
+app_servicefile="$app_name.service"
+app_dir="/usr/bin"
+app_binary="$app_name"
+app_lockname="${app_name//-/}"
+app_baseurl="$app_name"
+app_icon_name="$app_name"
+app_icon_url="https://raw.githubusercontent.com/sirrobot01/decypharr/refs/heads/main/docs/docs/images/logo.png"
+
+if [ ! -d "$swiz_configdir" ]; then
+	mkdir -p "$swiz_configdir"
+fi
+chown "$user":"$user" "$swiz_configdir"
+
+_install_decypharr() {
+	if [ ! -d "$app_configdir" ]; then
+		mkdir -p "$app_configdir"
+	fi
+	chown -R "$user":"$user" "$app_configdir"
+
+	apt_install "${app_reqs[@]}"
+
+	echo_progress_start "Downloading release archive"
+
+	case "$(_os_arch)" in
+	"amd64") arch='x86_64' ;;
+	"arm64") arch="arm64" ;;
+	"armhf") arch="armv6" ;;
+	*)
+		echo_error "Arch not supported"
+		exit 1
+		;;
+	esac
+
+  # Using my fork of decypharr until original author fixes base URL issue
+	latest=$(curl -sL https://api.github.com/repos/STiXzoOR/decypharr/releases/latest | grep "Linux_$arch" | grep browser_download_url | grep ".tar.gz" | cut -d \" -f4) || {
+		echo_error "Failed to query GitHub for latest version"
+		exit 1
+	}
+
+	if ! curl "$latest" -L -o "/tmp/$app_name.tar.gz" >>"$log" 2>&1; then
+		echo_error "Download failed, exiting"
+		exit 1
+	fi
+	echo_progress_done "Archive downloaded"
+
+	echo_progress_start "Extracting archive"
+	tar xfv "/tmp/$app_name.tar.gz" --directory /usr/bin/ >>"$log" 2>&1 || {
+		echo_error "Failed to extract"
+		exit 1
+	}
+	rm -rf "/tmp/$app_name.tar.gz"
+	echo_progress_done "Archive extracted"
+
+	chmod +x "$app_dir/$app_binary"
+
+	echo_progress_start "Creating default config"
+	cat >"$app_configdir/config.json" <<CFG
+{
+  "url_base": "/",
+  "port": "${app_port}",
+  "log_level": "info",
+  "qbittorrent": {
+    "download_folder": "downloads",
+    "refresh_interval": 5
+  },
+  "repair": {
+    "interval": "12h",
+    "workers": 1,
+    "strategy": "per_torrent"
+  },
+  "webdav": {},
+  "rclone": {
+    "vfs_cache_mode": "off",
+    "vfs_cache_max_age": "1h",
+    "vfs_cache_poll_interval": "1m",
+    "vfs_read_chunk_size": "128M",
+    "vfs_read_chunk_size_limit": "off",
+    "vfs_read_ahead": "128k",
+    "attr_timeout": "1s",
+    "dir_cache_time": "5m",
+    "log_level": "INFO"
+  },
+  "allowed_file_types": [
+    "3gp",
+    "ac3",
+    "aiff",
+    "alac",
+    "amr",
+    "ape",
+    "asf",
+    "asx",
+    "avc",
+    "avi",
+    "bin",
+    "bivx",
+    "dat",
+    "divx",
+    "dts",
+    "dv",
+    "dvr-ms",
+    "flac",
+    "fli",
+    "flv",
+    "ifo",
+    "img",
+    "iso",
+    "m2ts",
+    "m2v",
+    "m3u",
+    "m4a",
+    "m4p",
+    "m4v",
+    "mid",
+    "midi",
+    "mk3d",
+    "mka",
+    "mkv",
+    "mov",
+    "mp2",
+    "mp3",
+    "mp4",
+    "mpa",
+    "mpeg",
+    "mpg",
+    "nrg",
+    "nsv",
+    "nuv",
+    "ogg",
+    "ogm",
+    "ogv",
+    "pva",
+    "qt",
+    "ra",
+    "rm",
+    "rmvb",
+    "strm",
+    "svq3",
+    "ts",
+    "ty",
+    "viv",
+    "vob",
+    "voc",
+    "vp3",
+    "wav",
+    "webm",
+    "wma",
+    "wmv",
+    "wpl",
+    "wtv",
+    "wv",
+    "xvid"
+  ]
+}
+CFG
+
+	chown -R "$user":"$user" "$app_configdir"
+	echo_progress_done "Default config created"
+}
+
+_systemd_decypharr() {
+	echo_progress_start "Installing Systemd service"
+	cat >"/etc/systemd/system/$app_servicefile" <<EOF
+[Unit]
+Description=${app_name^} Daemon
+After=syslog.target network.target
+
+[Service]
+# Change the user and group variables here.
+User=${user}
+Group=${app_group}
+
+Type=simple
+
+# Change the path to ${app_name^} here if it is in a different location for you.
+ExecStart=$app_dir/$app_binary --config=$app_configdir
+TimeoutStopSec=20
+KillMode=process
+Restart=on-failure
+
+# These lines optionally isolate (sandbox) ${app_name^} from the rest of the system.
+# Make sure to add any paths it might use to the list below (space-separated).
+#ReadWritePaths=$app_dir /path/to/media/folder
+#ProtectSystem=strict
+#PrivateDevices=true
+#ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+	systemctl -q daemon-reload
+	systemctl enable --now -q "$app_servicefile"
+	sleep 1
+	echo_progress_done "${app_name^} service installed and enabled"
+}
+
+_nginx_decypharr() {
+	if [[ -f /install/.nginx.lock ]]; then
+		echo_progress_start "Configuring nginx"
+		cat >/etc/nginx/apps/$app_name.conf <<-NGX
+			location /$app_baseurl {
+			  return 301 /$app_baseurl/;
+			}
+
+			location ^~ /$app_baseurl/ {
+			    proxy_pass http://127.0.0.1:$app_port;
+			    proxy_set_header Host \$host;
+			    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+			    proxy_set_header X-Forwarded-Host \$host;
+			    proxy_set_header X-Forwarded-Proto \$scheme;
+			    proxy_redirect off;
+			    proxy_http_version 1.1;
+			    proxy_set_header Upgrade \$http_upgrade;
+			    proxy_set_header Connection \$http_connection;
+
+			    auth_basic "What's the password?";
+			    auth_basic_user_file /etc/htpasswd.d/htpasswd.${user};
+
+			    rewrite ^/$app_baseurl/(.*) /\$1 break;
+			}
+
+			location ^~ /$app_baseurl/api {
+			    auth_request off;
+			    proxy_pass http://127.0.0.1:$app_port;
+			    rewrite ^/$app_baseurl/(.*) /\$1 break;
+			}
+		NGX
+
+		systemctl reload nginx
+		echo_progress_done "Nginx configured"
+	else
+		echo_info "$app_name will run on port $app_port"
+	fi
+}
+
+_install_decypharr
+_systemd_decypharr
+_nginx_decypharr
+
+_load_panel_helper
+if command -v panel_register_app >/dev/null 2>&1; then
+	panel_register_app \
+		"$app_name" \
+		"Decypharr" \
+		"/$app_baseurl" \
+		"" \
+		"$app_name" \
+		"$app_icon_name" \
+		"$app_icon_url" \
+		"true"
+fi
+
+touch "/install/.$app_lockname.lock"
+echo_success "${app_name^} installed"

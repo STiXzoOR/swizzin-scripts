@@ -1,0 +1,49 @@
+#!/bin/bash
+# Swizzin panel helper
+# Defines: panel_register_app
+
+panel_register_app() {
+	local name="$1"           # e.g. "seerr"
+	local pretty_name="$2"    # e.g. "Seerr"
+	local baseurl="$3"        # e.g. "/seerr" (or "" if using urloverride)
+	local urloverride="$4"    # e.g. "https://seerr.raflix.app" or ""
+	local systemd_name="$5"   # e.g. "seerr"
+	local img_name="$6"       # icon name (without .png)
+	local icon_url="$7"       # optional: URL to PNG icon
+	local check_systemd="${8:-true}"
+
+	local profiles="/opt/swizzin/core/custom/profiles.py"
+	local icons_dir="/opt/swizzin/static/img/apps"
+	local classname="${name}_meta"
+
+	# Panel not installed? bail quietly
+	[ ! -f "$profiles" ] && return 0
+
+	mkdir -p "$icons_dir"
+
+	# Optional icon download
+	if [ -n "$icon_url" ] && [ ! -f "$icons_dir/${img_name}.png" ]; then
+		curl -fsSL "$icon_url" -o "$icons_dir/${img_name}.png" >/dev/null 2>&1 || true
+	fi
+
+	# Avoid duplicate class
+	if ! grep -q "class ${classname}" "$profiles"; then
+		{
+			echo ""
+			echo "class ${classname}:"
+			echo "    name = \"${name}\""
+			echo "    pretty_name = \"${pretty_name}\""
+			if [ -n "$urloverride" ]; then
+				echo "    urloverride = \"${urloverride}\""
+			elif [ -n "$baseurl" ]; then
+				echo "    baseurl = \"${baseurl}\""
+			fi
+			echo "    systemd = \"${systemd_name}\""
+			echo "    img = \"${img_name}\""
+			[ "$check_systemd" = "true" ] && echo "    check_theD = True"
+		} >>"$profiles"
+	fi
+
+	# Try to restart panel to pick up changes (if present)
+	systemctl restart panel >/dev/null 2>&1 || true
+}
