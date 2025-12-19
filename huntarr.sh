@@ -2,6 +2,8 @@
 # huntarr installer
 # STiXzoOR 2025
 
+. /etc/swizzin/sources/globals.sh
+
 #shellcheck source=sources/functions/utils
 . /etc/swizzin/sources/functions/utils
 

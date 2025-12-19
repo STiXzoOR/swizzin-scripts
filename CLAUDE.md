@@ -109,8 +109,10 @@ app_icon_url=""
 
 ### ShellCheck
 
-Scripts use shellcheck source directives:
+Scripts source Swizzin globals and utilities:
 ```bash
+. /etc/swizzin/sources/globals.sh
+
 #shellcheck source=sources/functions/utils
 . /etc/swizzin/sources/functions/utils
 ```
