@@ -36,6 +36,22 @@ _get_organizr_domain() {
 	fi
 }
 
+# Remove app from Organizr protected apps
+_exclude_from_organizr() {
+	if [ -f "$organizr_config" ] && grep -q "^${app_name}:" "$organizr_config"; then
+		echo_progress_start "Removing ${app_name^} from Organizr protected apps"
+		sed -i "/^${app_name}:/d" "$organizr_config"
+		echo_progress_done "Removed from Organizr"
+	fi
+}
+
+# Re-add app to Organizr protected apps (for revert)
+_include_in_organizr() {
+	if [ -f "$organizr_config" ] && ! grep -q "^${app_name}:" "$organizr_config"; then
+		echo_info "Note: ${app_name^} can be re-added to Organizr protection via: bash organizr-subdomain.sh --configure"
+	fi
+}
+
 # Pre-flight checks
 _preflight() {
 	if [ ! -f /install/.nginx.lock ]; then
@@ -317,6 +333,7 @@ _install() {
 		_request_certificate "$domain"
 		_create_subdomain_vhost "$domain" "$le_hostname"
 		_add_panel_meta "$domain"
+		_exclude_from_organizr
 		systemctl reload nginx
 		echo_success "${app_name^} converted to subdomain mode"
 		echo_info "Access at: https://$domain"
@@ -354,6 +371,9 @@ _revert() {
 
 	# Remove panel meta override
 	_remove_panel_meta
+
+	# Notify about Organizr re-protection
+	_include_in_organizr
 
 	systemctl reload nginx
 	echo_success "${app_name^} reverted to subfolder mode"
