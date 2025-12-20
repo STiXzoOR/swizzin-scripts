@@ -89,11 +89,12 @@ plex-subdomain.sh, emby-subdomain.sh, and jellyfin-subdomain.sh follow a common 
 - Convert from subfolder (`/<app>`) to dedicated subdomain
 - Request Let's Encrypt certificate via `box install letsencrypt`
 - Backup original nginx config to `/opt/swizzin/<app>-backups/`
-- Update panel meta with `urloverride` in `/opt/swizzin/core/custom/profiles.py`
+- Update panel meta with `baseurl = None` and `urloverride` in `/opt/swizzin/core/custom/profiles.py`
 - Add `Content-Security-Policy: frame-ancestors` header for Organizr embedding (if configured)
+- Exclude app from Organizr SSO protection (removes from both `/opt/swizzin/organizr-auth.conf` and `/etc/nginx/snippets/organizr-apps.conf`)
 
 **Flags:**
-- `--revert` - Revert to subfolder mode (restores backup)
+- `--revert` - Revert to subfolder mode (restores backup, notifies about re-adding Organizr protection)
 - `--remove [--force]` - Complete removal (runs `box remove <app>`)
 
 **Ports:**
@@ -101,7 +102,12 @@ plex-subdomain.sh, emby-subdomain.sh, and jellyfin-subdomain.sh follow a common 
 - Emby: 8096 (HTTP)
 - Jellyfin: 8922 (HTTPS)
 
-**plex.sh** is a prerequisite for plex-subdomain.sh that adds `/plex` nginx config to Swizzin's Plex install.
+**Nginx features per app:**
+- **Plex**: X-Plex-* proxy headers, `/library/streams/` location
+- **Emby**: Range/If-Range headers for streaming
+- **Jellyfin**: WebSocket `/socket` location, WebOS CORS headers, Range/If-Range headers, `/metrics` with private network ACL
+
+**plex.sh** is a prerequisite for plex-subdomain.sh that adds `/plex` nginx config to Swizzin's Plex install (includes X-Plex-* headers and referer-based rewrite).
 
 ### Key Swizzin Functions Used
 

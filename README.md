@@ -167,6 +167,12 @@ bash plex-subdomain.sh
 
 **Access:** `https://plex.example.com/`
 
+**Features:**
+- Automatic Let's Encrypt certificate
+- Proper X-Plex-* proxy headers for client communication
+- Frame-ancestors CSP header for Organizr embedding (if configured)
+- Automatically removes from Organizr SSO protection
+
 **Additional Commands:**
 
 ```bash
@@ -197,6 +203,12 @@ bash emby-subdomain.sh
 ```
 
 **Access:** `https://emby.example.com/`
+
+**Features:**
+- Automatic Let's Encrypt certificate
+- Range/If-Range headers for proper media streaming
+- Frame-ancestors CSP header for Organizr embedding (if configured)
+- Automatically removes from Organizr SSO protection
 
 **Additional Commands:**
 
@@ -230,6 +242,15 @@ bash jellyfin-subdomain.sh
 ```
 
 **Access:** `https://jellyfin.example.com/`
+
+**Features:**
+- Automatic Let's Encrypt certificate
+- WebSocket support via `/socket` location
+- WebOS LG TV CORS headers
+- Range/If-Range headers for proper media streaming
+- Prometheus `/metrics` endpoint with private network restrictions
+- Frame-ancestors CSP header for Organizr embedding (if configured)
+- Automatically removes from Organizr SSO protection
 
 **Additional Commands:**
 
