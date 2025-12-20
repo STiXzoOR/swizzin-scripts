@@ -174,6 +174,21 @@ server {
     ssl_certificate_key ${cert_dir}/key.pem;
     include snippets/ssl-params.conf;
 
+    # Organizr SSO auth endpoint (internal only)
+    location ~ /organizr-auth/auth-([0-9]+) {
+        internal;
+        proxy_pass https://$domain/api/v2/auth?group=\$1;
+        proxy_pass_request_body off;
+        proxy_set_header Content-Length "";
+        proxy_set_header X-Original-URI \$request_uri;
+    }
+
+    # Redirect 401 to Organizr login
+    error_page 401 = @organizr_login;
+    location @organizr_login {
+        return 302 https://$domain/?error=\$status&return=\$scheme://\$http_host\$request_uri;
+    }
+
     include /etc/nginx/apps/*.conf;
 
     root /srv/organizr;
@@ -209,29 +224,15 @@ VHOST
 	echo_progress_done "Subdomain vhost created"
 }
 
-# Create organizr auth snippet
+# Create organizr auth snippet (only the internal auth location)
 _create_auth_snippet() {
-	local domain="$1"
-
 	echo_progress_start "Creating Organizr auth snippet"
 
-	cat >"$auth_snippet" <<SNIPPET
+	# Note: error_page and @organizr_login are in the subdomain vhost at server level
+	cat >"$auth_snippet" <<'SNIPPET'
 # Organizr SSO Authentication
-# Include this in app configs and add: auth_request /organizr-auth/auth-0;
-
-location ~ /organizr-auth/auth-([0-9]+) {
-    internal;
-    proxy_pass https://$domain/api/v2/auth?group=\$1;
-    proxy_pass_request_body off;
-    proxy_set_header Content-Length "";
-    proxy_set_header X-Original-URI \$request_uri;
-}
-
-# Redirect 401 to Organizr login
-error_page 401 = @organizr_login;
-location @organizr_login {
-    return 302 https://$domain/?error=\$status&return=\$scheme://\$http_host\$request_uri;
-}
+# Include this in location blocks and add: auth_request /organizr-auth/auth-0;
+# The error_page 401 and @organizr_login are defined in the organizr vhost
 SNIPPET
 
 	echo_progress_done "Auth snippet created"
@@ -360,17 +361,16 @@ _protect_app() {
 	sed -i 's/^\([[:space:]]*auth_basic\)/#\1/g' "$conf"
 	sed -i 's/^\([[:space:]]*auth_basic_user_file\)/#\1/g' "$conf"
 
-	# Find first location block and add auth after it
+	# Find first location block and add auth_request after it
 	# Using a temp file for complex sed
 	local temp_conf
 	temp_conf=$(mktemp)
 
-	awk -v snippet="$auth_snippet" -v level="$auth_level" '
+	awk -v level="$auth_level" '
 	/location.*{/ && !added {
 		print
 		getline
 		print
-		print "        include /etc/nginx/snippets/organizr-auth.conf;"
 		print "        auth_request /organizr-auth/auth-" level ";"
 		print ""
 		added=1
@@ -395,9 +395,10 @@ _unprotect_app() {
 
 	echo_progress_start "Removing Organizr auth from $app"
 
-	# Remove auth_request and include lines
-	sed -i '/include \/etc\/nginx\/snippets\/organizr-auth.conf;/d' "$conf"
+	# Remove auth_request line
 	sed -i '/auth_request \/organizr-auth\/auth-[0-9]*;/d' "$conf"
+	# Also remove legacy include line if present from older installs
+	sed -i '/include \/etc\/nginx\/snippets\/organizr-auth.conf;/d' "$conf"
 
 	# Uncomment auth_basic
 	sed -i 's/^#\([[:space:]]*auth_basic\)/\1/g' "$conf"
