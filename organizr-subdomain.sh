@@ -189,8 +189,6 @@ server {
         return 302 https://$domain/?error=\$status&return=\$scheme://\$http_host\$request_uri;
     }
 
-    include /etc/nginx/apps/*.conf;
-
     root /srv/organizr;
     index index.php;
 
