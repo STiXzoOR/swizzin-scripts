@@ -58,10 +58,9 @@ _get_install_state() {
 		echo "not_installed"
 	elif [ -f "$subdomain_vhost" ]; then
 		echo "subdomain"
-	elif [ -f "$subfolder_conf" ]; then
-		echo "subfolder"
 	else
-		echo "unknown"
+		# Subfolder config or no config - treat as subfolder (ready for subdomain conversion)
+		echo "subfolder"
 	fi
 }
 
