@@ -174,14 +174,10 @@ server {
     ssl_certificate_key ${cert_dir}/key.pem;
     include snippets/ssl-params.conf;
 
-    # Organizr SSO auth endpoint (internal, uses PHP-FPM directly)
+    # Organizr SSO auth endpoint (internal rewrite to /api/v2)
     location ~ /organizr-auth/auth-([0-9]+) {
         internal;
-        include snippets/fastcgi-php.conf;
-        fastcgi_pass unix:/run/php/php${phpv}-fpm.sock;
-        fastcgi_param SCRIPT_FILENAME /srv/organizr/api/v2/index.php;
-        fastcgi_param REQUEST_URI /api/v2/auth?group=\$1;
-        fastcgi_param QUERY_STRING group=\$1;
+        rewrite ^/organizr-auth/auth-(.*)$ /api/v2/auth?group=\$1;
     }
 
     # Redirect 401 to Organizr login
