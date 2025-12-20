@@ -286,6 +286,7 @@ _add_panel_meta() {
 	cat >>"$profiles_py" <<PYTHON
 
 class ${app_name}_meta(${app_name}_meta):
+    baseurl = None
     urloverride = "https://${domain}"
 PYTHON
 

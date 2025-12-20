@@ -280,6 +280,7 @@ _add_panel_meta() {
 	cat >>"$profiles_py" <<PYTHON
 
 class organizr_meta(organizr_meta):
+    baseurl = None
     urloverride = "https://${domain}"
 PYTHON
 
