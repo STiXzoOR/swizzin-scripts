@@ -484,6 +484,8 @@ _install() {
 		reload_php_fpm
 		echo_success "Organizr converted to subdomain mode"
 		echo_info "Access at: https://$domain"
+		echo_warn "Note: Swizzin's automated Organizr setup may have failed."
+		echo_warn "If Organizr shows the setup wizard, complete it manually at https://$domain"
 		;;
 	"subdomain")
 		echo_info "Already in subdomain mode, running configure..."
