@@ -37,6 +37,10 @@ Each installer script follows a consistent pattern:
 - **subgen.sh** - Installs Subgen (Whisper-based subtitle generation, uses uv + ffmpeg)
 - **zurg.sh** - Installs Zurg (Real-Debrid WebDAV server + rclone mount)
 - **organizr-subdomain.sh** - Converts Organizr to subdomain mode with SSO authentication
+- **plex.sh** - Extends Plex install with nginx subfolder config at `/plex`
+- **plex-subdomain.sh** - Converts Plex from subfolder to subdomain mode
+- **emby-subdomain.sh** - Converts Emby from subfolder to subdomain mode
+- **jellyfin-subdomain.sh** - Converts Jellyfin from subfolder to subdomain mode
 - **panel_helpers.sh** - Shared utility for Swizzin panel app registration
 
 ### Python Apps (uv-based)
@@ -78,6 +82,27 @@ organizr-subdomain.sh is an extension script (not a standalone installer) that:
 
 **Note:** Swizzin's automated Organizr wizard may fail to create the database. Users should complete setup manually via the web interface if needed.
 
+### Media Server Subdomain Scripts
+
+plex-subdomain.sh, emby-subdomain.sh, and jellyfin-subdomain.sh follow a common pattern:
+
+- Convert from subfolder (`/<app>`) to dedicated subdomain
+- Request Let's Encrypt certificate via `box install letsencrypt`
+- Backup original nginx config to `/opt/swizzin/<app>-backups/`
+- Update panel meta with `urloverride` in `/opt/swizzin/core/custom/profiles.py`
+- Add `Content-Security-Policy: frame-ancestors` header for Organizr embedding (if configured)
+
+**Flags:**
+- `--revert` - Revert to subfolder mode (restores backup)
+- `--remove [--force]` - Complete removal (runs `box remove <app>`)
+
+**Ports:**
+- Plex: 32400 (HTTP)
+- Emby: 8096 (HTTP)
+- Jellyfin: 8922 (HTTPS)
+
+**plex.sh** is a prerequisite for plex-subdomain.sh that adds `/plex` nginx config to Swizzin's Plex install.
+
 ### Key Swizzin Functions Used
 
 ```bash
@@ -100,6 +125,15 @@ echo_error, echo_info        # Status logging
 | organizr-subdomain.sh | `ORGANIZR_DOMAIN` | **Yes** | Public FQDN for Organizr subdomain |
 | organizr-subdomain.sh | `ORGANIZR_LE_HOSTNAME` | No | Let's Encrypt hostname (defaults to ORGANIZR_DOMAIN) |
 | organizr-subdomain.sh | `ORGANIZR_LE_INTERACTIVE` | No | Set to `yes` for interactive Let's Encrypt (CloudFlare DNS) |
+| plex-subdomain.sh | `PLEX_DOMAIN` | **Yes** | Public FQDN for Plex subdomain |
+| plex-subdomain.sh | `PLEX_LE_HOSTNAME` | No | Let's Encrypt hostname |
+| plex-subdomain.sh | `PLEX_LE_INTERACTIVE` | No | Set to `yes` for interactive Let's Encrypt |
+| emby-subdomain.sh | `EMBY_DOMAIN` | **Yes** | Public FQDN for Emby subdomain |
+| emby-subdomain.sh | `EMBY_LE_HOSTNAME` | No | Let's Encrypt hostname |
+| emby-subdomain.sh | `EMBY_LE_INTERACTIVE` | No | Set to `yes` for interactive Let's Encrypt |
+| jellyfin-subdomain.sh | `JELLYFIN_DOMAIN` | **Yes** | Public FQDN for Jellyfin subdomain |
+| jellyfin-subdomain.sh | `JELLYFIN_LE_HOSTNAME` | No | Let's Encrypt hostname |
+| jellyfin-subdomain.sh | `JELLYFIN_LE_INTERACTIVE` | No | Set to `yes` for interactive Let's Encrypt |
 | notifiarr.sh | `DN_API_KEY` | Interactive | Notifiarr.com API key (prompted if not set) |
 | zurg.sh | Real-Debrid token | Interactive | Real-Debrid API token (prompted if not set) |
 | All scripts | `<APP>_OWNER` | No | App owner username (defaults to master user) |
@@ -123,8 +157,10 @@ Most installers use `port 10000 12000` to find an available port in the 10000-12
 ### Nginx Configuration
 
 - **Decypharr/Notifiarr/Huntarr**: Location-based routing at `/<appname>/`
-- **Seerr**: Dedicated vhost file for subdomain-based access
+- **Seerr**: Dedicated vhost for subdomain-based access with frame-ancestors CSP
 - **Organizr Subdomain**: Dedicated vhost at `/etc/nginx/sites-available/organizr` with internal auth rewrite
+- **Plex/Emby/Jellyfin Subdomain**: Dedicated vhosts with panel meta urloverride and frame-ancestors CSP
+- **Plex (subfolder)**: Location-based routing at `/plex/` via plex.sh
 - **Byparr/Subgen/Zurg**: No nginx (internal API/webhook services)
 - API endpoints bypass htpasswd authentication
 

@@ -63,6 +63,14 @@ app_port=$(port 10000 12000)
 app_reqs=("curl" "jq" "wget")
 app_icon_name="$app_name"
 app_icon_url="https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/overseerr.png"
+organizr_config="/opt/swizzin/organizr-auth.conf"
+
+# Get Organizr domain for frame-ancestors (if configured)
+_get_organizr_domain() {
+	if [ -f "$organizr_config" ] && grep -q "^ORGANIZR_DOMAIN=" "$organizr_config"; then
+		grep "^ORGANIZR_DOMAIN=" "$organizr_config" | cut -d'"' -f2
+	fi
+}
 
 if [ ! -d "$swiz_configdir" ]; then
 	mkdir -p "$swiz_configdir"
@@ -261,6 +269,14 @@ _nginx_seerr() {
 			echo_info "Let's Encrypt certificate issued for $le_hostname"
 		fi
 
+		# Get Organizr domain for frame-ancestors
+		local organizr_domain
+		organizr_domain=$(_get_organizr_domain)
+		local csp_header=""
+		if [ -n "$organizr_domain" ]; then
+			csp_header="add_header Content-Security-Policy \"frame-ancestors 'self' https://$organizr_domain\";"
+		fi
+
 		# Create dedicated vhost for Seerr
 		cat >"$vhost_file" <<-NGX
 			server {
@@ -289,6 +305,8 @@ _nginx_seerr() {
 			    ssl_certificate           /etc/nginx/ssl/$le_hostname/fullchain.pem;
 			    ssl_certificate_key       /etc/nginx/ssl/$le_hostname/key.pem;
 			    include snippets/ssl-params.conf;
+
+			    ${csp_header}
 
 			    # Seerr reverse proxy
 			    location / {

@@ -22,6 +22,7 @@ auth_snippet="/etc/nginx/snippets/organizr-auth.conf"
 subfolder_conf="/etc/nginx/apps/organizr.conf"
 subdomain_vhost="/etc/nginx/sites-available/organizr"
 subdomain_enabled="/etc/nginx/sites-enabled/organizr"
+profiles_py="/opt/swizzin/core/custom/profiles.py"
 
 # Get domain from config file if exists, otherwise from env
 _get_domain() {
@@ -262,6 +263,40 @@ HEADER
 	echo_progress_done "Apps include file generated"
 }
 
+# Add panel meta urloverride
+_add_panel_meta() {
+	local domain="$1"
+
+	echo_progress_start "Adding panel meta urloverride"
+
+	# Ensure profiles.py exists
+	mkdir -p "$(dirname "$profiles_py")"
+	touch "$profiles_py"
+
+	# Remove existing override if present
+	sed -i "/^class organizr_meta(organizr_meta):/,/^class \|^$/d" "$profiles_py" 2>/dev/null || true
+
+	# Add new override
+	cat >>"$profiles_py" <<PYTHON
+
+class organizr_meta(organizr_meta):
+    urloverride = "https://${domain}"
+PYTHON
+
+	echo_progress_done "Panel meta updated"
+}
+
+# Remove panel meta urloverride
+_remove_panel_meta() {
+	if [ -f "$profiles_py" ]; then
+		echo_progress_start "Removing panel meta urloverride"
+		sed -i "/^class organizr_meta(organizr_meta):/,/^class \|^$/d" "$profiles_py" 2>/dev/null || true
+		# Clean up empty lines at end of file
+		sed -i -e :a -e '/^\n*$/{$d;N;ba' -e '}' "$profiles_py" 2>/dev/null || true
+		echo_progress_done "Panel meta removed"
+	fi
+}
+
 # Get list of installed apps with nginx configs
 _get_available_apps() {
 	local apps=()
@@ -478,6 +513,7 @@ _install() {
 		_create_subdomain_vhost "$domain" "$le_hostname"
 		_create_auth_snippet
 		_generate_apps_include
+		_add_panel_meta "$domain"
 		_select_apps
 		_apply_protection
 		systemctl reload nginx
@@ -561,6 +597,9 @@ _revert() {
 		echo_info "Recreating subfolder config..."
 		bash /usr/local/bin/swizzin/nginx/organizr.sh
 	fi
+
+	# Remove panel meta override
+	_remove_panel_meta
 
 	# Keep auth snippet and config for future use
 	echo_info "Config preserved at $config_file for future re-enable"
