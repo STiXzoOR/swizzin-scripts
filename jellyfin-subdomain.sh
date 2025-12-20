@@ -36,11 +36,25 @@ _get_organizr_domain() {
 	fi
 }
 
-# Remove app from Organizr protected apps
+# Remove app from Organizr protected apps and nginx includes
 _exclude_from_organizr() {
+	local modified=false
+	local apps_include="/etc/nginx/snippets/organizr-apps.conf"
+
+	# Remove from protected apps config
 	if [ -f "$organizr_config" ] && grep -q "^${app_name}:" "$organizr_config"; then
 		echo_progress_start "Removing ${app_name^} from Organizr protected apps"
 		sed -i "/^${app_name}:/d" "$organizr_config"
+		modified=true
+	fi
+
+	# Remove from apps include file
+	if [ -f "$apps_include" ] && grep -q "include /etc/nginx/apps/${app_name}.conf;" "$apps_include"; then
+		sed -i "\|include /etc/nginx/apps/${app_name}.conf;|d" "$apps_include"
+		modified=true
+	fi
+
+	if [ "$modified" = true ]; then
 		echo_progress_done "Removed from Organizr"
 	fi
 }
