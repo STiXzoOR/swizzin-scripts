@@ -179,6 +179,8 @@ server {
     ssl_certificate_key ${cert_dir}/key.pem;
     include snippets/ssl-params.conf;
 
+    client_max_body_size 0;
+
     ${csp_header}
 
     location / {
@@ -196,6 +198,35 @@ server {
         proxy_set_header X-Forwarded-Ssl on;
         proxy_redirect off;
         proxy_buffering off;
+
+        if (\$http_user_agent ~ Web0S) {
+            add_header Access-Control-Allow-Origin "luna://com.webos.service.config" always;
+        }
+
+        proxy_set_header Range \$http_range;
+        proxy_set_header If-Range \$http_if_range;
+    }
+
+    location ~ (/jellyfin)?/socket {
+        include /etc/nginx/snippets/proxy.conf;
+        if (\$http_user_agent ~ Web0S) {
+            add_header Access-Control-Allow-Origin "luna://com.webos.service.config" always;
+        }
+        proxy_pass ${app_protocol}://127.0.0.1:${app_port};
+    }
+
+    # Restrict access to /metrics
+    # https://jellyfin.org/docs/general/networking/monitoring/#prometheus-metrics
+    location /metrics {
+        allow 192.168.0.0/16;
+        allow 10.0.0.0/8;
+        allow 172.16.0.0/12;
+        allow 127.0.0.0/8;
+
+        deny all;
+
+        include /etc/nginx/snippets/proxy.conf;
+        proxy_pass ${app_protocol}://127.0.0.1:${app_port};
     }
 }
 VHOST

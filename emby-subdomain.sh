@@ -183,6 +183,9 @@ server {
     location / {
         include snippets/proxy.conf;
         proxy_pass http://127.0.0.1:${app_port}/;
+
+        proxy_set_header Range \$http_range;
+        proxy_set_header If-Range \$http_if_range;
     }
 }
 VHOST
