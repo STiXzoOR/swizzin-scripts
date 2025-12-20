@@ -116,7 +116,9 @@ bash organizr-subdomain.sh --revert
 bash organizr-subdomain.sh --remove
 ```
 
-**Note:** This script runs `box install organizr` first if Organizr isn't already installed.
+**Notes:**
+- This script runs `box install organizr` first if Organizr isn't already installed.
+- Swizzin's automated Organizr wizard may fail. If Organizr shows the setup wizard, complete it manually at your subdomain URL.
 
 ---
 

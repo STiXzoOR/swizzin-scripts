@@ -69,6 +69,15 @@ organizr-subdomain.sh is an extension script (not a standalone installer) that:
 
 **Auth levels:** 0=Admin, 1=Co-Admin, 2=Super User, 3=Power User, 4=User, 998=Logged In
 
+**Key files:**
+- `/etc/nginx/sites-available/organizr` - Subdomain vhost with auth endpoint
+- `/etc/nginx/snippets/organizr-apps.conf` - Dynamic includes (excludes panel.conf)
+- `/opt/swizzin/organizr-auth.conf` - Protected apps configuration
+
+**Auth mechanism:** Uses internal rewrite to `/api/v2/auth?group=N` which is handled by the existing PHP location block. Apps add `auth_request /organizr-auth/auth-0;` to their location blocks.
+
+**Note:** Swizzin's automated Organizr wizard may fail to create the database. Users should complete setup manually via the web interface if needed.
+
 ### Key Swizzin Functions Used
 
 ```bash
@@ -115,7 +124,7 @@ Most installers use `port 10000 12000` to find an available port in the 10000-12
 
 - **Decypharr/Notifiarr/Huntarr**: Location-based routing at `/<appname>/`
 - **Seerr**: Dedicated vhost file for subdomain-based access
-- **Organizr Subdomain**: Dedicated vhost with SSO auth snippet at `/etc/nginx/snippets/organizr-auth.conf`
+- **Organizr Subdomain**: Dedicated vhost at `/etc/nginx/sites-available/organizr` with internal auth rewrite
 - **Byparr/Subgen/Zurg**: No nginx (internal API/webhook services)
 - API endpoints bypass htpasswd authentication
 
