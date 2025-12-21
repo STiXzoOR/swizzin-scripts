@@ -134,8 +134,22 @@ _configure_dns() {
 	echo_progress_done "DNS configured"
 }
 
+# Check if server has IPv4 connectivity
+_has_ipv4() {
+	# Check if any interface has a non-loopback IPv4 address
+	ip -4 addr show scope global 2>/dev/null | grep -q "inet " && return 0
+	return 1
+}
+
 # Disable IPv6
 _disable_ipv6() {
+	# Safety check: ensure we have IPv4 before disabling IPv6
+	if ! _has_ipv4; then
+		echo_error "No IPv4 connectivity detected - disabling IPv6 could lock you out!"
+		echo_error "Skipping IPv6 disable for safety"
+		return 1
+	fi
+
 	echo_progress_start "Disabling IPv6"
 
 	# Apply immediately
@@ -207,6 +221,10 @@ _revert() {
 _install() {
 	echo_info "DNS Fix for FlareSolverr/Byparr"
 	echo_info "This will configure public DNS and optionally disable IPv6"
+	echo ""
+	echo_warn "SAFETY NOTE: This script modifies system DNS settings."
+	echo_warn "SSH access should remain unaffected (SSH uses IP, not DNS)."
+	echo_warn "Backups are created automatically. Use --revert to undo."
 	echo ""
 
 	_show_status
