@@ -122,8 +122,8 @@ _validate_instance_name() {
 		return 1
 	fi
 
-	# Check if already exists
-	if [[ -f "/install/.${app_name}-${name}.lock" ]]; then
+	# Check if already exists (lock files use underscore for panel compatibility)
+	if [[ -f "/install/.${app_name}_${name}.lock" ]]; then
 		echo_error "Instance '${app_name}-${name}' already exists"
 		return 1
 	fi
@@ -137,11 +137,12 @@ _validate_instance_name() {
 # ==============================================================================
 _get_instances() {
 	local instances=()
-	for lock in /install/.${app_name}-*.lock; do
+	# Lock files use underscore for panel compatibility
+	for lock in /install/.${app_name}_*.lock; do
 		[[ -f "$lock" ]] || continue
 		local instance_name
 		instance_name=$(basename "$lock" .lock)
-		instance_name="${instance_name#.${app_name}-}"
+		instance_name="${instance_name#.${app_name}_}"
 		instances+=("$instance_name")
 	done
 	echo "${instances[@]}"
@@ -169,6 +170,7 @@ _add_instance() {
 	name="$validated_name"
 
 	local instance_name="${app_name}-${name}"
+	local instance_lock="${app_name}_${name}"  # Lock files use underscore for panel
 	local config_dir="/home/${user}/.config/${instance_name}"
 	local instance_port
 	instance_port=$(port 10000 12000)
@@ -268,8 +270,8 @@ _add_instance() {
 	systemctl enable --now "${instance_name}.service" >>"$log" 2>&1
 	echo_progress_done
 
-	# Create lock file
-	touch "/install/.${instance_name}.lock"
+	# Create lock file (underscore for panel compatibility)
+	touch "/install/.${instance_lock}.lock"
 
 	echo_success "${app_pretty} instance '${name}' installed"
 	echo_info "Access at: https://your-server/${instance_name}/"
@@ -283,8 +285,9 @@ _remove_instance() {
 	local name="$1"
 	local force="$2"
 	local instance_name="${app_name}-${name}"
+	local instance_lock="${app_name}_${name}"  # Lock files use underscore for panel
 
-	if [[ ! -f "/install/.${instance_name}.lock" ]]; then
+	if [[ ! -f "/install/.${instance_lock}.lock" ]]; then
 		echo_error "Instance '${instance_name}' not found"
 		return 1
 	fi
@@ -334,7 +337,7 @@ _remove_instance() {
 	fi
 
 	# Remove lock file
-	rm -f "/install/.${instance_name}.lock"
+	rm -f "/install/.${instance_lock}.lock"
 
 	echo_success "Instance '${name}' removed"
 }
