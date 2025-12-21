@@ -17,6 +17,7 @@ A collection of installer scripts for integrating additional applications into [
 | [jellyfin-subdomain.sh](#jellyfin-subdomain) | [Jellyfin](https://jellyfin.org/) | Convert Jellyfin to subdomain mode |
 | [seerr.sh](#seerr) | [Seerr](https://github.com/seerr-team/seerr) | Media request platform (Overseerr fork) |
 | [byparr.sh](#byparr) | [Byparr](https://github.com/ThePhaseless/Byparr) | FlareSolverr alternative for bypassing anti-bot protections |
+| [flaresolverr.sh](#flaresolverr) | [FlareSolverr](https://github.com/FlareSolverr/FlareSolverr) | Proxy server to bypass Cloudflare protection |
 | [huntarr.sh](#huntarr) | [Huntarr](https://github.com/plexguide/Huntarr.io) | Automated media discovery for Sonarr, Radarr, Lidarr, etc. |
 | [subgen.sh](#subgen) | [Subgen](https://github.com/McCloudS/subgen) | Automatic subtitle generation using Whisper AI |
 | [zurg.sh](#zurg) | [Zurg](https://github.com/debridmediamanager/zurg-testing) | Real-Debrid WebDAV server with rclone mount |
@@ -383,6 +384,29 @@ bash byparr.sh
 **Config:** `/home/<user>/.config/Byparr/env.conf`
 
 **Prowlarr Setup:** Add as FlareSolverr indexer proxy with URL `http://127.0.0.1:8191`
+
+---
+
+### FlareSolverr
+
+Proxy server to bypass Cloudflare and DDoS-GUARD protection. Used by Prowlarr, Jackett, and other *arr apps to access protected indexers.
+
+```bash
+# Optional: Set custom owner
+export FLARESOLVERR_OWNER="username"
+
+bash flaresolverr.sh
+```
+
+**Port:** 8191 (default FlareSolverr port)
+
+**Config:** `/home/<user>/.config/FlareSolverr/env.conf`
+
+**Prowlarr/Jackett Setup:** Add as FlareSolverr indexer proxy with URL `http://127.0.0.1:8191`
+
+**Note:** FlareSolverr only supports x64/amd64 architecture. For ARM systems, use [Byparr](#byparr) instead.
+
+**Troubleshooting:** If you get "cookies not valid" errors, run `bash dns-fix.sh` to fix DNS resolution issues.
 
 ---
 
