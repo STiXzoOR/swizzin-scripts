@@ -37,38 +37,40 @@ _detect_dns_method() {
 
 # Show current DNS status
 _show_status() {
-	echo ""
-	echo "DNS Configuration Status"
-	echo "─────────────────────────────"
-
 	local method
 	method=$(_detect_dns_method)
-	echo "  Method: ${method}"
 
-	echo ""
-	echo "  Current DNS servers:"
-	if [[ "$method" == "systemd-resolved" ]]; then
-		resolvectl status 2>/dev/null | grep -E "DNS Servers|Current DNS" | head -5 | sed 's/^/    /'
-	else
-		grep "^nameserver" /etc/resolv.conf 2>/dev/null | sed 's/^/    /'
-	fi
-
-	echo ""
-	echo "  IPv6 status:"
 	local ipv6_disabled
 	ipv6_disabled=$(sysctl -n net.ipv6.conf.all.disable_ipv6 2>/dev/null || echo "0")
+
+	local ipv6_status
 	if [[ "$ipv6_disabled" == "1" ]]; then
-		echo "    IPv6: DISABLED"
+		ipv6_status="DISABLED"
 	else
-		echo "    IPv6: ENABLED"
+		ipv6_status="ENABLED"
 	fi
 
 	echo ""
-	echo "  Backups:"
-	if [[ -d "$backup_dir" ]]; then
-		ls -la "$backup_dir" 2>/dev/null | tail -n +2 | sed 's/^/    /'
+	echo "Current Configuration"
+	echo "─────────────────────────────"
+	printf "  %-14s %s\n" "DNS Method:" "${method}"
+
+	# Get DNS servers
+	local dns_servers=""
+	if [[ "$method" == "systemd-resolved" ]]; then
+		dns_servers=$(resolvectl status 2>/dev/null | grep -E "DNS Servers:" | head -1 | sed 's/.*DNS Servers: //' | tr -s ' ' ', ')
+		if [[ -z "$dns_servers" ]]; then
+			dns_servers=$(resolvectl status 2>/dev/null | grep -E "Current DNS Server:" | head -1 | sed 's/.*Current DNS Server: //')
+		fi
 	else
-		echo "    (no backups found)"
+		dns_servers=$(grep "^nameserver" /etc/resolv.conf 2>/dev/null | awk '{print $2}' | tr '\n' ', ' | sed 's/,$//')
+	fi
+	printf "  %-14s %s\n" "DNS Servers:" "${dns_servers:-unknown}"
+	printf "  %-14s %s\n" "IPv6:" "${ipv6_status}"
+
+	# Show backups if they exist
+	if [[ -d "$backup_dir" ]] && [[ -n "$(ls -A "$backup_dir" 2>/dev/null)" ]]; then
+		printf "  %-14s %s\n" "Backups:" "${backup_dir}"
 	fi
 	echo ""
 }
