@@ -169,8 +169,10 @@ _remove_flaresolverr() {
 
 	echo_info "Removing ${app_pretty}..."
 
-	# Ask about purging configuration
-	if ask "Would you like to purge the configuration?" N; then
+	# Ask about purging configuration (skip if --force)
+	if [[ "$force" == "--force" ]]; then
+		purgeconfig="true"
+	elif ask "Would you like to purge the configuration?" N; then
 		purgeconfig="true"
 	else
 		purgeconfig="false"
