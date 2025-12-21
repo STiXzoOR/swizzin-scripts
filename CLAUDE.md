@@ -230,6 +230,63 @@ Scripts source Swizzin globals and utilities:
 . /etc/swizzin/sources/functions/utils
 ```
 
+### Coding Standards
+
+**Bracket style:** Use Bash `[[ ]]` throughout (not POSIX `[ ]`):
+```bash
+if [[ -f "$file" ]]; then
+if [[ "$var" == "value" ]]; then
+```
+
+**Variable quoting:** Always quote variables and use braces for clarity:
+```bash
+touch "$log"
+chown "${user}:${user}" "$config_dir"
+mkdir -p "${app_dir}/${app_name}"
+```
+
+**Confirmations:** Use Swizzin's `ask` function for yes/no prompts:
+```bash
+if ask "Would you like to purge the configuration?" N; then
+    rm -rf "$config_dir"
+fi
+```
+
+**Panel helper loading:** Use the download-and-cache pattern:
+```bash
+PANEL_HELPER_LOCAL="/opt/swizzin/panel_helpers.sh"
+PANEL_HELPER_URL="https://raw.githubusercontent.com/STiXzoOR/swizzin-scripts/main/panel_helpers.sh"
+
+_load_panel_helper() {
+    if [[ -f "$PANEL_HELPER_LOCAL" ]]; then
+        . "$PANEL_HELPER_LOCAL"
+        return
+    fi
+    mkdir -p "$(dirname "$PANEL_HELPER_LOCAL")"
+    if curl -fsSL "$PANEL_HELPER_URL" -o "$PANEL_HELPER_LOCAL" >>"$log" 2>&1; then
+        chmod +x "$PANEL_HELPER_LOCAL"
+        . "$PANEL_HELPER_LOCAL"
+    fi
+}
+```
+
+## Templates
+
+The `templates/` directory contains starter templates for common script types:
+
+| Template | Use Case | Examples |
+|----------|----------|----------|
+| `template-binary.sh` | Single binary apps installed to `/usr/bin` | decypharr, notifiarr |
+| `template-python.sh` | Python apps using uv for dependencies | byparr, huntarr, subgen |
+| `template-subdomain.sh` | Converting apps from subfolder to subdomain | plex-subdomain, emby-subdomain |
+| `template-multiinstance.sh` | Managing multiple instances of a base app | sonarr, radarr |
+
+Each template includes:
+- Detailed header with customization points (marked `# CUSTOMIZE:`)
+- Standard function structure
+- Inline documentation
+- All coding standards applied
+
 ## Testing
 
 Scripts must be tested on a Swizzin-installed system. No automated test framework exists.

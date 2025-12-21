@@ -1,14 +1,35 @@
 #!/bin/bash
-# sonarr multi-instance installer
-# STiXzoOR 2025
-# Usage: bash sonarr.sh [--add|--remove [name] [--force]|--list]
+# ==============================================================================
+# MULTI-INSTANCE MANAGER TEMPLATE
+# ==============================================================================
+# Template for managing multiple instances of an existing Swizzin app
+# Examples: sonarr, radarr
+#
+# Usage: bash <appname>.sh [--add [name]|--remove [name] [--force]|--list]
+#
+# This script:
+# - Installs base app via `box install <app>` if not present
+# - Creates named instances (e.g., 4k, anime, kids) with separate configs
+# - Each instance gets its own systemd service, nginx config, and panel entry
+#
+# CUSTOMIZATION POINTS (search for "# CUSTOMIZE:"):
+# 1. App variables (name, binary, port, branch)
+# 2. Config XML format in _add_instance()
+# 3. Systemd ExecStart in _add_instance()
+# 4. Nginx proxy settings in _add_instance()
+# ==============================================================================
+
+# CUSTOMIZE: Replace "myapp" with your app name throughout this file
+# Tip: Use sed 's/myapp/yourapp/g' and 's/Myapp/Yourapp/g'
 
 . /etc/swizzin/sources/globals.sh
 
 #shellcheck source=sources/functions/utils
 . /etc/swizzin/sources/functions/utils
 
+# ==============================================================================
 # Panel Helper - Download and cache for panel integration
+# ==============================================================================
 PANEL_HELPER_LOCAL="/opt/swizzin/panel_helpers.sh"
 PANEL_HELPER_URL="https://raw.githubusercontent.com/STiXzoOR/swizzin-scripts/main/panel_helpers.sh"
 
@@ -28,21 +49,32 @@ _load_panel_helper() {
 	fi
 }
 
-# Log to Swizzin.log
+# ==============================================================================
+# Logging
+# ==============================================================================
 export log=/root/logs/swizzin.log
 touch "$log"
 
-app_name="sonarr"
-app_binary="/opt/Sonarr/Sonarr"
-app_base_port="8989"
-app_branch="main"
-app_pretty="Sonarr"
-app_lockname="sonarr"
+# ==============================================================================
+# App Configuration
+# ==============================================================================
+# CUSTOMIZE: Set all app-specific variables here
 
+app_name="myapp"
+app_pretty="Myapp"                    # Display name
+app_lockname="myapp"                  # Base app lock file name
+app_binary="/opt/Myapp/Myapp"         # Path to binary
+app_base_port="8989"                  # Base app's default port
+app_branch="main"                     # Config branch (e.g., main, master)
+
+# User and paths
 user=$(_get_master_username)
 profiles_py="/opt/swizzin/core/custom/profiles.py"
 
-# Ensure base app has panel meta override with check_theD = False
+# ==============================================================================
+# Base App Panel Meta Override
+# ==============================================================================
+# Ensures base app has check_theD = False in panel
 _ensure_base_panel_meta() {
 	[[ -f /install/.panel.lock ]] || return 0
 
@@ -63,7 +95,9 @@ _ensure_base_panel_meta() {
 	fi
 }
 
-# Validate instance name (alphanumeric only, lowercase)
+# ==============================================================================
+# Instance Name Validation
+# ==============================================================================
 _validate_instance_name() {
 	local name="$1"
 
@@ -98,7 +132,9 @@ _validate_instance_name() {
 	return 0
 }
 
-# Get list of installed instances
+# ==============================================================================
+# Instance Discovery
+# ==============================================================================
 _get_instances() {
 	local instances=()
 	for lock in /install/.${app_name}-*.lock; do
@@ -111,7 +147,6 @@ _get_instances() {
 	echo "${instances[@]}"
 }
 
-# Get port from instance config
 _get_instance_port() {
 	local name="$1"
 	local config_file="/home/${user}/.config/${app_name}-${name}/config.xml"
@@ -122,7 +157,9 @@ _get_instance_port() {
 	fi
 }
 
-# Add a new instance
+# ==============================================================================
+# Add Instance
+# ==============================================================================
 _add_instance() {
 	local name="$1"
 
@@ -144,7 +181,7 @@ _add_instance() {
 	chown -R "${user}:${user}" "$config_dir"
 	echo_progress_done
 
-	# Create config.xml
+	# CUSTOMIZE: Create config file (XML format for *arr apps)
 	echo_progress_start "Generating configuration"
 	cat >"${config_dir}/config.xml" <<-EOSC
 		<Config>
@@ -165,6 +202,7 @@ _add_instance() {
 	echo_progress_done
 
 	# Create systemd service
+	# CUSTOMIZE: Adjust ExecStart for your app's command line format
 	echo_progress_start "Installing systemd service"
 	cat >"/etc/systemd/system/${instance_name}.service" <<-SERV
 		[Unit]
@@ -188,6 +226,7 @@ _add_instance() {
 	echo_progress_done
 
 	# Create nginx config if nginx is installed
+	# CUSTOMIZE: Adjust proxy settings for your app
 	if [[ -f /install/.nginx.lock ]]; then
 		echo_progress_start "Installing nginx config"
 		cat >"/etc/nginx/apps/${instance_name}.conf" <<-NGX
@@ -237,7 +276,9 @@ _add_instance() {
 	echo_info "Port: ${instance_port}"
 }
 
-# Remove an instance
+# ==============================================================================
+# Remove Instance
+# ==============================================================================
 _remove_instance() {
 	local name="$1"
 	local force="$2"
@@ -298,7 +339,9 @@ _remove_instance() {
 	echo_success "Instance '${name}' removed"
 }
 
-# Interactive instance removal
+# ==============================================================================
+# Interactive Removal
+# ==============================================================================
 _remove_interactive() {
 	local force="$1"
 	local instances
@@ -335,7 +378,9 @@ _remove_interactive() {
 	done
 }
 
-# List all instances
+# ==============================================================================
+# List Instances
+# ==============================================================================
 _list_instances() {
 	echo ""
 	echo "${app_pretty} Instances:"
@@ -364,7 +409,9 @@ _list_instances() {
 	echo ""
 }
 
-# Install base app if not installed
+# ==============================================================================
+# Base App Installation
+# ==============================================================================
 _ensure_base_installed() {
 	if [[ ! -f "/install/.${app_lockname}.lock" ]]; then
 		echo_info "${app_pretty} is not installed"
@@ -383,7 +430,9 @@ _ensure_base_installed() {
 	_ensure_base_panel_meta
 }
 
-# Pre-flight checks
+# ==============================================================================
+# Pre-flight Checks
+# ==============================================================================
 _preflight() {
 	if [[ ! -f /install/.nginx.lock ]]; then
 		echo_error "nginx is not installed. Please install nginx first."
@@ -391,7 +440,9 @@ _preflight() {
 	fi
 }
 
-# Interactive add flow
+# ==============================================================================
+# Interactive Add Flow
+# ==============================================================================
 _add_interactive() {
 	while true; do
 		if ! ask "Would you like to add a ${app_pretty} instance?" Y; then
@@ -405,7 +456,9 @@ _add_interactive() {
 	done
 }
 
+# ==============================================================================
 # Main
+# ==============================================================================
 _preflight
 
 case "$1" in

@@ -8,15 +8,25 @@
 #shellcheck source=sources/functions/utils
 . /etc/swizzin/sources/functions/utils
 
-# Load panel helpers (locally or from GitHub)
-panel_helpers="/opt/swizzin/scripts/panel_helpers.sh"
-if [[ -f "$panel_helpers" ]]; then
-	# shellcheck source=panel_helpers.sh
-	. "$panel_helpers"
-else
-	# shellcheck source=/dev/null
-	. <(curl -fsSL "https://raw.githubusercontent.com/STiXzoOR/swizzin-scripts/main/panel_helpers.sh")
-fi
+# Panel Helper - Download and cache for panel integration
+PANEL_HELPER_LOCAL="/opt/swizzin/panel_helpers.sh"
+PANEL_HELPER_URL="https://raw.githubusercontent.com/STiXzoOR/swizzin-scripts/main/panel_helpers.sh"
+
+_load_panel_helper() {
+	if [[ -f "$PANEL_HELPER_LOCAL" ]]; then
+		# shellcheck source=panel_helpers.sh
+		. "$PANEL_HELPER_LOCAL"
+		return
+	fi
+
+	mkdir -p "$(dirname "$PANEL_HELPER_LOCAL")"
+	if curl -fsSL "$PANEL_HELPER_URL" -o "$PANEL_HELPER_LOCAL" >>"$log" 2>&1; then
+		chmod +x "$PANEL_HELPER_LOCAL"
+		. "$PANEL_HELPER_LOCAL"
+	else
+		echo_info "Could not fetch panel helper; skipping panel integration"
+	fi
+}
 
 # Log to Swizzin.log
 export log=/root/logs/swizzin.log
@@ -207,7 +217,10 @@ _add_instance() {
 	# Add panel entry
 	if [[ -f /install/.panel.lock ]]; then
 		echo_progress_start "Adding panel entry"
-		panel_register_app "${instance_name//-/_}" "${app_pretty} ${name^}" "/${instance_name}" "" "${instance_name}" "${app_name}" "" "false"
+		_load_panel_helper
+		if command -v panel_register_app >/dev/null 2>&1; then
+			panel_register_app "${instance_name//-/_}" "${app_pretty} ${name^}" "/${instance_name}" "" "${instance_name}" "${app_name}" "" "false"
+		fi
 		echo_progress_done
 	fi
 
@@ -256,27 +269,26 @@ _remove_instance() {
 	# Remove panel entry
 	if [[ -f /install/.panel.lock ]]; then
 		echo_progress_start "Removing panel entry"
-		panel_unregister_app "${instance_name//-/_}"
+		_load_panel_helper
+		if command -v panel_unregister_app >/dev/null 2>&1; then
+			panel_unregister_app "${instance_name//-/_}"
+		fi
 		echo_progress_done
 	fi
 
 	# Purge config
 	local config_dir="/home/${user}/.config/${instance_name}"
 	if [[ -d "$config_dir" ]]; then
-		local purge="n"
 		if [[ "$force" == "--force" ]]; then
-			purge="y"
-		else
-			echo -n "Purge configuration directory? (y/n) "
-			read -r purge
-		fi
-
-		if [[ "$purge" == "y" ]]; then
+			echo_progress_start "Purging configuration"
+			rm -rf "$config_dir"
+			echo_progress_done
+		elif ask "Would you like to purge the configuration directory?" N; then
 			echo_progress_start "Purging configuration"
 			rm -rf "$config_dir"
 			echo_progress_done
 		else
-			echo_info "Configuration kept at: $config_dir"
+			echo_info "Configuration kept at: ${config_dir}"
 		fi
 	fi
 
@@ -356,9 +368,7 @@ _list_instances() {
 _ensure_base_installed() {
 	if [[ ! -f "/install/.${app_lockname}.lock" ]]; then
 		echo_info "${app_pretty} is not installed"
-		echo -n "Would you like to install ${app_pretty}? (y/n) "
-		read -r response
-		if [[ "$response" == "y" ]]; then
+		if ask "Would you like to install ${app_pretty}?" Y; then
 			box install "$app_name" || {
 				echo_error "Failed to install ${app_pretty}"
 				exit 1
@@ -384,9 +394,7 @@ _preflight() {
 # Interactive add flow
 _add_interactive() {
 	while true; do
-		echo -n "Would you like to add a ${app_pretty} instance? (y/n) "
-		read -r response
-		if [[ "$response" != "y" ]]; then
+		if ! ask "Would you like to add a ${app_pretty} instance?" Y; then
 			break
 		fi
 

@@ -538,9 +538,16 @@ Byparr, Huntarr, and Subgen use [uv](https://github.com/astral-sh/uv) for Python
 
 1. Fork the repository
 2. Create a feature branch
-3. Follow the existing script patterns
-4. Test on a Swizzin installation
-5. Submit a pull request
+3. **Use a template** from `templates/` as your starting point:
+   - `template-binary.sh` - For single-binary applications
+   - `template-python.sh` - For Python apps using uv
+   - `template-subdomain.sh` - For subdomain converters
+   - `template-multiinstance.sh` - For multi-instance managers
+4. Follow the coding standards in `CLAUDE.md`
+5. Test on a Swizzin installation
+6. Submit a pull request
+
+See `CLAUDE.md` for detailed coding conventions and architecture documentation.
 
 ## License
 
