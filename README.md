@@ -20,6 +20,7 @@ A collection of installer scripts for integrating additional applications into [
 | [huntarr.sh](#huntarr) | [Huntarr](https://github.com/plexguide/Huntarr.io) | Automated media discovery for Sonarr, Radarr, Lidarr, etc. |
 | [subgen.sh](#subgen) | [Subgen](https://github.com/McCloudS/subgen) | Automatic subtitle generation using Whisper AI |
 | [zurg.sh](#zurg) | [Zurg](https://github.com/debridmediamanager/zurg-testing) | Real-Debrid WebDAV server with rclone mount |
+| [dns-fix.sh](#dns-fix) | - | Fix DNS issues for FlareSolverr/Byparr cookie validation |
 
 ## Requirements
 
@@ -456,6 +457,33 @@ bash zurg.sh
 **Get your API token:** https://real-debrid.com/apitoken
 
 **Usage with *arr apps:** Point your *arr applications to `/mnt/zurg` for accessing Real-Debrid content.
+
+---
+
+## Utility Scripts
+
+### DNS Fix
+
+Fixes DNS resolution issues that can cause "cookies not valid" errors when using FlareSolverr or Byparr with Jackett indexers.
+
+```bash
+# Check current DNS status
+bash dns-fix.sh --status
+
+# Apply fix (configure public DNS, optionally disable IPv6)
+bash dns-fix.sh
+
+# Revert to original configuration
+bash dns-fix.sh --revert
+```
+
+**What it does:**
+- Configures system to use public DNS (8.8.8.8, 1.1.1.1)
+- Optionally disables IPv6 (can cause resolution mismatches)
+- Backs up original configuration
+- Restarts affected services (byparr, jackett, etc.)
+
+**When to use:** If Jackett reports "The cookies provided by FlareSolverr are not valid" when testing indexers.
 
 ---
 
