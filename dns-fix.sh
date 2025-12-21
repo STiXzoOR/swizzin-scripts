@@ -168,6 +168,28 @@ _disable_ipv6() {
 	echo_progress_done "IPv6 disabled"
 }
 
+# Restart affected services
+_restart_affected_services() {
+	local master_user
+	master_user=$(_get_master_username)
+
+	# Simple services
+	for svc in byparr flaresolverr; do
+		if systemctl is-active --quiet "$svc" 2>/dev/null; then
+			echo_progress_start "Restarting ${svc}"
+			systemctl restart "$svc" >>"$log" 2>&1
+			echo_progress_done "${svc} restarted"
+		fi
+	done
+
+	# Jackett uses templated service jackett@user
+	if systemctl is-active --quiet "jackett@${master_user}" 2>/dev/null; then
+		echo_progress_start "Restarting jackett@${master_user}"
+		systemctl restart "jackett@${master_user}" >>"$log" 2>&1
+		echo_progress_done "jackett restarted"
+	fi
+}
+
 # Enable IPv6
 _enable_ipv6() {
 	echo_progress_start "Enabling IPv6"
@@ -254,15 +276,7 @@ _install() {
 	echo ""
 	echo_success "DNS fix applied"
 	echo_info "Restarting affected services..."
-
-	# Restart services that might be affected
-	for svc in byparr flaresolverr jackett; do
-		if systemctl is-active --quiet "$svc" 2>/dev/null; then
-			echo_progress_start "Restarting ${svc}"
-			systemctl restart "$svc" >>"$log" 2>&1
-			echo_progress_done "${svc} restarted"
-		fi
-	done
+	_restart_affected_services
 
 	echo ""
 	echo_info "Test your indexers in Jackett now"
@@ -284,14 +298,7 @@ case "$1" in
 		exit 0
 	fi
 	_disable_ipv6
-	# Restart affected services
-	for svc in byparr flaresolverr jackett; do
-		if systemctl is-active --quiet "$svc" 2>/dev/null; then
-			echo_progress_start "Restarting ${svc}"
-			systemctl restart "$svc" >>"$log" 2>&1
-			echo_progress_done "${svc} restarted"
-		fi
-	done
+	_restart_affected_services
 	echo_success "IPv6 disabled"
 	echo_info "To re-enable: bash dns-fix.sh --enable-ipv6"
 	;;
