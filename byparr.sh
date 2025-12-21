@@ -196,8 +196,31 @@ EOF
 }
 
 # Handle --remove flag
-if [ "$1" = "--remove" ]; then
+if [[ "$1" == "--remove" ]]; then
 	_remove_byparr "$2"
+fi
+
+# Check for conflicting FlareSolverr installation
+if [[ -f "/install/.flaresolverr.lock" ]]; then
+	echo_warn "FlareSolverr is installed and uses the same port (8191)"
+	echo_warn "Both services cannot run simultaneously"
+	if ! ask "Would you like to remove FlareSolverr and continue with Byparr installation?" N; then
+		echo_info "Installation cancelled"
+		exit 0
+	fi
+	# Remove FlareSolverr
+	echo_info "Removing FlareSolverr..."
+	systemctl stop flaresolverr 2>/dev/null || true
+	systemctl disable flaresolverr 2>/dev/null || true
+	rm -f /etc/systemd/system/flaresolverr.service
+	systemctl daemon-reload
+	rm -rf /opt/flaresolverr
+	rm -f /install/.flaresolverr.lock
+	_load_panel_helper
+	if command -v panel_unregister_app >/dev/null 2>&1; then
+		panel_unregister_app "flaresolverr"
+	fi
+	echo_info "FlareSolverr removed"
 fi
 
 # Set owner for install

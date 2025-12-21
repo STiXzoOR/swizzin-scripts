@@ -385,6 +385,10 @@ bash byparr.sh
 
 **Prowlarr Setup:** Add as FlareSolverr indexer proxy with URL `http://127.0.0.1:8191`
 
+**Note:** Byparr and FlareSolverr both use port 8191 - only one can be installed at a time.
+
+**Troubleshooting:** If you get "cookies not valid" errors, run `bash dns-fix.sh` to fix DNS resolution issues.
+
 ---
 
 ### FlareSolverr
@@ -404,7 +408,7 @@ bash flaresolverr.sh
 
 **Prowlarr/Jackett Setup:** Add as FlareSolverr indexer proxy with URL `http://127.0.0.1:8191`
 
-**Note:** FlareSolverr only supports x64/amd64 architecture. For ARM systems, use [Byparr](#byparr) instead.
+**Note:** FlareSolverr only supports x64/amd64 architecture. For ARM systems, use [Byparr](#byparr) instead. Both use port 8191 - only one can be installed at a time.
 
 **Troubleshooting:** If you get "cookies not valid" errors, run `bash dns-fix.sh` to fix DNS resolution issues.
 
