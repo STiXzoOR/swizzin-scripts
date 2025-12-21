@@ -8,6 +8,16 @@
 #shellcheck source=sources/functions/utils
 . /etc/swizzin/sources/functions/utils
 
+# Load panel helpers (locally or from GitHub)
+panel_helpers="/opt/swizzin/scripts/panel_helpers.sh"
+if [[ -f "$panel_helpers" ]]; then
+	# shellcheck source=panel_helpers.sh
+	. "$panel_helpers"
+else
+	# shellcheck source=/dev/null
+	. <(curl -fsSL "https://raw.githubusercontent.com/STiXzoOR/swizzin-scripts/main/panel_helpers.sh")
+fi
+
 # Log to Swizzin.log
 export log=/root/logs/swizzin.log
 touch "$log"
@@ -21,6 +31,27 @@ app_lockname="sonarr"
 
 user=$(_get_master_username)
 profiles_py="/opt/swizzin/core/custom/profiles.py"
+
+# Ensure base app has panel meta override with check_theD = False
+_ensure_base_panel_meta() {
+	[[ -f /install/.panel.lock ]] || return 0
+
+	mkdir -p "$(dirname "$profiles_py")"
+	touch "$profiles_py"
+
+	# Check if override class already exists
+	if ! grep -q "class ${app_name}_meta(${app_name}_meta):" "$profiles_py" 2>/dev/null; then
+		echo_progress_start "Adding base ${app_pretty} panel override"
+		cat >>"$profiles_py" <<-PYTHON
+
+			class ${app_name}_meta(${app_name}_meta):
+			    systemd = "${app_name}"
+			    check_theD = False
+		PYTHON
+		systemctl restart panel 2>/dev/null || true
+		echo_progress_done
+	fi
+}
 
 # Validate instance name (alphanumeric only, lowercase)
 _validate_instance_name() {
@@ -176,23 +207,7 @@ _add_instance() {
 	# Add panel entry
 	if [[ -f /install/.panel.lock ]]; then
 		echo_progress_start "Adding panel entry"
-		mkdir -p "$(dirname "$profiles_py")"
-		touch "$profiles_py"
-
-		# Remove existing entry if present
-		sed -i "/^class ${instance_name//-/_}_meta:/,/^class \|^$/d" "$profiles_py" 2>/dev/null || true
-
-		cat >>"$profiles_py" <<-PYTHON
-
-			class ${instance_name//-/_}_meta:
-			    name = "${instance_name}"
-			    pretty_name = "${app_pretty} ${name^}"
-			    baseurl = "/${instance_name}"
-			    systemd = "${instance_name}"
-			    check_theD = False
-			    img = "${app_name}"
-		PYTHON
-		systemctl restart panel 2>/dev/null || true
+		panel_register_app "${instance_name//-/_}" "${app_pretty} ${name^}" "/${instance_name}" "" "${instance_name}" "${app_name}" "" "false"
 		echo_progress_done
 	fi
 
@@ -239,11 +254,9 @@ _remove_instance() {
 	fi
 
 	# Remove panel entry
-	if [[ -f "$profiles_py" ]]; then
+	if [[ -f /install/.panel.lock ]]; then
 		echo_progress_start "Removing panel entry"
-		sed -i "/^class ${instance_name//-/_}_meta:/,/^class \|^$/d" "$profiles_py" 2>/dev/null || true
-		sed -i -e :a -e '/^\n*$/{$d;N;ba' -e '}' "$profiles_py" 2>/dev/null || true
-		systemctl restart panel 2>/dev/null || true
+		panel_unregister_app "${instance_name//-/_}"
 		echo_progress_done
 	fi
 
@@ -355,6 +368,9 @@ _ensure_base_installed() {
 			exit 0
 		fi
 	fi
+
+	# Ensure base app has panel meta override
+	_ensure_base_panel_meta
 }
 
 # Pre-flight checks
