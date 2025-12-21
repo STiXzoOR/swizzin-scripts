@@ -41,6 +41,8 @@ Each installer script follows a consistent pattern:
 - **plex-subdomain.sh** - Converts Plex from subfolder to subdomain mode
 - **emby-subdomain.sh** - Converts Emby from subfolder to subdomain mode
 - **jellyfin-subdomain.sh** - Converts Jellyfin from subfolder to subdomain mode
+- **sonarr.sh** - Multi-instance Sonarr manager (add/remove/list named instances)
+- **radarr.sh** - Multi-instance Radarr manager (add/remove/list named instances)
 - **panel_helpers.sh** - Shared utility for Swizzin panel app registration
 
 ### Python Apps (uv-based)
@@ -108,6 +110,44 @@ plex-subdomain.sh, emby-subdomain.sh, and jellyfin-subdomain.sh follow a common 
 - **Jellyfin**: WebSocket `/socket` location, WebOS CORS headers, Range/If-Range headers, `/metrics` with private network ACL
 
 **plex.sh** is a prerequisite for plex-subdomain.sh that adds `/plex` nginx config to Swizzin's Plex install (includes X-Plex-* headers and referer-based rewrite).
+
+### Multi-Instance Scripts (Sonarr/Radarr)
+
+sonarr.sh and radarr.sh manage multiple named instances of Sonarr/Radarr:
+
+**Commands:**
+```bash
+sonarr.sh                      # Install base if needed, then add instances interactively
+sonarr.sh --add [name]         # Add a named instance (e.g., 4k, anime, kids)
+sonarr.sh --remove [name]      # Remove instance(s) - interactive if no name
+sonarr.sh --remove name --force # Remove without prompts, purge config
+sonarr.sh --list               # List all instances with ports
+```
+
+**Naming convention:**
+| Component | Pattern | Example |
+|-----------|---------|---------|
+| Service | `sonarr-<name>.service` | `sonarr-4k.service` |
+| Config dir | `/home/<user>/.config/sonarr-<name>/` | `/home/user/.config/sonarr-4k/` |
+| Nginx | `/etc/nginx/apps/sonarr-<name>.conf` | `/etc/nginx/apps/sonarr-4k.conf` |
+| URL path | `/sonarr-<name>/` | `/sonarr-4k/` |
+| Lock file | `/install/.sonarr-<name>.lock` | `/install/.sonarr-4k.lock` |
+
+**Instance name validation:**
+- Alphanumeric only (a-z, 0-9), converted to lowercase
+- Checked against existing lock files for uniqueness
+- Reserved words blocked: "base"
+
+**Port allocation:** Dynamic via `port 10000 12000` (not the base port)
+
+**Key differences between apps:**
+| Variable | Sonarr | Radarr |
+|----------|--------|--------|
+| `app_binary` | /opt/Sonarr/Sonarr | /opt/Radarr/Radarr |
+| `app_base_port` | 8989 | 7878 |
+| `app_branch` | main | master |
+
+**Base app protection:** Base cannot be removed via these scripts. Remove all instances before running `box remove sonarr/radarr`.
 
 ### Key Swizzin Functions Used
 

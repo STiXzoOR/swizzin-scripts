@@ -6,6 +6,8 @@ A collection of installer scripts for integrating additional applications into [
 
 | Script | Application | Description |
 |--------|-------------|-------------|
+| [sonarr.sh](#sonarr) | [Sonarr](https://sonarr.tv/) | Multi-instance Sonarr manager (4k, anime, etc.) |
+| [radarr.sh](#radarr) | [Radarr](https://radarr.video/) | Multi-instance Radarr manager (4k, anime, etc.) |
 | [decypharr.sh](#decypharr) | [Decypharr](https://github.com/sirrobot01/decypharr) | Encrypted file/torrent management via rclone and qBittorrent |
 | [notifiarr.sh](#notifiarr) | [Notifiarr](https://github.com/Notifiarr/notifiarr) | Notification relay client for *arr apps and Plex |
 | [organizr-subdomain.sh](#organizr-subdomain) | [Organizr](https://github.com/causefx/Organizr) | Convert Organizr to subdomain with SSO authentication |
@@ -42,6 +44,76 @@ chmod +x ~/<script>.sh
 ```
 
 ## Scripts
+
+### Sonarr
+
+Multi-instance Sonarr manager. Installs the base Sonarr app if needed, then allows adding named instances (e.g., 4k, anime, kids).
+
+```bash
+# Install base + add instances interactively
+bash sonarr.sh
+
+# Add a specific instance
+bash sonarr.sh --add 4k
+
+# List all instances
+bash sonarr.sh --list
+
+# Remove instances (interactive)
+bash sonarr.sh --remove
+
+# Remove specific instance
+bash sonarr.sh --remove 4k
+
+# Remove without prompts
+bash sonarr.sh --remove 4k --force
+```
+
+**Instance naming:** Alphanumeric only (e.g., `4k`, `anime`, `kids`, `remux`)
+
+**Per-instance files:**
+- Config: `/home/<user>/.config/sonarr-<name>/`
+- Service: `sonarr-<name>.service`
+- Access: `https://your-server/sonarr-<name>/`
+
+**Note:** Base Sonarr is installed via `box install sonarr`. Instances share the binary at `/opt/Sonarr/` but have separate configs and ports.
+
+---
+
+### Radarr
+
+Multi-instance Radarr manager. Installs the base Radarr app if needed, then allows adding named instances (e.g., 4k, anime, kids).
+
+```bash
+# Install base + add instances interactively
+bash radarr.sh
+
+# Add a specific instance
+bash radarr.sh --add 4k
+
+# List all instances
+bash radarr.sh --list
+
+# Remove instances (interactive)
+bash radarr.sh --remove
+
+# Remove specific instance
+bash radarr.sh --remove 4k
+
+# Remove without prompts
+bash radarr.sh --remove 4k --force
+```
+
+**Instance naming:** Alphanumeric only (e.g., `4k`, `anime`, `kids`, `remux`)
+
+**Per-instance files:**
+- Config: `/home/<user>/.config/radarr-<name>/`
+- Service: `radarr-<name>.service`
+- Access: `https://your-server/radarr-<name>/`
+
+**Note:** Base Radarr is installed via `box install radarr`. Instances share the binary at `/opt/Radarr/` but have separate configs and ports.
+
+---
 
 ### Decypharr
 
