@@ -498,10 +498,16 @@ Fixes DNS resolution issues that can cause "cookies not valid" errors when using
 # Check current DNS status
 bash dns-fix.sh --status
 
-# Apply fix (configure public DNS, optionally disable IPv6)
+# Apply full fix (configure public DNS, optionally disable IPv6)
 bash dns-fix.sh
 
-# Revert to original configuration
+# Only disable IPv6 (no DNS changes)
+bash dns-fix.sh --disable-ipv6
+
+# Re-enable IPv6
+bash dns-fix.sh --enable-ipv6
+
+# Revert all changes to original configuration
 bash dns-fix.sh --revert
 ```
 
@@ -509,7 +515,7 @@ bash dns-fix.sh --revert
 - Configures system to use public DNS (8.8.8.8, 1.1.1.1)
 - Optionally disables IPv6 (can cause resolution mismatches)
 - Backs up original configuration
-- Restarts affected services (byparr, jackett, etc.)
+- Automatically restarts affected services (byparr, flaresolverr, jackett)
 
 **When to use:** If Jackett reports "The cookies provided by FlareSolverr are not valid" when testing indexers.
 
