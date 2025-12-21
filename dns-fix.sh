@@ -277,15 +277,31 @@ case "$1" in
 "--status")
 	_show_status
 	;;
+"--disable-ipv6")
+	_show_status
+	if ! ask "Disable IPv6?" Y; then
+		echo_info "Cancelled"
+		exit 0
+	fi
+	_disable_ipv6
+	echo_success "IPv6 disabled"
+	echo_info "To re-enable: bash dns-fix.sh --enable-ipv6"
+	;;
+"--enable-ipv6")
+	_enable_ipv6
+	echo_success "IPv6 enabled"
+	;;
 "")
 	_install
 	;;
 *)
-	echo "Usage: $0 [--revert|--status]"
+	echo "Usage: $0 [--revert|--status|--disable-ipv6|--enable-ipv6]"
 	echo ""
-	echo "  (no args)    Apply DNS fix (configure public DNS, optionally disable IPv6)"
-	echo "  --status     Show current DNS configuration"
-	echo "  --revert     Revert to original configuration"
+	echo "  (no args)       Apply DNS fix (configure public DNS, optionally disable IPv6)"
+	echo "  --status        Show current DNS configuration"
+	echo "  --revert        Revert to original configuration"
+	echo "  --disable-ipv6  Only disable IPv6 (no DNS changes)"
+	echo "  --enable-ipv6   Re-enable IPv6"
 	exit 1
 	;;
 esac
