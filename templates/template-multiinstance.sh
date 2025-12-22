@@ -61,11 +61,11 @@ touch "$log"
 # CUSTOMIZE: Set all app-specific variables here
 
 app_name="myapp"
-app_pretty="Myapp"                    # Display name
-app_lockname="myapp"                  # Base app lock file name
-app_binary="/opt/Myapp/Myapp"         # Path to binary
-app_base_port="8989"                  # Base app's default port
-app_branch="main"                     # Config branch (e.g., main, master)
+app_pretty="Myapp"            # Display name
+app_lockname="myapp"          # Base app lock file name
+app_binary="/opt/Myapp/Myapp" # Path to binary
+app_base_port="8989"          # Base app's default port
+app_branch="main"             # Config branch (e.g., main, master)
 
 # User and paths
 user=$(_get_master_username)
@@ -170,7 +170,7 @@ _add_instance() {
 	name="$validated_name"
 
 	local instance_name="${app_name}-${name}"
-	local instance_lock="${app_name}_${name}"  # Lock files use underscore for panel
+	local instance_lock="${app_name}_${name}" # Lock files use underscore for panel
 	local config_dir="/home/${user}/.config/${instance_name}"
 	local instance_port
 	instance_port=$(port 10000 12000)
@@ -285,7 +285,7 @@ _remove_instance() {
 	local name="$1"
 	local force="$2"
 	local instance_name="${app_name}-${name}"
-	local instance_lock="${app_name}_${name}"  # Lock files use underscore for panel
+	local instance_lock="${app_name}_${name}" # Lock files use underscore for panel
 
 	if [[ ! -f "/install/.${instance_lock}.lock" ]]; then
 		echo_error "Instance '${instance_name}' not found"

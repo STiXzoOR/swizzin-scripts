@@ -56,9 +56,9 @@ touch "$log"
 # CUSTOMIZE: Set all app-specific variables here
 
 app_name="myapp"
-app_pretty="Myapp"                    # Display name (capitalized)
-app_lockname="${app_name//-/}"        # Lock file name (no hyphens)
-app_baseurl="${app_name}"             # URL path (e.g., /myapp) - optional
+app_pretty="Myapp"             # Display name (capitalized)
+app_lockname="${app_name//-/}" # Lock file name (no hyphens)
+app_baseurl="${app_name}"      # URL path (e.g., /myapp) - optional
 
 # Application directory (cloned repo)
 app_dir="/opt/${app_name}"

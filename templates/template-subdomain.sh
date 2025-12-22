@@ -40,8 +40,8 @@ touch "$log"
 # CUSTOMIZE: Set app-specific variables
 
 app_name="myapp"
-app_port="8080"                       # The port the app listens on
-app_lockname="myapp"                  # Lock file name (usually same as app_name)
+app_port="8080"      # The port the app listens on
+app_lockname="myapp" # Lock file name (usually same as app_name)
 
 # File paths
 backup_dir="/opt/swizzin/${app_name}-backups"

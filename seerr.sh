@@ -62,7 +62,7 @@ app_group="$user"
 app_port=$(port 10000 12000)
 app_reqs=("curl" "jq" "wget")
 app_icon_name="$app_name"
-app_icon_url="https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/overseerr.png"
+app_icon_url="https://cdn.jsdelivr.net/gh/selfhst/icons@main/png/overseerr.png"
 organizr_config="/opt/swizzin/organizr-auth.conf"
 
 # Get Organizr domain for frame-ancestors (if configured)

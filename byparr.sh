@@ -48,7 +48,7 @@ app_servicefile="$app_name.service"
 app_dir="/opt/$app_name"
 app_lockname="${app_name//-/}"
 app_icon_name="$app_name"
-app_icon_url="https://raw.githubusercontent.com/ThePhaseless/Byparr/refs/heads/main/icon/1080x1080.png"
+app_icon_url="https://cdn.jsdelivr.net/gh/selfhst/icons@main/png/byparr.png"
 
 if [ ! -d "$swiz_configdir" ]; then
 	mkdir -p "$swiz_configdir"

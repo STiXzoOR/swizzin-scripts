@@ -51,7 +51,7 @@ app_servicefile="${app_name}.service"
 
 # Panel icon
 app_icon_name="${app_name}"
-app_icon_url="https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/flaresolverr.png"
+app_icon_url="https://cdn.jsdelivr.net/gh/selfhst/icons@main/png/flaresolverr.png"
 
 # Get owner from swizdb or fall back to master user
 if ! app_owner="$(swizdb get "${app_name}/owner" 2>/dev/null)"; then

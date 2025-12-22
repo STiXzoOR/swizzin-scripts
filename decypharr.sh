@@ -50,7 +50,7 @@ app_binary="$app_name"
 app_lockname="${app_name//-/}"
 app_baseurl="$app_name"
 app_icon_name="$app_name"
-app_icon_url="https://raw.githubusercontent.com/sirrobot01/decypharr/refs/heads/main/docs/docs/images/logo.png"
+app_icon_url="https://cdn.jsdelivr.net/gh/selfhst/icons@main/png/decypharr.png"
 
 if [ ! -d "$swiz_configdir" ]; then
 	mkdir -p "$swiz_configdir"
