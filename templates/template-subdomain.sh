@@ -7,17 +7,20 @@
 #
 # Usage: bash <appname>-subdomain.sh [--revert|--remove [--force]]
 #
-# Required Environment:
-#   <APPNAME>_DOMAIN      - Public FQDN for the app (e.g., plex.example.com)
+# Interactive prompts:
+#   - Domain (required)
+#   - Let's Encrypt mode (interactive for DNS challenges)
 #
-# Optional Environment:
+# Environment bypass (for automation):
+#   <APPNAME>_DOMAIN          - Skip domain prompt
 #   <APPNAME>_LE_HOSTNAME     - Let's Encrypt hostname (defaults to domain)
 #   <APPNAME>_LE_INTERACTIVE  - Set to "yes" for interactive LE (CloudFlare DNS)
 #
 # CUSTOMIZATION POINTS (search for "# CUSTOMIZE:"):
 # 1. App variables (name, port, lock name)
-# 2. Nginx vhost configuration in _create_subdomain_vhost()
-# 3. Subfolder config restoration in _revert()
+# 2. Domain prompt and swizdb key in _prompt_domain() and _get_domain()
+# 3. Nginx vhost configuration in _create_subdomain_vhost()
+# 4. Subfolder config restoration in _revert()
 # ==============================================================================
 
 # CUSTOMIZE: Replace "myapp" with your app name throughout this file
@@ -55,10 +58,85 @@ organizr_config="/opt/swizzin/organizr-auth.conf"
 # Environment Helpers
 # ==============================================================================
 
-# Get domain from env
-# CUSTOMIZE: Change MYAPP_DOMAIN to match your app
+# Get domain from swizdb or env
+# CUSTOMIZE: Change myapp and MYAPP_DOMAIN to match your app
 _get_domain() {
+	# Check swizdb first
+	local swizdb_domain
+	swizdb_domain=$(swizdb get "myapp/domain" 2>/dev/null) || true
+	if [[ -n "$swizdb_domain" ]]; then
+		echo "$swizdb_domain"
+		return
+	fi
+
+	# Fall back to env
 	echo "${MYAPP_DOMAIN:-}"
+}
+
+# Prompt for domain interactively
+# CUSTOMIZE: Change MYAPP_DOMAIN, myapp, and Myapp to match your app
+_prompt_domain() {
+	# Check environment variable first (bypass)
+	if [[ -n "$MYAPP_DOMAIN" ]]; then
+		echo_info "Using domain from MYAPP_DOMAIN: $MYAPP_DOMAIN"
+		app_domain="$MYAPP_DOMAIN"
+		return
+	fi
+
+	# Get existing domain as default
+	local existing_domain
+	existing_domain=$(_get_domain)
+
+	if [[ -n "$existing_domain" ]]; then
+		echo_query "Enter domain for Myapp" "[$existing_domain]"
+	else
+		echo_query "Enter domain for Myapp" "(e.g., myapp.example.com)"
+	fi
+	read -r input_domain </dev/tty
+
+	if [[ -z "$input_domain" ]]; then
+		if [[ -n "$existing_domain" ]]; then
+			app_domain="$existing_domain"
+		else
+			echo_error "Domain is required"
+			exit 1
+		fi
+	else
+		# Basic validation
+		if [[ ! "$input_domain" =~ \. ]]; then
+			echo_error "Invalid domain format (must contain at least one dot)"
+			exit 1
+		fi
+		if [[ "$input_domain" =~ [[:space:]] ]]; then
+			echo_error "Domain cannot contain spaces"
+			exit 1
+		fi
+		app_domain="$input_domain"
+	fi
+
+	echo_info "Using domain: $app_domain"
+
+	# Store in swizdb
+	swizdb set "myapp/domain" "$app_domain"
+
+	# Export for other functions
+	export MYAPP_DOMAIN="$app_domain"
+}
+
+# Prompt for Let's Encrypt mode
+# CUSTOMIZE: Change MYAPP_LE_INTERACTIVE to match your app
+_prompt_le_mode() {
+	# Check environment variable first (bypass)
+	if [[ -n "$MYAPP_LE_INTERACTIVE" ]]; then
+		echo_info "Using LE mode from MYAPP_LE_INTERACTIVE: $MYAPP_LE_INTERACTIVE"
+		return
+	fi
+
+	if ask "Use interactive Let's Encrypt (for DNS challenges/wildcards)?" N; then
+		export MYAPP_LE_INTERACTIVE="yes"
+	else
+		export MYAPP_LE_INTERACTIVE="no"
+	fi
 }
 
 # Get Organizr domain for frame-ancestors (if configured)
@@ -111,14 +189,10 @@ _preflight() {
 		exit 1
 	fi
 
+	# For install, prompt for domain and LE mode
 	if [[ "$1" != "revert" ]] && [[ "$1" != "remove" ]]; then
-		local domain
-		domain=$(_get_domain)
-		if [[ -z "$domain" ]]; then
-			# CUSTOMIZE: Update env var name
-			echo_error "MYAPP_DOMAIN must be set (e.g., export MYAPP_DOMAIN=\"myapp.example.com\")"
-			exit 1
-		fi
+		_prompt_domain
+		_prompt_le_mode
 	fi
 }
 
@@ -430,6 +504,10 @@ _remove() {
 	# Remove app via box
 	echo_info "Removing ${app_name^} via box remove ${app_name}..."
 	box remove "$app_name"
+
+	# Remove swizdb entry
+	# CUSTOMIZE: Change myapp to match your app
+	swizdb clear "myapp/domain" 2>/dev/null || true
 
 	echo_success "${app_name^} has been removed"
 	echo_info "Note: Let's Encrypt certificate was not removed"

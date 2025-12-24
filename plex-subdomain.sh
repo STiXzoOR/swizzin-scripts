@@ -23,9 +23,82 @@ subdomain_enabled="/etc/nginx/sites-enabled/${app_name}"
 profiles_py="/opt/swizzin/core/custom/profiles.py"
 organizr_config="/opt/swizzin/organizr-auth.conf"
 
-# Get domain from env
+# Get domain from swizdb or env
 _get_domain() {
+	# Check swizdb first
+	local swizdb_domain
+	swizdb_domain=$(swizdb get "plex/domain" 2>/dev/null) || true
+	if [ -n "$swizdb_domain" ]; then
+		echo "$swizdb_domain"
+		return
+	fi
+
+	# Fall back to env
 	echo "${PLEX_DOMAIN:-}"
+}
+
+# Prompt for domain interactively
+_prompt_domain() {
+	# Check environment variable first (bypass)
+	if [ -n "$PLEX_DOMAIN" ]; then
+		echo_info "Using domain from PLEX_DOMAIN: $PLEX_DOMAIN"
+		app_domain="$PLEX_DOMAIN"
+		return
+	fi
+
+	# Get existing domain as default
+	local existing_domain
+	existing_domain=$(_get_domain)
+
+	if [ -n "$existing_domain" ]; then
+		echo_query "Enter domain for Plex" "[$existing_domain]"
+	else
+		echo_query "Enter domain for Plex" "(e.g., plex.example.com)"
+	fi
+	read -r input_domain </dev/tty
+
+	if [ -z "$input_domain" ]; then
+		if [ -n "$existing_domain" ]; then
+			app_domain="$existing_domain"
+		else
+			echo_error "Domain is required"
+			exit 1
+		fi
+	else
+		# Basic validation
+		if [[ ! "$input_domain" =~ \. ]]; then
+			echo_error "Invalid domain format (must contain at least one dot)"
+			exit 1
+		fi
+		if [[ "$input_domain" =~ [[:space:]] ]]; then
+			echo_error "Domain cannot contain spaces"
+			exit 1
+		fi
+		app_domain="$input_domain"
+	fi
+
+	echo_info "Using domain: $app_domain"
+
+	# Store in swizdb
+	swizdb set "plex/domain" "$app_domain"
+
+	# Export for other functions
+	export PLEX_DOMAIN="$app_domain"
+}
+
+# Prompt for Let's Encrypt mode
+_prompt_le_mode() {
+	# Check environment variable first (bypass)
+	if [ -n "$PLEX_LE_INTERACTIVE" ]; then
+		echo_info "Using LE mode from PLEX_LE_INTERACTIVE: $PLEX_LE_INTERACTIVE"
+		return
+	fi
+
+	if ask "Use interactive Let's Encrypt (for DNS challenges/wildcards)?" N; then
+		export PLEX_LE_INTERACTIVE="yes"
+	else
+		export PLEX_LE_INTERACTIVE="no"
+	fi
 }
 
 # Get Organizr domain for frame-ancestors (if configured)
@@ -72,13 +145,10 @@ _preflight() {
 		exit 1
 	fi
 
+	# For install, prompt for domain and LE mode
 	if [ "$1" != "revert" ] && [ "$1" != "remove" ]; then
-		local domain
-		domain=$(_get_domain)
-		if [ -z "$domain" ]; then
-			echo_error "PLEX_DOMAIN must be set (e.g., export PLEX_DOMAIN=\"plex.example.com\")"
-			exit 1
-		fi
+		_prompt_domain
+		_prompt_le_mode
 	fi
 }
 
@@ -446,6 +516,9 @@ _remove() {
 	# Remove app via box
 	echo_info "Removing ${app_name^} via box remove ${app_name}..."
 	box remove "$app_name"
+
+	# Remove swizdb entry
+	swizdb clear "plex/domain" 2>/dev/null || true
 
 	echo_success "${app_name^} has been removed"
 	echo_info "Note: Let's Encrypt certificate was not removed"

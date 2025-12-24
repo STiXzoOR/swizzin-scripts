@@ -49,7 +49,7 @@ app_mount_servicefile="rclone-$app_name.service"
 app_dir="/usr/bin"
 app_binary="$app_name"
 app_lockname="${app_name//-/}"
-app_mount_point="/mnt/$app_name"
+app_default_mount="/mnt/$app_name"
 app_icon_name="placeholder"
 app_icon_url=""
 
@@ -57,6 +57,73 @@ if [ ! -d "$swiz_configdir" ]; then
 	mkdir -p "$swiz_configdir"
 fi
 chown "$user":"$user" "$swiz_configdir"
+
+# Prompt for mount point or use default/env
+_get_mount_point() {
+	# Check environment variable first
+	if [ -n "$ZURG_MOUNT_POINT" ]; then
+		echo_info "Using mount point from ZURG_MOUNT_POINT: $ZURG_MOUNT_POINT"
+		app_mount_point="$ZURG_MOUNT_POINT"
+		return
+	fi
+
+	# Check existing config in swizdb
+	local existing_mount
+	existing_mount=$(swizdb get "zurg/mount_point" 2>/dev/null) || true
+
+	local default_mount="${existing_mount:-$app_default_mount}"
+
+	echo_query "Enter zurg mount point" "[$default_mount]"
+	read -r input_mount </dev/tty
+
+	if [ -z "$input_mount" ]; then
+		app_mount_point="$default_mount"
+	else
+		# Validate absolute path
+		if [[ ! "$input_mount" = /* ]]; then
+			echo_error "Mount point must be an absolute path (start with /)"
+			exit 1
+		fi
+		app_mount_point="$input_mount"
+	fi
+
+	echo_info "Using mount point: $app_mount_point"
+}
+
+# Update decypharr config if installed
+_update_decypharr_config() {
+	local mount_point="$1"
+	local api_key="$2"
+	local decypharr_config="/home/$user/.config/Decypharr/config.json"
+
+	[ -f /install/.decypharr.lock ] || return 0
+	[ -f "$decypharr_config" ] || return 0
+
+	echo_progress_start "Updating Decypharr configuration"
+
+	# Update realdebrid folder path using jq if available, else sed
+	if command -v jq >/dev/null 2>&1; then
+		local tmp_config
+		tmp_config=$(mktemp)
+		jq --arg folder "${mount_point}/__all__/" --arg key "$api_key" '
+			.debrids = [.debrids[] | if .name == "realdebrid" then .folder = $folder | .api_key = $key else . end]
+		' "$decypharr_config" >"$tmp_config" 2>/dev/null && mv "$tmp_config" "$decypharr_config"
+		chown "$user":"$user" "$decypharr_config"
+	else
+		# Fallback: just log a warning
+		echo_warn "jq not installed - please manually update Decypharr config"
+		echo_warn "Set realdebrid folder to: ${mount_point}/__all__/"
+		echo_progress_done "Decypharr config needs manual update"
+		return
+	fi
+
+	# Restart decypharr
+	if systemctl is-active --quiet decypharr 2>/dev/null; then
+		systemctl restart decypharr
+	fi
+
+	echo_progress_done "Decypharr configuration updated"
+}
 
 _install_zurg() {
 	if [ ! -d "$app_configdir" ]; then
@@ -200,6 +267,9 @@ _remove_zurg() {
 
 	echo_info "Removing ${app_name^}..."
 
+	# Get mount point from swizdb (needed for unmounting)
+	app_mount_point=$(swizdb get "zurg/mount_point" 2>/dev/null) || app_mount_point="$app_default_mount"
+
 	# Ask about purging configuration
 	if ask "Would you like to purge the configuration?" N; then
 		purgeconfig="true"
@@ -247,8 +317,10 @@ _remove_zurg() {
 		echo_progress_start "Purging configuration files"
 		rm -rf "$app_configdir"
 		echo_progress_done "Configuration purged"
-		# Remove swizdb entry
+		# Remove swizdb entries
 		swizdb clear "$app_name/owner" 2>/dev/null || true
+		swizdb clear "zurg/mount_point" 2>/dev/null || true
+		swizdb clear "zurg/api_key" 2>/dev/null || true
 	else
 		echo_info "Configuration files kept at: $app_configdir"
 	fi
@@ -356,8 +428,18 @@ if [ -n "$ZURG_OWNER" ]; then
 	swizdb set "$app_name/owner" "$ZURG_OWNER"
 fi
 
+# Get mount point (interactive or from env)
+_get_mount_point
+
 _install_zurg
 _systemd_zurg
+
+# Store configuration in swizdb for other scripts (decypharr)
+swizdb set "zurg/mount_point" "$app_mount_point"
+swizdb set "zurg/api_key" "$RD_TOKEN"
+
+# Update decypharr if installed
+_update_decypharr_config "$app_mount_point" "$RD_TOKEN"
 
 _load_panel_helper
 if command -v panel_register_app >/dev/null 2>&1; then

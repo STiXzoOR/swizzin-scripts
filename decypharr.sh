@@ -57,6 +57,55 @@ if [ ! -d "$swiz_configdir" ]; then
 fi
 chown "$user":"$user" "$swiz_configdir"
 
+app_default_mount="/mnt"
+
+# Prompt for rclone mount path or use default/env
+_get_mount_path() {
+	# Check environment variable first
+	if [ -n "$DECYPHARR_MOUNT_PATH" ]; then
+		echo_info "Using mount path from DECYPHARR_MOUNT_PATH: $DECYPHARR_MOUNT_PATH"
+		app_mount_path="$DECYPHARR_MOUNT_PATH"
+		return
+	fi
+
+	# Check existing config in swizdb
+	local existing_mount
+	existing_mount=$(swizdb get "decypharr/mount_path" 2>/dev/null) || true
+
+	local default_mount="${existing_mount:-$app_default_mount}"
+
+	echo_query "Enter rclone mount path" "[$default_mount]"
+	read -r input_mount </dev/tty
+
+	if [ -z "$input_mount" ]; then
+		app_mount_path="$default_mount"
+	else
+		# Validate absolute path
+		if [[ ! "$input_mount" = /* ]]; then
+			echo_error "Mount path must be an absolute path (start with /)"
+			exit 1
+		fi
+		app_mount_path="$input_mount"
+	fi
+
+	echo_info "Using mount path: $app_mount_path"
+}
+
+# Get zurg configuration if installed
+_get_zurg_config() {
+	zurg_mount=""
+	zurg_api_key=""
+
+	if [ -f /install/.zurg.lock ]; then
+		zurg_mount=$(swizdb get "zurg/mount_point" 2>/dev/null) || true
+		zurg_api_key=$(swizdb get "zurg/api_key" 2>/dev/null) || true
+
+		if [ -n "$zurg_mount" ]; then
+			echo_info "Found zurg installation at: $zurg_mount"
+		fi
+	fi
+}
+
 _install_decypharr() {
 	if [ ! -d "$app_configdir" ]; then
 		mkdir -p "$app_configdir"
@@ -100,22 +149,51 @@ _install_decypharr() {
 	chmod +x "$app_dir/$app_binary"
 
 	echo_progress_start "Creating default config"
+
+	# Build realdebrid folder path from zurg mount if available
+	local rd_folder=""
+	local rd_api_key=""
+	local zurg_url=""
+	if [ -n "$zurg_mount" ]; then
+		rd_folder="${zurg_mount}/__all__/"
+		rd_api_key="${zurg_api_key:-}"
+		zurg_url="http://127.0.0.1:9999"
+	fi
+
 	cat >"$app_configdir/config.json" <<CFG
 {
   "url_base": "/${app_baseurl}/",
   "port": "${app_port}",
   "log_level": "info",
+  "debrids": [
+    {
+      "name": "realdebrid",
+      "api_key": "${rd_api_key}",
+      "download_api_keys": ["${rd_api_key}"],
+      "folder": "${rd_folder}",
+      "rate_limit": "250/minute",
+      "minimum_free_slot": 1,
+      "use_webdav": true,
+      "torrents_refresh_interval": "15s",
+      "download_links_refresh_interval": "40m",
+      "workers": 600,
+      "auto_expire_links_after": "3d",
+      "folder_naming": "filename"
+    }
+  ],
   "qbittorrent": {
-    "download_folder": "downloads",
+    "download_folder": "${app_mount_path}/symlinks/downloads",
     "refresh_interval": 5
   },
   "repair": {
     "interval": "12h",
+    "zurg_url": "${zurg_url}",
     "workers": 1,
     "strategy": "per_torrent"
   },
   "webdav": {},
   "rclone": {
+    "mount_path": "${app_mount_path}",
     "vfs_cache_mode": "full",
     "vfs_cache_max_size": "256G",
     "vfs_cache_max_age": "72h",
@@ -259,6 +337,7 @@ _remove_decypharr() {
 		echo_progress_done "Configuration purged"
 		# Remove swizdb entry
 		swizdb clear "$app_name/owner" 2>/dev/null || true
+		swizdb clear "decypharr/mount_path" 2>/dev/null || true
 	else
 		echo_info "Configuration files kept at: $app_configdir"
 	fi
@@ -354,9 +433,18 @@ if [ -n "$DECYPHARR_OWNER" ]; then
 	swizdb set "$app_name/owner" "$DECYPHARR_OWNER"
 fi
 
+# Get mount path (interactive or from env)
+_get_mount_path
+
+# Get zurg config if installed
+_get_zurg_config
+
 _install_decypharr
 _systemd_decypharr
 _nginx_decypharr
+
+# Store configuration in swizdb
+swizdb set "decypharr/mount_path" "$app_mount_path"
 
 _load_panel_helper
 if command -v panel_register_app >/dev/null 2>&1; then

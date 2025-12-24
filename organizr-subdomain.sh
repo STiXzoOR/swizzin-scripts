@@ -24,12 +24,87 @@ subdomain_vhost="/etc/nginx/sites-available/organizr"
 subdomain_enabled="/etc/nginx/sites-enabled/organizr"
 profiles_py="/opt/swizzin/core/custom/profiles.py"
 
-# Get domain from config file if exists, otherwise from env
+# Get domain from swizdb, config file, or env
 _get_domain() {
+	# Check swizdb first
+	local swizdb_domain
+	swizdb_domain=$(swizdb get "organizr/domain" 2>/dev/null) || true
+	if [ -n "$swizdb_domain" ]; then
+		echo "$swizdb_domain"
+		return
+	fi
+
+	# Check config file
 	if [ -f "$config_file" ] && grep -q "^ORGANIZR_DOMAIN=" "$config_file"; then
 		grep "^ORGANIZR_DOMAIN=" "$config_file" | cut -d'"' -f2
+		return
+	fi
+
+	# Fall back to env
+	echo "${ORGANIZR_DOMAIN:-}"
+}
+
+# Prompt for domain interactively
+_prompt_domain() {
+	# Check environment variable first (bypass)
+	if [ -n "$ORGANIZR_DOMAIN" ]; then
+		echo_info "Using domain from ORGANIZR_DOMAIN: $ORGANIZR_DOMAIN"
+		app_domain="$ORGANIZR_DOMAIN"
+		return
+	fi
+
+	# Get existing domain as default
+	local existing_domain
+	existing_domain=$(_get_domain)
+
+	if [ -n "$existing_domain" ]; then
+		echo_query "Enter domain for Organizr" "[$existing_domain]"
 	else
-		echo "${ORGANIZR_DOMAIN:-}"
+		echo_query "Enter domain for Organizr" "(e.g., organizr.example.com)"
+	fi
+	read -r input_domain </dev/tty
+
+	if [ -z "$input_domain" ]; then
+		if [ -n "$existing_domain" ]; then
+			app_domain="$existing_domain"
+		else
+			echo_error "Domain is required"
+			exit 1
+		fi
+	else
+		# Basic validation
+		if [[ ! "$input_domain" =~ \. ]]; then
+			echo_error "Invalid domain format (must contain at least one dot)"
+			exit 1
+		fi
+		if [[ "$input_domain" =~ [[:space:]] ]]; then
+			echo_error "Domain cannot contain spaces"
+			exit 1
+		fi
+		app_domain="$input_domain"
+	fi
+
+	echo_info "Using domain: $app_domain"
+
+	# Store in swizdb
+	swizdb set "organizr/domain" "$app_domain"
+
+	# Export for other functions
+	export ORGANIZR_DOMAIN="$app_domain"
+}
+
+# Prompt for Let's Encrypt mode
+_prompt_le_mode() {
+	# Check environment variable first (bypass)
+	if [ -n "$ORGANIZR_LE_INTERACTIVE" ]; then
+		echo_info "Using LE mode from ORGANIZR_LE_INTERACTIVE: $ORGANIZR_LE_INTERACTIVE"
+		return
+	fi
+
+	if ask "Use interactive Let's Encrypt (for DNS challenges/wildcards)?" N; then
+		export ORGANIZR_LE_INTERACTIVE="yes"
+	else
+		export ORGANIZR_LE_INTERACTIVE="no"
 	fi
 }
 
@@ -41,14 +116,10 @@ _preflight() {
 		exit 1
 	fi
 
-	# Check domain for install/configure
+	# For install/configure, prompt for domain and LE mode
 	if [ "$1" != "revert" ] && [ "$1" != "remove" ]; then
-		local domain
-		domain=$(_get_domain)
-		if [ -z "$domain" ]; then
-			echo_error "ORGANIZR_DOMAIN must be set (e.g., export ORGANIZR_DOMAIN=\"organizr.example.com\")"
-			exit 1
-		fi
+		_prompt_domain
+		_prompt_le_mode
 	fi
 }
 
@@ -665,6 +736,9 @@ _remove() {
 		rm -f "/etc/nginx/snippets/organizr-apps.conf"
 		rm -f "$config_file"
 		rm -rf "$backup_dir"
+
+		# Remove swizdb entry
+		swizdb clear "organizr/domain" 2>/dev/null || true
 
 		echo_success "Organizr completely removed"
 		echo_info "Note: Let's Encrypt certificate was not removed"
