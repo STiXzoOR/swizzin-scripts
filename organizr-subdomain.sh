@@ -1,7 +1,7 @@
 #!/bin/bash
 # organizr-subdomain - Convert Organizr to subdomain with SSO authentication
 # STiXzoOR 2025
-# Usage: bash organizr-subdomain.sh [--configure|--revert|--remove]
+# Usage: bash organizr-subdomain.sh [--configure|--migrate|--revert|--remove]
 
 . /etc/swizzin/sources/globals.sh
 
@@ -609,6 +609,107 @@ _unprotect_app() {
 	echo_progress_done "$app auth removed"
 }
 
+# Migrate auth_request from redirect blocks to proxy blocks
+_migrate_auth_placement() {
+	local app="$1"
+	local conf="/etc/nginx/apps/${app}.conf"
+
+	[ -f "$conf" ] || return 0
+
+	# Check if auth_request exists in this config
+	grep -q "auth_request /organizr-auth" "$conf" || return 0
+
+	# Check if auth_request is in a redirect block (misplaced)
+	# Look for pattern: location block with both auth_request and return 301
+	if awk '
+		/location.*\{/ { in_loc=1; has_auth=0; has_redirect=0; block="" }
+		in_loc { block = block $0 "\n" }
+		in_loc && /auth_request/ { has_auth=1 }
+		in_loc && /return 301/ { has_redirect=1 }
+		in_loc && /^\s*\}/ {
+			in_loc=0
+			if (has_auth && has_redirect) { exit 0 }  # Found misplaced auth
+		}
+		END { exit 1 }
+	' "$conf"; then
+		echo_progress_start "Migrating $app auth placement"
+
+		# Extract the auth level from existing config
+		local auth_level
+		auth_level=$(grep -oP 'auth_request /organizr-auth/auth-\K[0-9]+' "$conf" | head -1)
+		[ -z "$auth_level" ] && auth_level=0
+
+		# Remove all auth_request lines first
+		sed -i '/auth_request \/organizr-auth\/auth-[0-9]*;/d' "$conf"
+
+		# Re-apply auth correctly using the fixed awk logic
+		local temp_conf
+		temp_conf=$(mktemp)
+
+		awk -v level="$auth_level" '
+		BEGIN { in_location = 0; buffer = ""; has_proxy = 0; added_global = 0 }
+
+		/location.*\{/ {
+			in_location = 1
+			has_proxy = 0
+			buffer = $0 "\n"
+			next
+		}
+
+		in_location {
+			buffer = buffer $0 "\n"
+			if (/proxy_pass/) { has_proxy = 1 }
+			if (/^\s*\}/) {
+				in_location = 0
+				if (has_proxy && !added_global) {
+					n = split(buffer, lines, "\n")
+					for (i = 1; i <= n; i++) {
+						if (lines[i] ~ /location.*\{/) {
+							print lines[i]
+							print "        auth_request /organizr-auth/auth-" level ";"
+						} else if (lines[i] != "") {
+							print lines[i]
+						}
+					}
+					added_global = 1
+				} else {
+					printf "%s", buffer
+				}
+				buffer = ""
+			}
+			next
+		}
+
+		{ print }
+		' "$conf" >"$temp_conf"
+
+		mv "$temp_conf" "$conf"
+		echo_progress_done "$app migrated"
+		return 0
+	fi
+
+	return 0
+}
+
+# Migrate all protected apps
+_migrate_all_apps() {
+	local migrated=0
+
+	for conf in /etc/nginx/apps/*.conf; do
+		[ -f "$conf" ] || continue
+		local app
+		app=$(basename "$conf" .conf)
+		if _migrate_auth_placement "$app"; then
+			((migrated++)) || true
+		fi
+	done
+
+	if [ "$migrated" -gt 0 ]; then
+		systemctl reload nginx
+		echo_info "Migration complete"
+	fi
+}
+
 # Apply protection to all configured apps
 _apply_protection() {
 	local protected_apps
@@ -618,6 +719,11 @@ _apply_protection() {
 		echo_info "No apps configured for protection"
 		return
 	fi
+
+	# First, migrate any misconfigured apps
+	echo "$protected_apps" | while IFS=: read -r app level; do
+		_migrate_auth_placement "$app"
+	done
 
 	echo "$protected_apps" | while IFS=: read -r app level; do
 		_protect_app "$app" "$level"
@@ -788,6 +894,10 @@ case "$1" in
 "--configure")
 	_configure
 	;;
+"--migrate")
+	echo_info "Checking for misconfigured auth placement..."
+	_migrate_all_apps
+	;;
 "--revert")
 	_revert
 	;;
@@ -798,10 +908,11 @@ case "$1" in
 	_install
 	;;
 *)
-	echo "Usage: $0 [--configure|--revert|--remove]"
+	echo "Usage: $0 [--configure|--migrate|--revert|--remove]"
 	echo ""
 	echo "  (no args)    Install/convert Organizr to subdomain mode"
 	echo "  --configure  Modify which apps are protected"
+	echo "  --migrate    Fix auth_request placement in redirect blocks"
 	echo "  --revert     Revert to subfolder mode"
 	echo "  --remove     Completely remove Organizr"
 	exit 1
