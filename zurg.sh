@@ -312,6 +312,14 @@ _remove_zurg() {
 		echo_progress_done "Removed from panel"
 	fi
 
+	# Remove nginx config
+	if [ -f "/etc/nginx/apps/$app_name.conf" ]; then
+		echo_progress_start "Removing nginx configuration"
+		rm -f "/etc/nginx/apps/$app_name.conf"
+		systemctl reload nginx 2>/dev/null || true
+		echo_progress_done "Nginx configuration removed"
+	fi
+
 	# Remove config directory if purging
 	if [ "$purgeconfig" = "true" ]; then
 		echo_progress_start "Purging configuration files"
@@ -417,6 +425,37 @@ EOF
 	echo_info "Real-Debrid content mounted at $app_mount_point"
 }
 
+_nginx_zurg() {
+	if [[ -f /install/.nginx.lock ]]; then
+		echo_progress_start "Configuring nginx"
+		cat >/etc/nginx/apps/$app_name.conf <<-NGX
+			location /$app_name {
+			    return 301 /$app_name/;
+			}
+
+			location ^~ /$app_name/ {
+			    proxy_pass http://127.0.0.1:$app_port/;
+			    proxy_set_header Host \$host;
+			    proxy_set_header X-Real-IP \$remote_addr;
+			    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+			    proxy_set_header X-Forwarded-Proto \$scheme;
+			    proxy_redirect off;
+			    proxy_http_version 1.1;
+			    proxy_set_header Upgrade \$http_upgrade;
+			    proxy_set_header Connection \$http_connection;
+
+			    auth_basic "What's the password?";
+			    auth_basic_user_file /etc/htpasswd.d/htpasswd.${user};
+			}
+		NGX
+
+		systemctl reload nginx
+		echo_progress_done "Nginx configured"
+	else
+		echo_info "$app_name will run on port $app_port"
+	fi
+}
+
 # Handle --remove flag
 if [ "$1" = "--remove" ]; then
 	_remove_zurg "$2"
@@ -433,6 +472,7 @@ _get_mount_point
 
 _install_zurg
 _systemd_zurg
+_nginx_zurg
 
 # Store configuration in swizdb for other scripts (decypharr)
 swizdb set "zurg/mount_point" "$app_mount_point"
@@ -446,8 +486,8 @@ if command -v panel_register_app >/dev/null 2>&1; then
 	panel_register_app \
 		"$app_name" \
 		"Zurg" \
+		"/$app_name" \
 		"" \
-		"http://127.0.0.1:$app_port" \
 		"$app_name" \
 		"$app_icon_name" \
 		"$app_icon_url" \
