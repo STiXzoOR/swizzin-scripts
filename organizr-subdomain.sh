@@ -523,22 +523,56 @@ _protect_app() {
 	sed -i 's/^\([[:space:]]*auth_basic\)/#\1/g' "$conf"
 	sed -i 's/^\([[:space:]]*auth_basic_user_file\)/#\1/g' "$conf"
 
-	# Find first location block and add auth_request after it
-	# Using a temp file for complex sed
+	# Find location blocks with proxy_pass (skip return 301 redirects)
+	# Using a temp file for complex processing
 	local temp_conf
 	temp_conf=$(mktemp)
 
 	awk -v level="$auth_level" '
-	/location.*{/ && !added {
-		print
-		getline
-		print
-		print "        auth_request /organizr-auth/auth-" level ";"
-		print ""
-		added=1
+	BEGIN { in_location = 0; buffer = ""; has_proxy = 0; added_global = 0 }
+
+	/location.*\{/ {
+		# Start of location block
+		in_location = 1
+		has_proxy = 0
+		buffer = $0 "\n"
 		next
 	}
-	{print}
+
+	in_location {
+		buffer = buffer $0 "\n"
+
+		# Check if this block has proxy_pass (real content, not just redirect)
+		if (/proxy_pass/) {
+			has_proxy = 1
+		}
+
+		# End of location block
+		if (/^\s*\}/) {
+			in_location = 0
+			# Only add auth_request to first proxy location block
+			if (has_proxy && !added_global) {
+				# Insert auth_request after the opening brace line
+				n = split(buffer, lines, "\n")
+				for (i = 1; i <= n; i++) {
+					if (lines[i] ~ /location.*\{/) {
+						print lines[i]
+						print "        auth_request /organizr-auth/auth-" level ";"
+					} else if (lines[i] != "") {
+						print lines[i]
+					}
+				}
+				added_global = 1
+			} else {
+				# Print buffer without modification
+				printf "%s", buffer
+			}
+			buffer = ""
+		}
+		next
+	}
+
+	{ print }
 	' "$conf" >"$temp_conf"
 
 	mv "$temp_conf" "$conf"
