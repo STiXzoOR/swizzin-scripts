@@ -1,7 +1,7 @@
 #!/bin/bash
-# jellyfin-subdomain - Convert Jellyfin to subdomain mode
+# jellyfin - Extended Jellyfin installer with subdomain support
 # STiXzoOR 2025
-# Usage: bash jellyfin-subdomain.sh [--revert|--remove [--force]]
+# Usage: bash jellyfin.sh [--subdomain [--revert]|--remove [--force]]
 
 . /etc/swizzin/sources/globals.sh
 
@@ -24,30 +24,27 @@ subdomain_enabled="/etc/nginx/sites-enabled/${app_name}"
 profiles_py="/opt/swizzin/core/custom/profiles.py"
 organizr_config="/opt/swizzin/organizr-auth.conf"
 
-# Get domain from swizdb or env
+# ==============================================================================
+# Domain/LE Helper Functions
+# ==============================================================================
+
 _get_domain() {
-	# Check swizdb first
 	local swizdb_domain
 	swizdb_domain=$(swizdb get "jellyfin/domain" 2>/dev/null) || true
 	if [ -n "$swizdb_domain" ]; then
 		echo "$swizdb_domain"
 		return
 	fi
-
-	# Fall back to env
 	echo "${JELLYFIN_DOMAIN:-}"
 }
 
-# Prompt for domain interactively
 _prompt_domain() {
-	# Check environment variable first (bypass)
 	if [ -n "$JELLYFIN_DOMAIN" ]; then
 		echo_info "Using domain from JELLYFIN_DOMAIN: $JELLYFIN_DOMAIN"
 		app_domain="$JELLYFIN_DOMAIN"
 		return
 	fi
 
-	# Get existing domain as default
 	local existing_domain
 	existing_domain=$(_get_domain)
 
@@ -66,7 +63,6 @@ _prompt_domain() {
 			exit 1
 		fi
 	else
-		# Basic validation
 		if [[ ! "$input_domain" =~ \. ]]; then
 			echo_error "Invalid domain format (must contain at least one dot)"
 			exit 1
@@ -79,17 +75,11 @@ _prompt_domain() {
 	fi
 
 	echo_info "Using domain: $app_domain"
-
-	# Store in swizdb
 	swizdb set "jellyfin/domain" "$app_domain"
-
-	# Export for other functions
 	export JELLYFIN_DOMAIN="$app_domain"
 }
 
-# Prompt for Let's Encrypt mode
 _prompt_le_mode() {
-	# Check environment variable first (bypass)
 	if [ -n "$JELLYFIN_LE_INTERACTIVE" ]; then
 		echo_info "Using LE mode from JELLYFIN_LE_INTERACTIVE: $JELLYFIN_LE_INTERACTIVE"
 		return
@@ -102,26 +92,26 @@ _prompt_le_mode() {
 	fi
 }
 
-# Get Organizr domain for frame-ancestors (if configured)
+# ==============================================================================
+# Organizr Integration
+# ==============================================================================
+
 _get_organizr_domain() {
 	if [ -f "$organizr_config" ] && grep -q "^ORGANIZR_DOMAIN=" "$organizr_config"; then
 		grep "^ORGANIZR_DOMAIN=" "$organizr_config" | cut -d'"' -f2
 	fi
 }
 
-# Remove app from Organizr protected apps and nginx includes
 _exclude_from_organizr() {
 	local modified=false
 	local apps_include="/etc/nginx/snippets/organizr-apps.conf"
 
-	# Remove from protected apps config
 	if [ -f "$organizr_config" ] && grep -q "^${app_name}:" "$organizr_config"; then
 		echo_progress_start "Removing ${app_name^} from Organizr protected apps"
 		sed -i "/^${app_name}:/d" "$organizr_config"
 		modified=true
 	fi
 
-	# Remove from apps include file
 	if [ -f "$apps_include" ] && grep -q "include /etc/nginx/apps/${app_name}.conf;" "$apps_include"; then
 		sed -i "\|include /etc/nginx/apps/${app_name}.conf;|d" "$apps_include"
 		modified=true
@@ -132,28 +122,16 @@ _exclude_from_organizr() {
 	fi
 }
 
-# Re-add app to Organizr protected apps (for revert)
 _include_in_organizr() {
 	if [ -f "$organizr_config" ] && ! grep -q "^${app_name}:" "$organizr_config"; then
-		echo_info "Note: ${app_name^} can be re-added to Organizr protection via: bash organizr-subdomain.sh --configure"
+		echo_info "Note: ${app_name^} can be re-added to Organizr protection via: bash organizr.sh --configure"
 	fi
 }
 
-# Pre-flight checks
-_preflight() {
-	if [ ! -f /install/.nginx.lock ]; then
-		echo_error "nginx is not installed. Please install nginx first."
-		exit 1
-	fi
+# ==============================================================================
+# State Detection
+# ==============================================================================
 
-	# For install, prompt for domain and LE mode
-	if [ "$1" != "revert" ] && [ "$1" != "remove" ]; then
-		_prompt_domain
-		_prompt_le_mode
-	fi
-}
-
-# Check current state
 _get_install_state() {
 	if [ ! -f "/install/.${app_lockname}.lock" ]; then
 		echo "not_installed"
@@ -166,7 +144,10 @@ _get_install_state() {
 	fi
 }
 
-# Install app via box if not installed
+# ==============================================================================
+# Base App Installation
+# ==============================================================================
+
 _install_app() {
 	if [ ! -f "/install/.${app_lockname}.lock" ]; then
 		echo_info "Installing ${app_name^} via box install ${app_name}..."
@@ -179,7 +160,36 @@ _install_app() {
 	fi
 }
 
-# Request Let's Encrypt certificate
+# ==============================================================================
+# Nginx Subfolder Config
+# ==============================================================================
+
+_create_subfolder_config() {
+	cat >"$subfolder_conf" <<-'NGX'
+		location /jellyfin {
+		    proxy_pass https://127.0.0.1:8922;
+		    proxy_pass_request_headers on;
+		    proxy_set_header Host $proxy_host;
+		    proxy_http_version 1.1;
+		    proxy_set_header X-Real-IP $remote_addr;
+		    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+		    proxy_set_header X-Forwarded-Proto $scheme;
+		    proxy_set_header X-Forwarded-Protocol $scheme;
+		    proxy_set_header X-Forwarded-Host $http_host;
+		    proxy_set_header Upgrade $http_upgrade;
+		    proxy_set_header Connection $http_connection;
+		    proxy_set_header X-Forwarded-Ssl on;
+		    proxy_redirect off;
+		    proxy_buffering off;
+		    auth_basic off;
+		}
+	NGX
+}
+
+# ==============================================================================
+# Let's Encrypt Certificate
+# ==============================================================================
+
 _request_certificate() {
 	local domain="$1"
 	local le_hostname="${JELLYFIN_LE_HOSTNAME:-$domain}"
@@ -212,25 +222,26 @@ _request_certificate() {
 	echo_info "Let's Encrypt certificate issued for $le_hostname"
 }
 
-# Create backup directory
+# ==============================================================================
+# Backup Helpers
+# ==============================================================================
+
 _ensure_backup_dir() {
-	if [ ! -d "$backup_dir" ]; then
-		mkdir -p "$backup_dir"
-	fi
+	[ -d "$backup_dir" ] || mkdir -p "$backup_dir"
 }
 
-# Backup a file
 _backup_file() {
 	local src="$1"
 	local name
 	name=$(basename "$src")
 	_ensure_backup_dir
-	if [ -f "$src" ]; then
-		cp "$src" "$backup_dir/${name}.bak"
-	fi
+	[ -f "$src" ] && cp "$src" "$backup_dir/${name}.bak"
 }
 
-# Create subdomain vhost
+# ==============================================================================
+# Subdomain Vhost Creation
+# ==============================================================================
+
 _create_subdomain_vhost() {
 	local domain="$1"
 	local le_hostname="${2:-$domain}"
@@ -240,13 +251,11 @@ _create_subdomain_vhost() {
 
 	echo_progress_start "Creating subdomain nginx vhost"
 
-	# Backup and remove subfolder config
 	if [ -f "$subfolder_conf" ]; then
 		_backup_file "$subfolder_conf"
 		rm -f "$subfolder_conf"
 	fi
 
-	# Build CSP header
 	local csp_header=""
 	if [ -n "$organizr_domain" ]; then
 		csp_header="add_header Content-Security-Policy \"frame-ancestors 'self' https://$organizr_domain\";"
@@ -331,28 +340,25 @@ server {
 }
 VHOST
 
-	# Enable site
-	if [ ! -L "$subdomain_enabled" ]; then
-		ln -s "$subdomain_vhost" "$subdomain_enabled"
-	fi
+	[ -L "$subdomain_enabled" ] || ln -s "$subdomain_vhost" "$subdomain_enabled"
 
 	echo_progress_done "Subdomain vhost created"
 }
 
-# Add panel meta urloverride
+# ==============================================================================
+# Panel Meta Management
+# ==============================================================================
+
 _add_panel_meta() {
 	local domain="$1"
 
 	echo_progress_start "Adding panel meta urloverride"
 
-	# Ensure profiles.py exists
 	mkdir -p "$(dirname "$profiles_py")"
 	touch "$profiles_py"
 
-	# Remove existing override if present
 	sed -i "/^class ${app_name}_meta(${app_name}_meta):/,/^class \|^$/d" "$profiles_py" 2>/dev/null || true
 
-	# Add new override
 	cat >>"$profiles_py" <<PYTHON
 
 class ${app_name}_meta(${app_name}_meta):
@@ -363,42 +369,23 @@ PYTHON
 	echo_progress_done "Panel meta updated"
 }
 
-# Remove panel meta urloverride
 _remove_panel_meta() {
 	if [ -f "$profiles_py" ]; then
 		echo_progress_start "Removing panel meta urloverride"
 		sed -i "/^class ${app_name}_meta(${app_name}_meta):/,/^class \|^$/d" "$profiles_py" 2>/dev/null || true
-		# Clean up empty lines at end of file
 		sed -i -e :a -e '/^\n*$/{$d;N;ba' -e '}' "$profiles_py" 2>/dev/null || true
 		echo_progress_done "Panel meta removed"
 	fi
 }
 
-# Recreate default subfolder config
-_create_subfolder_config() {
-	cat >"$subfolder_conf" <<-'NGX'
-		location /jellyfin {
-		    proxy_pass https://127.0.0.1:8922;
-		    proxy_pass_request_headers on;
-		    proxy_set_header Host $proxy_host;
-		    proxy_http_version 1.1;
-		    proxy_set_header X-Real-IP $remote_addr;
-		    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-		    proxy_set_header X-Forwarded-Proto $scheme;
-		    proxy_set_header X-Forwarded-Protocol $scheme;
-		    proxy_set_header X-Forwarded-Host $http_host;
-		    proxy_set_header Upgrade $http_upgrade;
-		    proxy_set_header Connection $http_connection;
-		    proxy_set_header X-Forwarded-Ssl on;
-		    proxy_redirect off;
-		    proxy_buffering off;
-		    auth_basic off;
-		}
-	NGX
-}
+# ==============================================================================
+# Subdomain Install/Revert
+# ==============================================================================
 
-# Main install flow
-_install() {
+_install_subdomain() {
+	_prompt_domain
+	_prompt_le_mode
+
 	local domain
 	domain=$(_get_domain)
 	local le_hostname="${JELLYFIN_LE_HOSTNAME:-$domain}"
@@ -414,7 +401,7 @@ _install() {
 	"not_installed")
 		_install_app
 		;& # fallthrough
-	"subfolder")
+	"subfolder" | "unknown")
 		_request_certificate "$domain"
 		_create_subdomain_vhost "$domain" "$le_hostname"
 		_add_panel_meta "$domain"
@@ -426,26 +413,15 @@ _install() {
 	"subdomain")
 		echo_info "Already in subdomain mode"
 		;;
-	*)
-		echo_error "Unknown installation state"
-		exit 1
-		;;
 	esac
 }
 
-# Revert to subfolder mode
-_revert() {
+_revert_subdomain() {
 	echo_info "Reverting ${app_name^} to subfolder mode..."
 
-	# Remove subdomain vhost
-	if [ -L "$subdomain_enabled" ]; then
-		rm -f "$subdomain_enabled"
-	fi
-	if [ -f "$subdomain_vhost" ]; then
-		rm -f "$subdomain_vhost"
-	fi
+	[ -L "$subdomain_enabled" ] && rm -f "$subdomain_enabled"
+	[ -f "$subdomain_vhost" ] && rm -f "$subdomain_vhost"
 
-	# Restore subfolder config
 	if [ -f "$backup_dir/${app_name}.conf.bak" ]; then
 		cp "$backup_dir/${app_name}.conf.bak" "$subfolder_conf"
 		echo_info "Restored subfolder nginx config"
@@ -454,10 +430,7 @@ _revert() {
 		_create_subfolder_config
 	fi
 
-	# Remove panel meta override
 	_remove_panel_meta
-
-	# Notify about Organizr re-protection
 	_include_in_organizr
 
 	systemctl reload nginx
@@ -465,7 +438,10 @@ _revert() {
 	echo_info "Access at: https://your-server/${app_name}/"
 }
 
-# Complete removal
+# ==============================================================================
+# Complete Removal
+# ==============================================================================
+
 _remove() {
 	local force="$1"
 	if [ "$force" != "--force" ] && [ ! -f "/install/.${app_lockname}.lock" ]; then
@@ -475,27 +451,20 @@ _remove() {
 
 	echo_info "Removing ${app_name^}..."
 
-	# Revert first if on subdomain
 	if [ -f "$subdomain_vhost" ]; then
 		rm -f "$subdomain_enabled"
 		rm -f "$subdomain_vhost"
 		_remove_panel_meta
 	fi
 
-	# Remove subfolder config if exists
 	rm -f "$subfolder_conf"
-
-	# Remove backup dir
 	rm -rf "$backup_dir"
 
-	# Reload nginx
 	systemctl reload nginx 2>/dev/null || true
 
-	# Remove app via box
 	echo_info "Removing ${app_name^} via box remove ${app_name}..."
 	box remove "$app_name"
 
-	# Remove swizdb entry
 	swizdb clear "jellyfin/domain" 2>/dev/null || true
 
 	echo_success "${app_name^} has been removed"
@@ -503,25 +472,75 @@ _remove() {
 	exit 0
 }
 
+# ==============================================================================
+# Interactive Mode
+# ==============================================================================
+
+_interactive() {
+	echo_info "${app_name^} Setup"
+
+	_install_app
+
+	local state
+	state=$(_get_install_state)
+
+	if [ "$state" != "subdomain" ]; then
+		if ask "Convert Jellyfin to subdomain mode?" N; then
+			_install_subdomain
+		fi
+	else
+		echo_info "Subdomain already configured"
+	fi
+
+	echo_success "${app_name^} setup complete"
+}
+
+# ==============================================================================
+# Usage
+# ==============================================================================
+
+_usage() {
+	echo "Usage: $0 [OPTIONS]"
+	echo ""
+	echo "  (no args)             Interactive setup"
+	echo "  --subdomain           Convert to subdomain mode"
+	echo "  --subdomain --revert  Revert to subfolder mode"
+	echo "  --remove [--force]    Complete removal"
+	exit 1
+}
+
+# ==============================================================================
+# Pre-flight Checks
+# ==============================================================================
+
+_preflight() {
+	if [ ! -f /install/.nginx.lock ]; then
+		echo_error "nginx is not installed. Please install nginx first."
+		exit 1
+	fi
+}
+
+# ==============================================================================
 # Main
-_preflight "$1"
+# ==============================================================================
+
+_preflight
 
 case "$1" in
-"--revert")
-	_revert
+"--subdomain")
+	case "$2" in
+	"--revert") _revert_subdomain ;;
+	"") _install_subdomain ;;
+	*) _usage ;;
+	esac
 	;;
 "--remove")
 	_remove "$2"
 	;;
 "")
-	_install
+	_interactive
 	;;
 *)
-	echo "Usage: $0 [--revert|--remove [--force]]"
-	echo ""
-	echo "  (no args)    Convert ${app_name^} to subdomain mode"
-	echo "  --revert     Revert to subfolder mode"
-	echo "  --remove     Completely remove ${app_name^}"
-	exit 1
+	_usage
 	;;
 esac
