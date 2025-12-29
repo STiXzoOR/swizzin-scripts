@@ -10,11 +10,10 @@ A collection of installer scripts for integrating additional applications into [
 | [radarr.sh](#radarr) | [Radarr](https://radarr.video/) | Multi-instance Radarr manager (4k, anime, etc.) |
 | [decypharr.sh](#decypharr) | [Decypharr](https://github.com/sirrobot01/decypharr) | Encrypted file/torrent management via rclone and qBittorrent |
 | [notifiarr.sh](#notifiarr) | [Notifiarr](https://github.com/Notifiarr/notifiarr) | Notification relay client for *arr apps and Plex |
-| [organizr-subdomain.sh](#organizr-subdomain) | [Organizr](https://github.com/causefx/Organizr) | Convert Organizr to subdomain with SSO authentication |
-| [plex.sh](#plex) | [Plex](https://plex.tv/) | Extend Plex install with nginx subfolder config |
-| [plex-subdomain.sh](#plex-subdomain) | [Plex](https://plex.tv/) | Convert Plex to subdomain mode |
-| [emby-subdomain.sh](#emby-subdomain) | [Emby](https://emby.media/) | Convert Emby to subdomain mode |
-| [jellyfin-subdomain.sh](#jellyfin-subdomain) | [Jellyfin](https://jellyfin.org/) | Convert Jellyfin to subdomain mode |
+| [plex.sh](#plex) | [Plex](https://plex.tv/) | Extended Plex installer with subdomain support |
+| [emby.sh](#emby) | [Emby](https://emby.media/) | Extended Emby installer with subdomain and Premiere bypass |
+| [jellyfin.sh](#jellyfin) | [Jellyfin](https://jellyfin.org/) | Extended Jellyfin installer with subdomain support |
+| [organizr.sh](#organizr) | [Organizr](https://github.com/causefx/Organizr) | Extended Organizr installer with subdomain and SSO support |
 | [seerr.sh](#seerr) | [Seerr](https://github.com/seerr-team/seerr) | Media request platform (Overseerr fork) |
 | [byparr.sh](#byparr) | [Byparr](https://github.com/ThePhaseless/Byparr) | FlareSolverr alternative for bypassing anti-bot protections |
 | [flaresolverr.sh](#flaresolverr) | [FlareSolverr](https://github.com/FlareSolverr/FlareSolverr) | Proxy server to bypass Cloudflare protection |
@@ -154,189 +153,152 @@ bash notifiarr.sh
 
 ---
 
-### Organizr Subdomain
-
-Converts Swizzin's default Organizr installation from subfolder (`/organizr`) to subdomain mode with SSO authentication for other apps.
-
-```bash
-# Required: Set the public domain for Organizr
-export ORGANIZR_DOMAIN="organizr.example.com"
-
-# Optional: Custom Let's Encrypt hostname (defaults to ORGANIZR_DOMAIN)
-export ORGANIZR_LE_HOSTNAME="example.com"
-
-# Optional: Interactive Let's Encrypt (for CloudFlare DNS validation)
-export ORGANIZR_LE_INTERACTIVE="yes"
-
-bash organizr-subdomain.sh
-```
-
-**Access:** `https://organizr.example.com/`
-
-**Config:** `/opt/swizzin/organizr-auth.conf`
-
-**Features:**
-- Automatic Let's Encrypt certificate
-- SSO authentication for selected apps (replaces htpasswd)
-- Interactive app selection menu
-- Configurable auth levels per app (Admin, User, etc.)
-
-**Additional Commands:**
-
-```bash
-# Modify which apps are protected
-bash organizr-subdomain.sh --configure
-
-# Revert to subfolder mode
-bash organizr-subdomain.sh --revert
-
-# Complete removal
-bash organizr-subdomain.sh --remove
-```
-
-**Notes:**
-- This script runs `box install organizr` first if Organizr isn't already installed.
-- Swizzin's automated Organizr wizard may fail. If Organizr shows the setup wizard, complete it manually at your subdomain URL.
-
----
-
 ### Plex
 
-Extends Swizzin's Plex installation with an nginx subfolder configuration for accessing Plex at `/plex`.
+Extended Plex installer with subdomain support. Installs Plex via `box install plex` if not installed, optionally converts to subdomain mode.
 
 ```bash
+# Interactive setup (installs Plex, asks about subdomain)
 bash plex.sh
-```
 
-**Access:** `https://your-server/plex/`
+# Convert to subdomain mode (prompts for domain)
+bash plex.sh --subdomain
 
-**Additional Commands:**
+# Revert to subfolder mode
+bash plex.sh --subdomain --revert
 
-```bash
-# Complete removal (removes Plex entirely)
+# Complete removal
 bash plex.sh --remove
-
-# Force removal
-bash plex.sh --remove --force
 ```
 
----
+**Subdomain Access:** `https://plex.example.com/`
 
-### Plex Subdomain
-
-Converts Plex from subfolder (`/plex`) to subdomain mode with Let's Encrypt certificate.
-
-```bash
-# Required: Set the public domain for Plex
-export PLEX_DOMAIN="plex.example.com"
-
-# Optional: Custom Let's Encrypt hostname
-export PLEX_LE_HOSTNAME="example.com"
-
-# Optional: Interactive Let's Encrypt (for CloudFlare DNS validation)
-export PLEX_LE_INTERACTIVE="yes"
-
-bash plex-subdomain.sh
-```
-
-**Access:** `https://plex.example.com/`
+**Subfolder Access:** `https://your-server/plex/`
 
 **Features:**
+- Interactive domain prompt (or set `PLEX_DOMAIN` env var to bypass)
 - Automatic Let's Encrypt certificate
 - Proper X-Plex-* proxy headers for client communication
 - Frame-ancestors CSP header for Organizr embedding (if configured)
-- Automatically removes from Organizr SSO protection
-
-**Additional Commands:**
-
-```bash
-# Revert to subfolder mode
-bash plex-subdomain.sh --revert
-
-# Complete removal
-bash plex-subdomain.sh --remove
-```
 
 ---
 
-### Emby Subdomain
+### Emby
 
-Converts Emby from subfolder (`/emby`) to subdomain mode with Let's Encrypt certificate.
+Extended Emby installer with subdomain support and Emby Premiere bypass. Installs Emby via `box install emby` if not installed.
 
 ```bash
-# Required: Set the public domain for Emby
-export EMBY_DOMAIN="emby.example.com"
+# Interactive setup (installs Emby, asks about subdomain and Premiere)
+bash emby.sh
 
-# Optional: Custom Let's Encrypt hostname
-export EMBY_LE_HOSTNAME="example.com"
+# Convert to subdomain mode (prompts for domain)
+bash emby.sh --subdomain
 
-# Optional: Interactive Let's Encrypt (for CloudFlare DNS validation)
-export EMBY_LE_INTERACTIVE="yes"
+# Revert to subfolder mode
+bash emby.sh --subdomain --revert
 
-bash emby-subdomain.sh
+# Enable Emby Premiere bypass
+bash emby.sh --premiere
+
+# Disable Emby Premiere bypass
+bash emby.sh --premiere --revert
+
+# Complete removal
+bash emby.sh --remove
 ```
 
-**Access:** `https://emby.example.com/`
+**Subdomain Access:** `https://emby.example.com/`
+
+**Subfolder Access:** `https://your-server/emby/`
 
 **Features:**
+- Interactive domain prompt (or set `EMBY_DOMAIN` env var to bypass)
 - Automatic Let's Encrypt certificate
 - Range/If-Range headers for proper media streaming
 - Frame-ancestors CSP header for Organizr embedding (if configured)
-- Automatically removes from Organizr SSO protection
 
-**Additional Commands:**
-
-```bash
-# Revert to subfolder mode
-bash emby-subdomain.sh --revert
-
-# Complete removal
-bash emby-subdomain.sh --remove
-```
-
-**Note:** Runs `box install emby` first if Emby isn't already installed.
+**Premiere Bypass:**
+- Intercepts Emby's license validation requests locally
+- Creates self-signed certificate for `mb3admin.com`
+- Adds certificate to system CA trust
+- Patches `/etc/hosts` to redirect validation
+- Computes and displays Premiere key for reference
 
 ---
 
-### Jellyfin Subdomain
+### Jellyfin
 
-Converts Jellyfin from subfolder (`/jellyfin`) to subdomain mode with Let's Encrypt certificate.
+Extended Jellyfin installer with subdomain support. Installs Jellyfin via `box install jellyfin` if not installed.
 
 ```bash
-# Required: Set the public domain for Jellyfin
-export JELLYFIN_DOMAIN="jellyfin.example.com"
+# Interactive setup (installs Jellyfin, asks about subdomain)
+bash jellyfin.sh
 
-# Optional: Custom Let's Encrypt hostname
-export JELLYFIN_LE_HOSTNAME="example.com"
+# Convert to subdomain mode (prompts for domain)
+bash jellyfin.sh --subdomain
 
-# Optional: Interactive Let's Encrypt (for CloudFlare DNS validation)
-export JELLYFIN_LE_INTERACTIVE="yes"
+# Revert to subfolder mode
+bash jellyfin.sh --subdomain --revert
 
-bash jellyfin-subdomain.sh
+# Complete removal
+bash jellyfin.sh --remove
 ```
 
-**Access:** `https://jellyfin.example.com/`
+**Subdomain Access:** `https://jellyfin.example.com/`
+
+**Subfolder Access:** `https://your-server/jellyfin/`
 
 **Features:**
+- Interactive domain prompt (or set `JELLYFIN_DOMAIN` env var to bypass)
 - Automatic Let's Encrypt certificate
 - WebSocket support via `/socket` location
 - WebOS LG TV CORS headers
 - Range/If-Range headers for proper media streaming
 - Prometheus `/metrics` endpoint with private network restrictions
-- Frame-ancestors CSP header for Organizr embedding (if configured)
-- Automatically removes from Organizr SSO protection
 
-**Additional Commands:**
+---
+
+### Organizr
+
+Extended Organizr installer with subdomain and SSO support. Installs Organizr via `box install organizr` if not installed.
 
 ```bash
+# Interactive setup (installs Organizr, asks about subdomain)
+bash organizr.sh
+
+# Convert to subdomain mode (prompts for domain)
+bash organizr.sh --subdomain
+
 # Revert to subfolder mode
-bash jellyfin-subdomain.sh --revert
+bash organizr.sh --subdomain --revert
+
+# Modify which apps are protected by SSO
+bash organizr.sh --configure
+
+# Fix auth_request placement in redirect blocks
+bash organizr.sh --migrate
 
 # Complete removal
-bash jellyfin-subdomain.sh --remove
+bash organizr.sh --remove
 ```
 
-**Note:** Runs `box install jellyfin` first if Jellyfin isn't already installed.
+**Subdomain Access:** `https://organizr.example.com/`
+
+**Subfolder Access:** `https://your-server/organizr/`
+
+**Config:** `/opt/swizzin/organizr-auth.conf`
+
+**Features:**
+- Interactive domain prompt (or set `ORGANIZR_DOMAIN` env var to bypass)
+- Automatic Let's Encrypt certificate
+- SSO authentication for selected apps (replaces htpasswd)
+- Interactive app selection menu
+- Configurable auth levels per app (Admin, User, etc.)
+
+**Auth Levels:** 0=Admin, 1=Co-Admin, 2=Super User, 3=Power User, 4=User, 998=Logged In
+
+**Notes:**
+- Swizzin's automated Organizr wizard may fail. If Organizr shows the setup wizard, complete it manually at your subdomain URL.
 
 ---
 
@@ -345,26 +307,25 @@ bash jellyfin-subdomain.sh --remove
 Media request and discovery platform (Overseerr fork) with Plex/Jellyfin integration.
 
 ```bash
-# Required: Set the public domain for Seerr
-export SEERR_DOMAIN="seerr.example.com"
+# Interactive setup (prompts for domain)
+bash seerr.sh
 
-# Optional: Custom Let's Encrypt hostname (defaults to SEERR_DOMAIN)
-export SEERR_LE_HOSTNAME="example.com"
+# Convert to subdomain mode
+bash seerr.sh --subdomain
 
-# Optional: Interactive Let's Encrypt (for CloudFlare DNS validation)
-export SEERR_LE_INTERACTIVE="yes"
+# Revert to direct port access
+bash seerr.sh --subdomain --revert
+
+# Complete removal
+bash seerr.sh --remove
 
 # Optional: Set custom owner
 export SEERR_OWNER="username"
-
-bash seerr.sh
 ```
 
 **Access:** `https://seerr.example.com/`
 
 **Config:** `/home/<user>/.config/Seerr/`
-
-**Note:** Seerr requires a dedicated subdomain. During installation, you will be prompted to configure Let's Encrypt interactively.
 
 ---
 
@@ -523,30 +484,28 @@ bash dns-fix.sh --revert
 
 ## Environment Variables
 
-All scripts support an optional `<APP>_OWNER` variable to specify the user account for the application. If not set, the Swizzin master user is used.
+All scripts now use **interactive prompts** for required values. Environment variables can be used to bypass prompts for automation.
 
-| Variable | Script | Required | Description |
-|----------|--------|----------|-------------|
-| `ORGANIZR_DOMAIN` | organizr-subdomain.sh | **Yes** | Public FQDN for Organizr |
-| `ORGANIZR_LE_HOSTNAME` | organizr-subdomain.sh | No | Let's Encrypt hostname |
-| `ORGANIZR_LE_INTERACTIVE` | organizr-subdomain.sh | No | Set to `yes` for interactive LE |
-| `PLEX_DOMAIN` | plex-subdomain.sh | **Yes** | Public FQDN for Plex |
-| `PLEX_LE_HOSTNAME` | plex-subdomain.sh | No | Let's Encrypt hostname |
-| `PLEX_LE_INTERACTIVE` | plex-subdomain.sh | No | Set to `yes` for interactive LE |
-| `EMBY_DOMAIN` | emby-subdomain.sh | **Yes** | Public FQDN for Emby |
-| `EMBY_LE_HOSTNAME` | emby-subdomain.sh | No | Let's Encrypt hostname |
-| `EMBY_LE_INTERACTIVE` | emby-subdomain.sh | No | Set to `yes` for interactive LE |
-| `JELLYFIN_DOMAIN` | jellyfin-subdomain.sh | **Yes** | Public FQDN for Jellyfin |
-| `JELLYFIN_LE_HOSTNAME` | jellyfin-subdomain.sh | No | Let's Encrypt hostname |
-| `JELLYFIN_LE_INTERACTIVE` | jellyfin-subdomain.sh | No | Set to `yes` for interactive LE |
-| `SEERR_DOMAIN` | seerr.sh | **Yes** | Public FQDN for Seerr |
-| `SEERR_LE_HOSTNAME` | seerr.sh | No | Let's Encrypt hostname |
-| `SEERR_LE_INTERACTIVE` | seerr.sh | No | Set to `yes` for interactive LE |
-| `DN_API_KEY` | notifiarr.sh | No* | Notifiarr.com API key (prompted if not set) |
-| `RD_TOKEN` | zurg.sh | No* | Real-Debrid API token (prompted if not set) |
-| `<APP>_OWNER` | All | No | Application owner username |
-
-*Required for non-interactive installs (e.g., when piping to bash)
+| Variable | Script | Description |
+|----------|--------|-------------|
+| `PLEX_DOMAIN` | plex.sh | Public FQDN for Plex (bypasses prompt) |
+| `PLEX_LE_HOSTNAME` | plex.sh | Let's Encrypt hostname (defaults to domain) |
+| `PLEX_LE_INTERACTIVE` | plex.sh | Set to `yes` for interactive LE (CloudFlare DNS) |
+| `EMBY_DOMAIN` | emby.sh | Public FQDN for Emby (bypasses prompt) |
+| `EMBY_LE_HOSTNAME` | emby.sh | Let's Encrypt hostname |
+| `EMBY_LE_INTERACTIVE` | emby.sh | Set to `yes` for interactive LE |
+| `JELLYFIN_DOMAIN` | jellyfin.sh | Public FQDN for Jellyfin (bypasses prompt) |
+| `JELLYFIN_LE_HOSTNAME` | jellyfin.sh | Let's Encrypt hostname |
+| `JELLYFIN_LE_INTERACTIVE` | jellyfin.sh | Set to `yes` for interactive LE |
+| `ORGANIZR_DOMAIN` | organizr.sh | Public FQDN for Organizr (bypasses prompt) |
+| `ORGANIZR_LE_HOSTNAME` | organizr.sh | Let's Encrypt hostname |
+| `ORGANIZR_LE_INTERACTIVE` | organizr.sh | Set to `yes` for interactive LE |
+| `SEERR_DOMAIN` | seerr.sh | Public FQDN for Seerr (bypasses prompt) |
+| `SEERR_LE_HOSTNAME` | seerr.sh | Let's Encrypt hostname |
+| `SEERR_LE_INTERACTIVE` | seerr.sh | Set to `yes` for interactive LE |
+| `DN_API_KEY` | notifiarr.sh | Notifiarr.com API key (prompted if not set) |
+| `RD_TOKEN` | zurg.sh | Real-Debrid API token (prompted if not set) |
+| `<APP>_OWNER` | All | Application owner username (defaults to master user) |
 
 ## Panel Integration
 
@@ -575,7 +534,7 @@ This will:
 - Remove configuration files
 - Clean up lock files
 
-**Note:** For Seerr, the Let's Encrypt certificate is not removed automatically.
+**Note:** Let's Encrypt certificates are not removed automatically.
 
 ## Architecture
 
@@ -588,6 +547,24 @@ Scripts follow a consistent pattern:
 5. Configure nginx reverse proxy (where applicable)
 6. Register with Swizzin panel
 7. Create lock file at `/install/.<app>.lock`
+
+### Extended Installer Pattern
+
+Media server scripts (plex.sh, emby.sh, jellyfin.sh, organizr.sh, seerr.sh) follow a unified pattern:
+
+```bash
+# Interactive setup - installs app, asks about features
+bash <app>.sh
+
+# Convert to subdomain mode
+bash <app>.sh --subdomain
+
+# Revert to subfolder mode
+bash <app>.sh --subdomain --revert
+
+# Complete removal
+bash <app>.sh --remove
+```
 
 ### Python Apps (uv-based)
 
@@ -603,7 +580,7 @@ Byparr, Huntarr, and Subgen use [uv](https://github.com/astral-sh/uv) for Python
 3. **Use a template** from `templates/` as your starting point:
    - `template-binary.sh` - For single-binary applications
    - `template-python.sh` - For Python apps using uv
-   - `template-subdomain.sh` - For subdomain converters
+   - `template-subdomain.sh` - For extended installers with subdomain support
    - `template-multiinstance.sh` - For multi-instance managers
 4. Follow the coding standards in `CLAUDE.md`
 5. Test on a Swizzin installation
