@@ -388,12 +388,6 @@ _generate_premiere_cert() {
 
 	mkdir -p "$premiere_cert_dir"
 
-	# Generate DH params if not exists
-	if [ ! -f "$premiere_cert_dir/dhparams.pem" ]; then
-		echo_info "Generating DH parameters (this may take a moment)..."
-		openssl dhparam -out "$premiere_cert_dir/dhparams.pem" 2048 >>"$log" 2>&1
-	fi
-
 	# Generate self-signed cert (10 years)
 	openssl req -x509 -nodes -days 3650 \
 		-newkey rsa:2048 \
@@ -428,7 +422,6 @@ server {
 
     ssl_certificate ${premiere_cert_dir}/fullchain.pem;
     ssl_certificate_key ${premiere_cert_dir}/key.pem;
-    ssl_dhparam ${premiere_cert_dir}/dhparams.pem;
     include snippets/ssl-params.conf;
 
     location /admin/service/registration/validateDevice {
