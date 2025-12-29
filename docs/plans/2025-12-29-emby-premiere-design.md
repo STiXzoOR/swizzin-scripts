@@ -87,16 +87,28 @@ _generate_premiere_cert() {
     local cert_dir="/etc/nginx/ssl/mb3admin.com"
     mkdir -p "$cert_dir"
 
-    # Generate DH params (if not exists)
-    [[ -f "$cert_dir/dhparams.pem" ]] || \
-        openssl dhparam -out "$cert_dir/dhparams.pem" 2048
-
     # Generate self-signed cert (10 years)
     openssl req -x509 -nodes -days 3650 \
         -newkey rsa:2048 \
         -keyout "$cert_dir/key.pem" \
         -out "$cert_dir/fullchain.pem" \
         -subj "/CN=mb3admin.com"
+}
+```
+
+### Step 3.5: Add Certificate to System CA Trust
+
+Emby validates SSL certificates, so the self-signed cert must be trusted by the system:
+
+```bash
+_install_premiere_ca() {
+    cp /etc/nginx/ssl/mb3admin.com/fullchain.pem /usr/local/share/ca-certificates/mb3admin.crt
+    update-ca-certificates
+}
+
+_remove_premiere_ca() {
+    rm -f /usr/local/share/ca-certificates/mb3admin.crt
+    update-ca-certificates
 }
 ```
 
@@ -119,7 +131,6 @@ server {
 
     ssl_certificate /etc/nginx/ssl/mb3admin.com/fullchain.pem;
     ssl_certificate_key /etc/nginx/ssl/mb3admin.com/key.pem;
-    ssl_dhparam /etc/nginx/ssl/mb3admin.com/dhparams.pem;
     include snippets/ssl-params.conf;
 
     location /admin/service/registration/validateDevice {
@@ -213,6 +224,7 @@ Existing logic from emby-subdomain.sh
 | Item | Location |
 |------|----------|
 | SSL cert | `/etc/nginx/ssl/mb3admin.com/` |
+| CA trust cert | `/usr/local/share/ca-certificates/mb3admin.crt` |
 | nginx site | `/etc/nginx/sites-available/mb3admin.com` |
 | hosts backup | `/etc/hosts.emby-premiere.bak` |
 | Emby config | `/var/lib/emby/config/system.xml` |

@@ -399,6 +399,31 @@ _generate_premiere_cert() {
 }
 
 # ==============================================================================
+# Premiere: System CA Trust Management
+# ==============================================================================
+
+_install_premiere_ca() {
+	echo_progress_start "Adding certificate to system CA trust"
+
+	# Copy cert to system CA directory
+	cp "$premiere_cert_dir/fullchain.pem" /usr/local/share/ca-certificates/mb3admin.crt
+
+	# Update CA certificates
+	update-ca-certificates >>"$log" 2>&1
+
+	echo_progress_done "Certificate trusted by system"
+}
+
+_remove_premiere_ca() {
+	if [ -f /usr/local/share/ca-certificates/mb3admin.crt ]; then
+		echo_progress_start "Removing certificate from system CA trust"
+		rm -f /usr/local/share/ca-certificates/mb3admin.crt
+		update-ca-certificates >>"$log" 2>&1
+		echo_progress_done "Certificate removed from system trust"
+	fi
+}
+
+# ==============================================================================
 # Premiere: Create nginx Site
 # ==============================================================================
 
@@ -603,6 +628,9 @@ _install_premiere() {
 	# Generate certificate
 	_generate_premiere_cert
 
+	# Add cert to system CA trust (so Emby trusts it)
+	_install_premiere_ca
+
 	# Create nginx site
 	_create_premiere_site "$premiere_key"
 
@@ -643,6 +671,7 @@ _revert_premiere() {
 
 	# Ask about removing SSL cert
 	if ask "Remove self-signed certificate?" N; then
+		_remove_premiere_ca
 		rm -rf "$premiere_cert_dir"
 		echo_info "Certificate removed"
 	fi
