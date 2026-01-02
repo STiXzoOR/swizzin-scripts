@@ -43,7 +43,7 @@ swiz_configdir="/home/$user/.config"
 app_configdir="$swiz_configdir/${app_name^}"
 app_group="$user"
 app_port=$(port 10000 12000)
-app_reqs=("curl" "rclone")
+app_reqs=("curl" "fuse3")
 app_servicefile="$app_name.service"
 app_dir="/usr/bin"
 app_binary="$app_name"
@@ -91,6 +91,23 @@ _get_mount_path() {
 	echo_info "Using mount path: $app_mount_path"
 }
 
+# Install latest rclone from official script
+_install_rclone() {
+	if command -v rclone &>/dev/null; then
+		local current_version
+		current_version=$(rclone version 2>/dev/null | head -1 | awk '{print $2}')
+		echo_info "rclone $current_version already installed, checking for updates..."
+	fi
+
+	echo_progress_start "Installing latest rclone"
+	if curl -fsSL https://rclone.org/install.sh | bash >>"$log" 2>&1; then
+		echo_progress_done "rclone installed: $(rclone version 2>/dev/null | head -1 | awk '{print $2}')"
+	else
+		echo_error "Failed to install rclone"
+		exit 1
+	fi
+}
+
 # Get zurg configuration if installed
 _get_zurg_config() {
 	zurg_mount=""
@@ -113,6 +130,7 @@ _install_decypharr() {
 	chown -R "$user":"$user" "$app_configdir"
 
 	apt_install "${app_reqs[@]}"
+	_install_rclone
 
 	echo_progress_start "Downloading release archive"
 

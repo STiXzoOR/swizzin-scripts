@@ -43,7 +43,7 @@ swiz_configdir="/home/$user/.config"
 app_configdir="$swiz_configdir/${app_name}"
 app_group="$user"
 app_port=9999
-app_reqs=("curl" "rclone" "unzip" "fuse3")
+app_reqs=("curl" "unzip" "fuse3")
 app_servicefile="$app_name.service"
 app_mount_servicefile="rclone-$app_name.service"
 app_dir="/usr/bin"
@@ -57,6 +57,23 @@ if [ ! -d "$swiz_configdir" ]; then
 	mkdir -p "$swiz_configdir"
 fi
 chown "$user":"$user" "$swiz_configdir"
+
+# Install latest rclone from official script
+_install_rclone() {
+	if command -v rclone &>/dev/null; then
+		local current_version
+		current_version=$(rclone version 2>/dev/null | head -1 | awk '{print $2}')
+		echo_info "rclone $current_version already installed, checking for updates..."
+	fi
+
+	echo_progress_start "Installing latest rclone"
+	if curl -fsSL https://rclone.org/install.sh | bash >>"$log" 2>&1; then
+		echo_progress_done "rclone installed: $(rclone version 2>/dev/null | head -1 | awk '{print $2}')"
+	else
+		echo_error "Failed to install rclone"
+		exit 1
+	fi
+}
 
 # Prompt for mount point or use default/env
 _get_mount_point() {
@@ -132,6 +149,7 @@ _install_zurg() {
 	chown -R "$user":"$user" "$app_configdir"
 
 	apt_install "${app_reqs[@]}"
+	_install_rclone
 
 	# Prompt for Real-Debrid token if not already configured
 	echo_info "Checking for Real-Debrid API token"
