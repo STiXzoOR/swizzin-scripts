@@ -407,14 +407,17 @@ ExecStart=/usr/bin/rclone mount zurg: $app_mount_point \\
     --poll-interval 0 \\
     --dir-cache-time 10s \\
     --attr-timeout 15s \\
-    --vfs-read-wait 75ms \\
     --vfs-cache-mode full \\
     --vfs-cache-max-size 256G \\
     --vfs-cache-max-age 72h \\
     --vfs-cache-poll-interval 10m \\
-    --buffer-size 32M \\
-    --vfs-read-chunk-size 2M \\
-    --vfs-read-chunk-size-limit 64M \\
+    --vfs-read-ahead 128M \\
+    --vfs-fast-fingerprint \\
+    --buffer-size 128M \\
+    --vfs-read-chunk-size 32M \\
+    --vfs-read-chunk-size-limit off \\
+    --async-read \\
+    --transfers 8 \\
     --allow-other \\
     --uid $(id -u "$user") \\
     --gid $(id -g "$user") \\
