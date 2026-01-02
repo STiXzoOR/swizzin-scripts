@@ -173,12 +173,14 @@ _install_decypharr() {
 	local rd_api_key=""
 	local zurg_url=""
 	local rclone_enabled="true"
+	local use_webdav="true"
 	if [ -n "$zurg_mount" ]; then
 		rd_folder="${zurg_mount}/__all__/"
 		rd_api_key="${zurg_api_key:-}"
 		zurg_url="http://127.0.0.1:9999"
 		rclone_enabled="false"  # zurg handles rclone mount
-		echo_info "Zurg detected - disabling Decypharr's internal rclone mount"
+		use_webdav="false"      # use zurg's mount directly, not internal webdav
+		echo_info "Zurg detected - using zurg's mount directly (webdav and internal rclone disabled)"
 	fi
 
 	cat >"$app_configdir/config.json" <<CFG
@@ -194,7 +196,7 @@ _install_decypharr() {
       "folder": "${rd_folder}",
       "rate_limit": "250/minute",
       "minimum_free_slot": 1,
-      "use_webdav": true,
+      "use_webdav": ${use_webdav},
       "torrents_refresh_interval": "15s",
       "download_links_refresh_interval": "40m",
       "workers": 600,
