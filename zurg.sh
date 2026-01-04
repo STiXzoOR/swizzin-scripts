@@ -354,15 +354,32 @@ _install_zurg() {
 zurg: v1
 token: ${RD_TOKEN}
 
-# Server settings (binding to localhost only)
+# Network & Server Configuration
 host: "127.0.0.1"
 port: ${app_port}
 
-# Repair settings
+# Performance & Rate Limits
+api_rate_limit_per_minute: 250
+torrents_rate_limit_per_minute: 75
+api_timeout_secs: 60
+download_timeout_secs: 15
+
+# File Management
 enable_repair: true
 restrict_repair_to_cached: false
+retain_folder_name_extension: false
+retain_rd_torrent_name: false
 
-# Rclone mount settings (using zurg's internal rclone with optimized 4K streaming args)
+# Scheduling & Updates
+check_for_changes_every_secs: 15
+repair_every_mins: 60
+
+# Media Analysis
+auto_analyze_new_torrents: true
+cache_network_test_results: true
+
+# Rclone Management (using zurg's internal rclone with optimized 4K streaming args)
+# Note: Zurg writes and uses an embedded rclone config at data/rclone.conf
 rclone_enabled: true
 mount_path: ${app_mount_point}
 rclone_extra_args:
@@ -388,14 +405,6 @@ rclone_extra_args:
   - "--gid=${user_gid}"
   - "-v"
 
-# Rate limits for API calls
-api_rate_limit_per_minute: 250
-torrents_rate_limit_per_minute: 75
-
-# File management settings
-retain_folder_name_extension: false
-retain_rd_torrent_name: false
-
 # Directory definitions
 directories:
   torrents:
@@ -413,26 +422,28 @@ CFG
 zurg: v1
 token: ${RD_TOKEN}
 
+# Network & Server Configuration
 host: "127.0.0.1"
 port: ${app_port}
 
-# How often to check for changes (seconds)
-check_for_changes_every_secs: 10
+# Performance & Rate Limits
+api_rate_limit_per_minute: 250
+torrents_rate_limit_per_minute: 75
+concurrent_workers: 32
+download_timeout_secs: 15
 
-# Repair settings
-repair_every_mins: 60
+# File Management
 enable_repair: true
-
-# Automatically delete RAR torrents after extraction
 auto_delete_rar_torrents: false
-
-# Retain folder structure in library
 retain_folder_name_extension: false
 retain_rd_torrent_name: false
 
-# Network settings
-concurrent_workers: 32
-download_timeout_secs: 10
+# Scheduling & Updates
+check_for_changes_every_secs: 15
+repair_every_mins: 60
+
+# Media Analysis
+cache_network_test_results: true
 
 # Directory definitions
 directories:
