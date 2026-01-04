@@ -682,10 +682,24 @@ _nginx_zurg() {
 			    proxy_set_header X-Real-IP \$remote_addr;
 			    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
 			    proxy_set_header X-Forwarded-Proto \$scheme;
-			    proxy_redirect off;
 			    proxy_http_version 1.1;
 			    proxy_set_header Upgrade \$http_upgrade;
 			    proxy_set_header Connection \$http_connection;
+
+			    # Rewrite Location headers for redirects
+			    proxy_redirect / /$app_name/;
+
+			    # Rewrite URLs in responses (zurg has no base_url support)
+			    sub_filter_once off;
+			    sub_filter_types text/html text/css text/javascript application/javascript application/json;
+			    sub_filter 'href="/' 'href="/$app_name/';
+			    sub_filter 'src="/' 'src="/$app_name/';
+			    sub_filter 'action="/' 'action="/$app_name/';
+			    sub_filter 'url(/' 'url(/$app_name/';
+			    sub_filter '"/api/' '"/$app_name/api/';
+			    sub_filter "'/api/" "'/$app_name/api/";
+			    sub_filter 'fetch("/' 'fetch("/$app_name/';
+			    sub_filter "fetch('/" "fetch('/$app_name/";
 
 			    auth_basic "What's the password?";
 			    auth_basic_user_file /etc/htpasswd.d/htpasswd.${user};
