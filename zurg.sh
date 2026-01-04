@@ -215,31 +215,26 @@ _install_zurg() {
 zurg: v1
 token: ${RD_TOKEN}
 
+# Server settings (binding to localhost only)
 host: "127.0.0.1"
 port: ${app_port}
 
-# How often to check for changes (seconds)
-# Note: This should match --dir-cache-time in rclone mount service
-check_for_changes_every_secs: 10
-
 # Repair settings
-repair_every_mins: 60
 enable_repair: true
+restrict_repair_to_cached: false
 
-# Automatically delete RAR torrents after extraction
-auto_delete_rar_torrents: false
+# Rclone mount settings
+# We use our own rclone service with optimized 4K streaming settings
+rclone_enabled: false
+mount_path: ${app_mount_point}
 
-# Retain folder structure in library
+# Rate limits for API calls
+api_rate_limit_per_minute: 250
+torrents_rate_limit_per_minute: 75
+
+# File management settings
 retain_folder_name_extension: false
 retain_rd_torrent_name: false
-
-# Network settings
-concurrent_workers: 32
-download_timeout_secs: 10
-
-# On library update hook (optional)
-# on_library_update: |
-#   echo "Library updated"
 
 # Directory definitions
 directories:
