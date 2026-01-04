@@ -338,9 +338,15 @@ _install_zurg() {
 
 	echo_progress_start "Creating configuration"
 
+	# Get user UID/GID for rclone mount
+	local user_uid
+	local user_gid
+	user_uid=$(id -u "$user")
+	user_gid=$(id -g "$user")
+
 	# Create config.yml based on version
 	if [ "$zurg_version" = "paid" ]; then
-		# Paid version config (newer format)
+		# Paid version config (newer format with internal rclone)
 		cat >"$app_configdir/config.yml" <<CFG
 # Zurg configuration (paid version)
 # Documentation: https://github.com/debridmediamanager/zurg
@@ -356,10 +362,31 @@ port: ${app_port}
 enable_repair: true
 restrict_repair_to_cached: false
 
-# Rclone mount settings
-# We use our own rclone service with optimized 4K streaming settings
-rclone_enabled: false
+# Rclone mount settings (using zurg's internal rclone with optimized 4K streaming args)
+rclone_enabled: true
 mount_path: ${app_mount_point}
+rclone_extra_args:
+  - "--read-only"
+  - "--no-modtime"
+  - "--no-checksum"
+  - "--poll-interval=0"
+  - "--dir-cache-time=10s"
+  - "--attr-timeout=15s"
+  - "--vfs-cache-mode=full"
+  - "--vfs-cache-max-size=256G"
+  - "--vfs-cache-max-age=72h"
+  - "--vfs-cache-poll-interval=10m"
+  - "--vfs-read-ahead=128M"
+  - "--vfs-fast-fingerprint"
+  - "--buffer-size=128M"
+  - "--vfs-read-chunk-size=32M"
+  - "--vfs-read-chunk-size-limit=off"
+  - "--async-read"
+  - "--transfers=8"
+  - "--allow-other"
+  - "--uid=${user_uid}"
+  - "--gid=${user_gid}"
+  - "-v"
 
 # Rate limits for API calls
 api_rate_limit_per_minute: 250
@@ -462,14 +489,16 @@ _remove_zurg() {
 		purgeconfig="false"
 	fi
 
-	# Stop and disable rclone mount service first
-	echo_progress_start "Stopping and disabling rclone mount service"
-	systemctl stop "$app_mount_servicefile" 2>/dev/null || true
-	systemctl disable "$app_mount_servicefile" 2>/dev/null || true
-	rm -f "/etc/systemd/system/$app_mount_servicefile"
-	echo_progress_done "Rclone mount service removed"
+	# Stop and disable rclone mount service if it exists (free version only)
+	if [ -f "/etc/systemd/system/$app_mount_servicefile" ]; then
+		echo_progress_start "Stopping and disabling rclone mount service"
+		systemctl stop "$app_mount_servicefile" 2>/dev/null || true
+		systemctl disable "$app_mount_servicefile" 2>/dev/null || true
+		rm -f "/etc/systemd/system/$app_mount_servicefile"
+		echo_progress_done "Rclone mount service removed"
+	fi
 
-	# Unmount if still mounted
+	# Unmount if still mounted (for both versions)
 	if mountpoint -q "$app_mount_point" 2>/dev/null; then
 		echo_progress_start "Unmounting $app_mount_point"
 		fusermount -uz "$app_mount_point" 2>/dev/null || umount -f "$app_mount_point" 2>/dev/null || true
@@ -555,8 +584,10 @@ TimeoutStopSec=20
 WantedBy=multi-user.target
 EOF
 
-	# Rclone mount service
-	cat >"/etc/systemd/system/$app_mount_servicefile" <<EOF
+	# For free version, create separate rclone mount service
+	# Paid version uses zurg's internal rclone management
+	if [ "$zurg_version" = "free" ]; then
+		cat >"/etc/systemd/system/$app_mount_servicefile" <<EOF
 [Unit]
 Description=Rclone mount for ${app_name^}
 After=${app_servicefile}
@@ -597,6 +628,7 @@ RestartSec=10
 [Install]
 WantedBy=multi-user.target
 EOF
+	fi
 
 	# Ensure allow_other is enabled in fuse.conf
 	if ! grep -q "^user_allow_other" /etc/fuse.conf 2>/dev/null; then
@@ -605,8 +637,12 @@ EOF
 
 	systemctl -q daemon-reload
 	systemctl enable --now -q "$app_servicefile"
-	sleep 2
-	systemctl enable --now -q "$app_mount_servicefile"
+
+	# Only enable rclone mount service for free version
+	if [ "$zurg_version" = "free" ]; then
+		sleep 2
+		systemctl enable --now -q "$app_mount_servicefile"
+	fi
 	sleep 1
 
 	echo_progress_done "${app_name^} services installed and enabled"
