@@ -454,13 +454,15 @@ directories:
 CFG
 	fi
 
-	# Create rclone config for user
-	local rclone_configdir="/home/$user/.config/rclone"
-	if [ ! -d "$rclone_configdir" ]; then
-		mkdir -p "$rclone_configdir"
-	fi
+	# Create rclone config for free version only
+	# Paid version with rclone_enabled uses zurg's internal rclone config at data/rclone.conf
+	if [ "$zurg_version" = "free" ]; then
+		local rclone_configdir="/home/$user/.config/rclone"
+		if [ ! -d "$rclone_configdir" ]; then
+			mkdir -p "$rclone_configdir"
+		fi
 
-	cat >"$rclone_configdir/rclone.conf" <<RCLONE
+		cat >"$rclone_configdir/rclone.conf" <<RCLONE
 [zurg]
 type = webdav
 url = http://127.0.0.1:${app_port}/dav
@@ -468,7 +470,9 @@ vendor = other
 pacer_min_sleep = 0
 RCLONE
 
-	chown -R "$user":"$user" "$rclone_configdir"
+		chown -R "$user":"$user" "$rclone_configdir"
+	fi
+
 	chown -R "$user":"$user" "$app_configdir"
 
 	# Create mount point
