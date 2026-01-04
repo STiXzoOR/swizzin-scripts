@@ -58,6 +58,88 @@ if [ ! -d "$swiz_configdir" ]; then
 fi
 chown "$user":"$user" "$swiz_configdir"
 
+# Zurg version selection
+_select_zurg_version() {
+	# Check environment variable first
+	if [ -n "$ZURG_VERSION" ]; then
+		if [[ "$ZURG_VERSION" == "paid" || "$ZURG_VERSION" == "free" ]]; then
+			zurg_version="$ZURG_VERSION"
+			echo_info "Using zurg version from ZURG_VERSION: $zurg_version"
+			return
+		fi
+	fi
+
+	# Check existing version in swizdb
+	local existing_version
+	existing_version=$(swizdb get "zurg/version" 2>/dev/null) || true
+
+	if [ -n "$existing_version" ]; then
+		zurg_version="$existing_version"
+		echo_info "Using existing zurg version: $zurg_version"
+		return
+	fi
+
+	echo_info "Zurg has two versions:"
+	echo_info "  - free: Public repo (debridmediamanager/zurg-testing)"
+	echo_info "  - paid: Private repo for GitHub sponsors (debridmediamanager/zurg)"
+	echo ""
+	if ask "Do you have the paid/sponsor version of Zurg?" N; then
+		zurg_version="paid"
+	else
+		zurg_version="free"
+	fi
+}
+
+# GitHub authentication for paid version
+_get_github_token() {
+	# Check environment variable first
+	if [ -n "$GITHUB_TOKEN" ]; then
+		echo_info "Using GitHub token from GITHUB_TOKEN environment variable"
+		github_token="$GITHUB_TOKEN"
+		return 0
+	fi
+
+	# Check if gh CLI is available and authenticated
+	if command -v gh &>/dev/null; then
+		if gh auth status &>/dev/null; then
+			echo_info "Using GitHub CLI authentication"
+			github_token="gh_cli"
+			return 0
+		fi
+	fi
+
+	# Prompt for token
+	echo_info "GitHub authentication required to access paid zurg repo"
+	echo_info "Create a token at: https://github.com/settings/tokens"
+	echo_info "Required scope: repo (to access private repositories)"
+	echo ""
+	echo_query "Enter your GitHub Personal Access Token"
+	read -rs github_token </dev/tty
+	echo ""
+
+	if [ -z "$github_token" ]; then
+		echo_error "GitHub token is required for paid version"
+		return 1
+	fi
+
+	# Test the token
+	echo_progress_start "Verifying GitHub access"
+	local test_response
+	test_response=$(curl -sL -H "Authorization: token $github_token" \
+		"https://api.github.com/repos/debridmediamanager/zurg" 2>&1)
+
+	if echo "$test_response" | grep -q '"id"'; then
+		echo_progress_done "GitHub access verified"
+		return 0
+	else
+		echo_error "Cannot access paid zurg repo. Make sure you:"
+		echo_error "  1. Have sponsored debridmediamanager"
+		echo_error "  2. Used the correct GitHub account"
+		echo_error "  3. Token has 'repo' scope"
+		return 1
+	fi
+}
+
 # Install latest rclone from official script
 _install_rclone() {
 	if command -v rclone &>/dev/null; then
@@ -151,6 +233,17 @@ _install_zurg() {
 	apt_install "${app_reqs[@]}"
 	_install_rclone
 
+	# Select zurg version (free/paid)
+	_select_zurg_version
+
+	# For paid version, get GitHub authentication
+	if [ "$zurg_version" = "paid" ]; then
+		if ! _get_github_token; then
+			echo_error "GitHub authentication failed. Falling back to free version."
+			zurg_version="free"
+		fi
+	fi
+
 	# Prompt for Real-Debrid token if not already configured
 	echo_info "Checking for Real-Debrid API token"
 	if [ ! -f "$app_configdir/config.yml" ] || ! grep -qE '^token: .+' "$app_configdir/config.yml" 2>/dev/null; then
@@ -171,7 +264,7 @@ _install_zurg() {
 		RD_TOKEN=$(grep -E '^token: ' "$app_configdir/config.yml" | sed 's/token: //')
 	fi
 
-	echo_progress_start "Downloading release archive"
+	echo_progress_start "Downloading $zurg_version release archive"
 
 	case "$(_os_arch)" in
 	"amd64") arch='linux-amd64' ;;
@@ -183,14 +276,52 @@ _install_zurg() {
 		;;
 	esac
 
-	latest=$(curl -sL https://api.github.com/repos/debridmediamanager/zurg-testing/releases/latest | grep "browser_download_url" | grep "$arch" | cut -d \" -f4) || {
-		echo_error "Failed to query GitHub for latest version"
-		exit 1
-	}
+	# Set repo based on version
+	if [ "$zurg_version" = "paid" ]; then
+		zurg_repo="debridmediamanager/zurg"
+	else
+		zurg_repo="debridmediamanager/zurg-testing"
+	fi
 
-	if ! curl "$latest" -L -o "/tmp/$app_name.zip" >>"$log" 2>&1; then
-		echo_error "Download failed, exiting"
-		exit 1
+	# Download release
+	if [ "$zurg_version" = "paid" ]; then
+		# Paid version requires authentication
+		if [ "$github_token" = "gh_cli" ]; then
+			# Use gh CLI
+			latest=$(gh api "repos/$zurg_repo/releases/latest" --jq ".assets[] | select(.name | contains(\"$arch\")) | .url") || {
+				echo_error "Failed to query GitHub for latest version"
+				exit 1
+			}
+			if ! gh api "$latest" -H "Accept: application/octet-stream" >/tmp/$app_name.zip 2>>"$log"; then
+				echo_error "Download failed, exiting"
+				exit 1
+			fi
+		else
+			# Use token
+			latest=$(curl -sL -H "Authorization: token $github_token" \
+				"https://api.github.com/repos/$zurg_repo/releases/latest" | \
+				grep "browser_download_url" | grep "$arch" | cut -d \" -f4) || {
+				echo_error "Failed to query GitHub for latest version"
+				exit 1
+			}
+			if ! curl -H "Authorization: token $github_token" \
+				-H "Accept: application/octet-stream" \
+				"$latest" -L -o "/tmp/$app_name.zip" >>"$log" 2>&1; then
+				echo_error "Download failed, exiting"
+				exit 1
+			fi
+		fi
+	else
+		# Free version - no auth needed
+		latest=$(curl -sL "https://api.github.com/repos/$zurg_repo/releases/latest" | \
+			grep "browser_download_url" | grep "$arch" | cut -d \" -f4) || {
+			echo_error "Failed to query GitHub for latest version"
+			exit 1
+		}
+		if ! curl "$latest" -L -o "/tmp/$app_name.zip" >>"$log" 2>&1; then
+			echo_error "Download failed, exiting"
+			exit 1
+		fi
 	fi
 	echo_progress_done "Archive downloaded"
 
@@ -207,10 +338,12 @@ _install_zurg() {
 
 	echo_progress_start "Creating configuration"
 
-	# Create config.yml
-	cat >"$app_configdir/config.yml" <<CFG
-# Zurg configuration
-# Documentation: https://github.com/debridmediamanager/zurg-testing
+	# Create config.yml based on version
+	if [ "$zurg_version" = "paid" ]; then
+		# Paid version config (newer format)
+		cat >"$app_configdir/config.yml" <<CFG
+# Zurg configuration (paid version)
+# Documentation: https://github.com/debridmediamanager/zurg
 
 zurg: v1
 token: ${RD_TOKEN}
@@ -244,6 +377,45 @@ directories:
     filters:
       - regex: /.*/
 CFG
+	else
+		# Free version config (older format)
+		cat >"$app_configdir/config.yml" <<CFG
+# Zurg configuration (free version)
+# Documentation: https://github.com/debridmediamanager/zurg-testing
+
+zurg: v1
+token: ${RD_TOKEN}
+
+host: "127.0.0.1"
+port: ${app_port}
+
+# How often to check for changes (seconds)
+check_for_changes_every_secs: 10
+
+# Repair settings
+repair_every_mins: 60
+enable_repair: true
+
+# Automatically delete RAR torrents after extraction
+auto_delete_rar_torrents: false
+
+# Retain folder structure in library
+retain_folder_name_extension: false
+retain_rd_torrent_name: false
+
+# Network settings
+concurrent_workers: 32
+download_timeout_secs: 10
+
+# Directory definitions
+directories:
+  torrents:
+    group_order: 10
+    group: media
+    filters:
+      - regex: /.*/
+CFG
+	fi
 
 	# Create rclone config for user
 	local rclone_configdir="/home/$user/.config/rclone"
@@ -342,6 +514,7 @@ _remove_zurg() {
 		swizdb clear "$app_name/owner" 2>/dev/null || true
 		swizdb clear "zurg/mount_point" 2>/dev/null || true
 		swizdb clear "zurg/api_key" 2>/dev/null || true
+		swizdb clear "zurg/version" 2>/dev/null || true
 	else
 		echo_info "Configuration files kept at: $app_configdir"
 	fi
@@ -493,6 +666,7 @@ _nginx_zurg
 # Store configuration in swizdb for other scripts (decypharr)
 swizdb set "zurg/mount_point" "$app_mount_point"
 swizdb set "zurg/api_key" "$RD_TOKEN"
+swizdb set "zurg/version" "$zurg_version"
 
 # Update decypharr if installed
 _update_decypharr_config "$app_mount_point" "$RD_TOKEN"
