@@ -85,11 +85,24 @@ _install_cleanuparr() {
 	echo_progress_done "Archive downloaded"
 
 	echo_progress_start "Extracting archive"
-	unzip -o "/tmp/$app_name.zip" -d "$app_dir" >>"$log" 2>&1 || {
+	# Extract to temp location first (zip contains versioned subfolder)
+	rm -rf "/tmp/$app_name-extract"
+	mkdir -p "/tmp/$app_name-extract"
+	unzip -o "/tmp/$app_name.zip" -d "/tmp/$app_name-extract" >>"$log" 2>&1 || {
 		echo_error "Failed to extract"
 		exit 1
 	}
 	rm -f "/tmp/$app_name.zip"
+
+	# Move contents from versioned subfolder to app_dir
+	extracted_folder=$(find "/tmp/$app_name-extract" -maxdepth 1 -type d -name "Cleanuparr-*" | head -1)
+	if [ -z "$extracted_folder" ]; then
+		echo_error "Could not find extracted folder"
+		exit 1
+	fi
+	# Move all files from extracted folder to app_dir (preserve config if exists)
+	mv "$extracted_folder"/* "$app_dir/" >>"$log" 2>&1
+	rm -rf "/tmp/$app_name-extract"
 	echo_progress_done "Archive extracted"
 
 	chmod +x "$app_dir/$app_binary"
