@@ -1,0 +1,15 @@
+# Local scripts (not for distribution)
+local/
+
+# Editor/IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+
+# Logs
+*.log
