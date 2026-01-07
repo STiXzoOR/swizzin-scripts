@@ -25,10 +25,11 @@ Each installer script follows a consistent pattern:
 ### Binary Placement
 
 - **Single-file binaries** → `/usr/bin/<appname>` (e.g., decypharr, notifiarr, zurg)
-- **Multi-file apps** → `/opt/<appname>/` (e.g., seerr, byparr, huntarr, subgen)
+- **Multi-file apps** → `/opt/<appname>/` (e.g., cleanuparr, seerr, byparr, huntarr, subgen)
 
 ### Files
 
+- **cleanuparr.sh** - Installs Cleanuparr (download queue cleanup for *arr apps)
 - **decypharr.sh** - Installs Decypharr (encrypted file/torrent management via rclone)
 - **notifiarr.sh** - Installs Notifiarr client (notification relay for Starr apps)
 - **seerr.sh** - Extended Seerr installer with subdomain support (media request platform)
@@ -256,7 +257,7 @@ Most installers use `port 10000 12000` to find an available port in the 10000-12
 
 ### Nginx Configuration
 
-- **Decypharr/Notifiarr/Huntarr**: Location-based routing at `/<appname>/`
+- **Cleanuparr/Decypharr/Notifiarr/Huntarr**: Location-based routing at `/<appname>/`
 - **Seerr**: Dedicated vhost for subdomain-based access with frame-ancestors CSP
 - **Organizr**: Dedicated vhost at `/etc/nginx/sites-available/organizr` with internal auth rewrite
 - **Plex/Emby/Jellyfin**: Dedicated vhosts with panel meta urloverride and frame-ancestors CSP

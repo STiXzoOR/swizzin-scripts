@@ -8,6 +8,7 @@ A collection of installer scripts for integrating additional applications into [
 |--------|-------------|-------------|
 | [sonarr.sh](#sonarr) | [Sonarr](https://sonarr.tv/) | Multi-instance Sonarr manager (4k, anime, etc.) |
 | [radarr.sh](#radarr) | [Radarr](https://radarr.video/) | Multi-instance Radarr manager (4k, anime, etc.) |
+| [cleanuparr.sh](#cleanuparr) | [Cleanuparr](https://github.com/Cleanuparr/Cleanuparr) | Download queue cleanup for *arr apps |
 | [decypharr.sh](#decypharr) | [Decypharr](https://github.com/sirrobot01/decypharr) | Encrypted file/torrent management via rclone and qBittorrent |
 | [notifiarr.sh](#notifiarr) | [Notifiarr](https://github.com/Notifiarr/notifiarr) | Notification relay client for *arr apps and Plex |
 | [plex.sh](#plex) | [Plex](https://plex.tv/) | Extended Plex installer with subdomain support |
@@ -113,6 +114,33 @@ bash radarr.sh --remove 4k --force
 - Access: `https://your-server/radarr-<name>/`
 
 **Note:** Base Radarr is installed via `box install radarr`. Instances share the binary at `/opt/Radarr/` but have separate configs and ports.
+
+---
+
+### Cleanuparr
+
+Automates cleanup of stalled, incomplete, or blocked downloads from your *arr applications. From the creators of Huntarr.
+
+```bash
+# Optional: Set custom owner (defaults to master user)
+export CLEANUPARR_OWNER="username"
+
+bash cleanuparr.sh
+
+# Remove (will ask about purging config)
+bash cleanuparr.sh --remove
+```
+
+**Access:** `https://your-server/cleanuparr/`
+
+**Config:** `/opt/cleanuparr/config/cleanuparr.json`
+
+**Features:**
+- Removes stalled, incomplete, or malicious downloads
+- Blocks problematic torrents across supported services
+- Triggers automatic searches to replace deleted content
+- Supports Sonarr, Radarr, Lidarr, Readarr, Whisparr
+- Supports qBittorrent, Transmission, Deluge, uTorrent
 
 ---
 
