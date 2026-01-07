@@ -127,11 +127,11 @@ Installing paid version...
 
 ## Implementation Checklist
 
-- [ ] Add `--switch-version` flag parsing
-- [ ] Create `_migrate_config()` function
-- [ ] Create `_cleanup_version_artifacts()` function
-- [ ] Modify `_select_zurg_version()` to detect and prompt for switch on reinstall
-- [ ] Add user feedback for each cleanup step
+- [x] Add `--switch-version` flag parsing
+- [x] Create `_migrate_config()` function
+- [x] Create `_cleanup_version_artifacts()` function
+- [x] Modify `_select_zurg_version()` to detect and prompt for switch on reinstall
+- [x] Add user feedback for each cleanup step
 - [ ] Test free → paid switch
 - [ ] Test paid → free switch
 - [ ] Test reinstall without switch (no regression)

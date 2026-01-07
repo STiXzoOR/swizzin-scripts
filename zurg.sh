@@ -1,7 +1,7 @@
 #!/bin/bash
 # zurg installer
 # STiXzoOR 2025
-# Usage: bash zurg.sh [--remove [--force]]
+# Usage: bash zurg.sh [--remove [--force]] [--switch-version [free|paid]]
 
 . /etc/swizzin/sources/globals.sh
 
@@ -60,25 +60,46 @@ chown "$user":"$user" "$swiz_configdir"
 
 # Zurg version selection
 _select_zurg_version() {
-	# Check environment variable first
+	# Check existing version in swizdb
+	local existing_version
+	existing_version=$(swizdb get "zurg/version" 2>/dev/null) || true
+
+	# Check environment variable - may trigger switch if different
 	if [ -n "$ZURG_VERSION" ]; then
 		if [[ "$ZURG_VERSION" == "paid" || "$ZURG_VERSION" == "free" ]]; then
+			# If env var differs from existing, trigger switch
+			if [ -n "$existing_version" ] && [ "$ZURG_VERSION" != "$existing_version" ]; then
+				echo_info "ZURG_VERSION=$ZURG_VERSION differs from installed ($existing_version)"
+				_switch_version "$ZURG_VERSION" "$existing_version"
+				return
+			fi
 			zurg_version="$ZURG_VERSION"
 			echo_info "Using zurg version from ZURG_VERSION: $zurg_version"
 			return
 		fi
 	fi
 
-	# Check existing version in swizdb
-	local existing_version
-	existing_version=$(swizdb get "zurg/version" 2>/dev/null) || true
+	# If already installed, offer to switch versions (unless switch_mode already set)
+	if [ -n "$existing_version" ] && [ "$switch_mode" != "true" ]; then
+		local other_version
+		if [ "$existing_version" = "free" ]; then
+			other_version="paid"
+		else
+			other_version="free"
+		fi
 
-	if [ -n "$existing_version" ]; then
+		echo_info "Currently running zurg $existing_version version"
+		if ask "Would you like to switch to $other_version version?" N; then
+			_switch_version "$other_version" "$existing_version"
+			return
+		fi
+
 		zurg_version="$existing_version"
-		echo_info "Using existing zurg version: $zurg_version"
+		echo_info "Keeping $existing_version version"
 		return
 	fi
 
+	# Fresh install - prompt for version
 	echo_info "Zurg has two versions:"
 	echo_info "  - free: Public repo (debridmediamanager/zurg-testing)"
 	echo_info "  - paid: Private repo for GitHub sponsors (debridmediamanager/zurg)"
@@ -177,6 +198,12 @@ _install_rclone() {
 
 # Prompt for mount point or use default/env
 _get_mount_point() {
+	# Skip if already set (e.g., from migration)
+	if [ -n "$app_mount_point" ]; then
+		echo_info "Using mount point: $app_mount_point"
+		return
+	fi
+
 	# Check environment variable first
 	if [ -n "$ZURG_MOUNT_POINT" ]; then
 		echo_info "Using mount point from ZURG_MOUNT_POINT: $ZURG_MOUNT_POINT"
@@ -240,6 +267,161 @@ _update_decypharr_config() {
 	fi
 
 	echo_progress_done "Decypharr configuration updated"
+}
+
+# Migrate config values from existing installation
+# Sets: RD_TOKEN, app_port, app_mount_point (global variables)
+_migrate_config() {
+	local config_file="$app_configdir/config.yml"
+
+	if [ ! -f "$config_file" ]; then
+		echo_warn "No existing config found, cannot migrate"
+		return 1
+	fi
+
+	echo_progress_start "Migrating configuration"
+
+	# Extract token
+	if grep -qE '^token: .+' "$config_file" 2>/dev/null; then
+		RD_TOKEN=$(grep -E '^token: ' "$config_file" | sed 's/token: //')
+	fi
+
+	# Extract port
+	local config_port
+	config_port=$(grep -E '^port: ' "$config_file" | sed 's/port: //' | tr -d ' ')
+	if [ -n "$config_port" ]; then
+		app_port="$config_port"
+	fi
+
+	# Extract mount point (from config for paid, swizdb for free)
+	local config_mount
+	config_mount=$(grep -E '^mount_path: ' "$config_file" | sed 's/mount_path: //' | tr -d ' ')
+	if [ -n "$config_mount" ]; then
+		app_mount_point="$config_mount"
+	elif app_mount_point=$(swizdb get "zurg/mount_point" 2>/dev/null); then
+		: # Got it from swizdb
+	else
+		app_mount_point="$app_default_mount"
+	fi
+
+	local token_display="***${RD_TOKEN: -4}"
+	echo_progress_done "Migrated: token $token_display, port $app_port, mount $app_mount_point"
+	return 0
+}
+
+# Clean up version-specific artifacts when switching versions
+# Args: $1 = old_version (free|paid)
+_cleanup_version_artifacts() {
+	local old_version="$1"
+	local mount_point
+
+	# Get mount point from swizdb or use default
+	mount_point=$(swizdb get "zurg/mount_point" 2>/dev/null) || mount_point="$app_default_mount"
+
+	echo_info "Cleaning up $old_version version artifacts..."
+
+	# Stop services first
+	if [ -f "/etc/systemd/system/$app_mount_servicefile" ]; then
+		echo_progress_start "Stopping rclone mount service"
+		systemctl stop "$app_mount_servicefile" 2>/dev/null || true
+		echo_progress_done "Rclone mount service stopped"
+	fi
+
+	echo_progress_start "Stopping zurg service"
+	systemctl stop "$app_servicefile" 2>/dev/null || true
+	echo_progress_done "Zurg service stopped"
+
+	# Unmount if mounted
+	if mountpoint -q "$mount_point" 2>/dev/null; then
+		echo_progress_start "Unmounting $mount_point"
+		fusermount -uz "$mount_point" 2>/dev/null || umount -f "$mount_point" 2>/dev/null || true
+		echo_progress_done "Unmounted"
+	fi
+
+	if [ "$old_version" = "free" ]; then
+		# Clean up free version artifacts
+		echo_progress_start "Removing free version artifacts"
+
+		# Remove rclone-zurg service
+		if [ -f "/etc/systemd/system/$app_mount_servicefile" ]; then
+			systemctl disable "$app_mount_servicefile" 2>/dev/null || true
+			rm -f "/etc/systemd/system/$app_mount_servicefile"
+		fi
+
+		# Clear free version cache
+		local free_cache="/home/$user/.cache/rclone/vfs/zurg"
+		if [ -d "$free_cache" ]; then
+			local cache_size
+			cache_size=$(du -sh "$free_cache" 2>/dev/null | cut -f1) || cache_size="unknown"
+			rm -rf "$free_cache"
+			echo_info "Cleared free version cache ($cache_size freed)"
+		fi
+
+		# Remove zurg entry from rclone.conf (keep other remotes)
+		local rclone_conf="/home/$user/.config/rclone/rclone.conf"
+		if [ -f "$rclone_conf" ] && grep -q '^\[zurg\]' "$rclone_conf"; then
+			# Remove [zurg] section
+			sed -i '/^\[zurg\]/,/^\[/{/^\[zurg\]/d;/^\[/!d}' "$rclone_conf"
+			# Clean up empty file
+			if [ ! -s "$rclone_conf" ]; then
+				rm -f "$rclone_conf"
+			fi
+		fi
+
+		echo_progress_done "Free version artifacts removed"
+
+	elif [ "$old_version" = "paid" ]; then
+		# Clean up paid version artifacts
+		echo_progress_start "Removing paid version artifacts"
+
+		# Clear paid version cache
+		local paid_cache="$app_configdir/data/rclone-cache"
+		if [ -d "$paid_cache" ]; then
+			local cache_size
+			cache_size=$(du -sh "$paid_cache" 2>/dev/null | cut -f1) || cache_size="unknown"
+			rm -rf "$paid_cache"
+			echo_info "Cleared paid version cache ($cache_size freed)"
+		fi
+
+		# Remove internal rclone.conf
+		rm -f "$app_configdir/data/rclone.conf" 2>/dev/null || true
+
+		echo_progress_done "Paid version artifacts removed"
+	fi
+
+	systemctl daemon-reload
+}
+
+# Handle version switch
+# Args: $1 = target_version (free|paid), $2 = current_version
+_switch_version() {
+	local target_version="$1"
+	local current_version="$2"
+
+	echo_info "Switching zurg from $current_version to $target_version..."
+
+	# For paid version, verify GitHub auth BEFORE making any changes
+	if [ "$target_version" = "paid" ]; then
+		if ! _get_github_token; then
+			echo_error "GitHub authentication failed. Cannot switch to paid version."
+			exit 1
+		fi
+		echo_info "GitHub access verified"
+	fi
+
+	# Migrate existing config values
+	if ! _migrate_config; then
+		echo_error "Failed to migrate configuration"
+		exit 1
+	fi
+
+	# Clean up old version artifacts
+	_cleanup_version_artifacts "$current_version"
+
+	# Set the target version for install
+	zurg_version="$target_version"
+
+	echo_info "Proceeding with $target_version version installation..."
 }
 
 _install_zurg() {
@@ -713,6 +895,51 @@ _nginx_zurg() {
 # Handle --remove flag
 if [ "$1" = "--remove" ]; then
 	_remove_zurg "$2"
+fi
+
+# Handle --switch-version flag
+switch_mode="false"
+if [ "$1" = "--switch-version" ]; then
+	if [ ! -f "/install/.$app_lockname.lock" ]; then
+		echo_error "Zurg is not installed. Run without --switch-version to install."
+		exit 1
+	fi
+
+	current_version=$(swizdb get "zurg/version" 2>/dev/null) || true
+	if [ -z "$current_version" ]; then
+		echo_error "Cannot determine current zurg version. Reinstall to fix."
+		exit 1
+	fi
+
+	# Determine target version
+	if [ -n "$2" ]; then
+		if [[ "$2" != "free" && "$2" != "paid" ]]; then
+			echo_error "Invalid version: $2. Use 'free' or 'paid'."
+			exit 1
+		fi
+		target_version="$2"
+	else
+		# Prompt for target version
+		if [ "$current_version" = "free" ]; then
+			target_version="paid"
+		else
+			target_version="free"
+		fi
+		echo_info "Currently running: $current_version"
+		if ! ask "Switch to $target_version version?" Y; then
+			echo_info "Switch cancelled"
+			exit 0
+		fi
+	fi
+
+	# Check if already on target version
+	if [ "$current_version" = "$target_version" ]; then
+		echo_info "Already running $target_version version"
+		exit 0
+	fi
+
+	switch_mode="true"
+	_switch_version "$target_version" "$current_version"
 fi
 
 # Set owner for install
