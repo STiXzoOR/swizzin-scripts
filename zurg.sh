@@ -161,22 +161,20 @@ _get_github_token() {
 	fi
 }
 
-# Detect system RAM and return rclone profile settings
-# Returns: buffer_size vfs_read_chunk_size vfs_read_chunk_size_limit
-_get_rclone_ram_profile() {
-	local ram_gb
-	ram_gb=$(awk '/MemTotal/ {printf "%.0f", $2/1024/1024}' /proc/meminfo 2>/dev/null) || ram_gb=0
-
-	if [ "$ram_gb" -lt 8 ]; then
-		# Low (<8GiB)
-		echo "32M 1M 64M"
-	elif [ "$ram_gb" -lt 16 ]; then
-		# Medium (8-16GiB)
-		echo "32M 2M 64M"
-	else
-		# High (>=16GiB)
-		echo "32M 2M 64M"
-	fi
+# Return benchmark-optimized rclone settings
+# These values are from zurg's performance testing (replaces old RAM-based profiles)
+# See: https://github.com/debridmediamanager/zurg changelog
+_get_rclone_settings() {
+	# Benchmark-optimized defaults:
+	# --buffer-size: 256M (was 32M)
+	# --vfs-read-chunk-size: off (disabling chunking improves throughput)
+	# --vfs-read-chunk-size-limit: 512M (was 64M)
+	# --vfs-read-ahead: 1G (new)
+	# --max-read-ahead: 1M (new)
+	# --vfs-read-wait: 5ms (was 75ms - critical: 75ms=~28Mbps, 5ms=~533Mbps)
+	# --async-read: false (sync reads perform better)
+	# --vfs-cache-poll-interval: 1m (was 10m)
+	echo "256M off 512M"
 }
 
 # Install latest rclone from official script
@@ -579,7 +577,7 @@ auto_analyze_new_torrents: true
 cache_network_test_results: true
 
 # Rclone Management
-# Zurg applies optimized RAM-based defaults automatically (buffer-size, chunk-size, etc.)
+# Zurg applies benchmark-optimized defaults automatically
 # See: https://github.com/debridmediamanager/zurg for rclone flag documentation
 rclone_enabled: true
 mount_path: ${app_mount_point}
@@ -781,13 +779,13 @@ WantedBy=multi-user.target
 EOF
 
 	# For free version, create separate rclone mount service
-	# Paid version uses zurg's internal rclone management with auto RAM detection
+	# Paid version uses zurg's internal rclone management
 	if [ "$zurg_version" = "free" ]; then
-		# Get RAM-based rclone settings
-		local ram_profile
-		ram_profile=$(_get_rclone_ram_profile)
+		# Get benchmark-optimized rclone settings
+		local rclone_settings
+		rclone_settings=$(_get_rclone_settings)
 		local buffer_size vfs_chunk_size vfs_chunk_limit
-		read -r buffer_size vfs_chunk_size vfs_chunk_limit <<< "$ram_profile"
+		read -r buffer_size vfs_chunk_size vfs_chunk_limit <<< "$rclone_settings"
 
 		cat >"/etc/systemd/system/$app_mount_servicefile" <<EOF
 [Unit]
@@ -808,15 +806,17 @@ ExecStart=/usr/bin/rclone mount zurg: $app_mount_point \\
     --poll-interval 0 \\
     --dir-cache-time 15s \\
     --attr-timeout 15s \\
-    --vfs-read-wait 75ms \\
+    --vfs-read-wait 5ms \\
     --vfs-cache-mode full \\
     --vfs-cache-max-size 256G \\
     --vfs-cache-max-age 72h \\
-    --vfs-cache-poll-interval 10m \\
+    --vfs-cache-poll-interval 1m \\
     --buffer-size ${buffer_size} \\
     --vfs-read-chunk-size ${vfs_chunk_size} \\
     --vfs-read-chunk-size-limit ${vfs_chunk_limit} \\
-    --async-read \\
+    --vfs-read-ahead 1G \\
+    --max-read-ahead 1M \\
+    --async-read=false \\
     --allow-other \\
     --uid $(id -u "$user") \\
     --gid $(id -g "$user") \\
