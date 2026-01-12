@@ -22,6 +22,7 @@ A collection of installer scripts for integrating additional applications into [
 | [subgen.sh](#subgen) | [Subgen](https://github.com/McCloudS/subgen) | Automatic subtitle generation using Whisper AI |
 | [zurg.sh](#zurg) | [Zurg](https://github.com/debridmediamanager/zurg-testing) | Real-Debrid WebDAV server with rclone mount |
 | [dns-fix.sh](#dns-fix) | - | Fix DNS issues for FlareSolverr/Byparr cookie validation |
+| [emby-watchdog.sh](#service-watchdog) | - | Service watchdog with health checks and auto-restart |
 
 ## Requirements
 
@@ -507,6 +508,61 @@ bash dns-fix.sh --revert
 - Automatically restarts affected services (byparr, flaresolverr, jackett)
 
 **When to use:** If Jackett reports "The cookies provided by FlareSolverr are not valid" when testing indexers.
+
+---
+
+### Service Watchdog
+
+Monitors services via process state and HTTP health checks, automatically restarts unhealthy services with cooldown protection, and sends notifications.
+
+```bash
+# Interactive setup (installs watchdog for Emby)
+bash emby-watchdog.sh
+
+# Install watchdog
+bash emby-watchdog.sh --install
+
+# Show current status
+bash emby-watchdog.sh --status
+
+# Clear backoff state, resume monitoring
+bash emby-watchdog.sh --reset
+
+# Remove watchdog
+bash emby-watchdog.sh --remove
+```
+
+**How it works:**
+1. Cron runs every 2 minutes
+2. Checks process state (`systemctl is-active`)
+3. Checks HTTP health endpoint (configurable URL + expected response)
+4. If unhealthy, restarts the service
+5. Rate-limited: max 3 restarts per 15 minutes
+6. Enters backoff mode if max restarts exceeded
+7. Sends notifications (Discord, Pushover, Notifiarr, email)
+
+**Notifications:** During installation, you'll be prompted to configure notification channels. All are optional - leave empty to skip.
+
+**Files:**
+| File | Purpose |
+|------|---------|
+| `/opt/swizzin/watchdog.sh` | Generic watchdog engine |
+| `/opt/swizzin/watchdog.conf` | Global config (notifications) |
+| `/opt/swizzin/watchdog.d/emby.conf` | Emby-specific config |
+| `/var/log/watchdog/emby.log` | Log file |
+| `/etc/cron.d/emby-watchdog` | Cron job |
+
+**Status output example:**
+```
+Emby Watchdog Status
+━━━━━━━━━━━━━━━━━━━━
+Service:     emby-server (active)
+Health:      http://127.0.0.1:8096/emby/System/Info/Public (OK)
+Restarts:    0/3 in current window
+State:       monitoring
+```
+
+**Adding other services:** The watchdog engine is generic. Copy `emby-watchdog.sh`, adjust `SERVICE_NAME`, `HEALTH_URL`, and `HEALTH_EXPECT` for your target service (Plex, Jellyfin, etc.).
 
 ---
 
