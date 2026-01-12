@@ -1,0 +1,444 @@
+#!/bin/bash
+# watchdog.sh - Generic service watchdog with health checks and notifications
+# STiXzoOR 2026
+# Usage: watchdog.sh /path/to/service.conf
+
+set -euo pipefail
+
+# ==============================================================================
+# Constants
+# ==============================================================================
+
+GLOBAL_CONFIG="/opt/swizzin/watchdog.conf"
+LOG_DIR="/var/log/watchdog"
+STATE_DIR="/var/run/watchdog"
+
+# ==============================================================================
+# Logging
+# ==============================================================================
+
+_log() {
+    local level="$1"
+    local message="$2"
+    local timestamp
+    timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+
+    echo "[$timestamp] [$level] $message" | tee -a "$LOG_FILE"
+}
+
+log_info()  { _log "INFO" "$1"; }
+log_warn()  { _log "WARN" "$1"; }
+log_error() { _log "ERROR" "$1"; }
+
+# ==============================================================================
+# Configuration Loading
+# ==============================================================================
+
+_load_global_config() {
+    if [[ ! -f "$GLOBAL_CONFIG" ]]; then
+        echo "ERROR: Global config not found: $GLOBAL_CONFIG"
+        echo "Run the service-specific installer (e.g., emby-watchdog.sh --install) first."
+        exit 1
+    fi
+
+    # shellcheck source=/dev/null
+    source "$GLOBAL_CONFIG"
+
+    # Set defaults
+    DEFAULT_MAX_RESTARTS="${DEFAULT_MAX_RESTARTS:-3}"
+    DEFAULT_COOLDOWN_WINDOW="${DEFAULT_COOLDOWN_WINDOW:-900}"
+    DEFAULT_HEALTH_TIMEOUT="${DEFAULT_HEALTH_TIMEOUT:-10}"
+}
+
+_load_service_config() {
+    local config_file="$1"
+
+    if [[ ! -f "$config_file" ]]; then
+        echo "ERROR: Service config not found: $config_file"
+        exit 1
+    fi
+
+    # shellcheck source=/dev/null
+    source "$config_file"
+
+    # Validate required fields
+    if [[ -z "${SERVICE_NAME:-}" ]]; then
+        echo "ERROR: SERVICE_NAME not set in $config_file"
+        exit 1
+    fi
+
+    if [[ -z "${APP_NAME:-}" ]]; then
+        APP_NAME="$SERVICE_NAME"
+    fi
+
+    if [[ -z "${HEALTH_URL:-}" ]]; then
+        echo "ERROR: HEALTH_URL not set in $config_file"
+        exit 1
+    fi
+
+    # Apply defaults
+    MAX_RESTARTS="${MAX_RESTARTS:-$DEFAULT_MAX_RESTARTS}"
+    COOLDOWN_WINDOW="${COOLDOWN_WINDOW:-$DEFAULT_COOLDOWN_WINDOW}"
+    HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-$DEFAULT_HEALTH_TIMEOUT}"
+    HEALTH_EXPECT="${HEALTH_EXPECT:-}"
+
+    # Set file paths
+    LOG_FILE="${LOG_FILE:-$LOG_DIR/${SERVICE_NAME}.log}"
+    STATE_FILE="${STATE_FILE:-$STATE_DIR/${SERVICE_NAME}.state}"
+    LOCK_FILE="${LOCK_FILE:-$STATE_DIR/${SERVICE_NAME}.lock}"
+}
+
+# ==============================================================================
+# State Management
+# ==============================================================================
+
+_init_state() {
+    mkdir -p "$LOG_DIR" "$STATE_DIR"
+
+    if [[ ! -f "$STATE_FILE" ]]; then
+        cat > "$STATE_FILE" <<EOF
+RESTART_COUNT=0
+RESTART_TIMESTAMPS=""
+BACKOFF_UNTIL=""
+EOF
+    fi
+}
+
+_load_state() {
+    # shellcheck source=/dev/null
+    source "$STATE_FILE"
+
+    RESTART_COUNT="${RESTART_COUNT:-0}"
+    RESTART_TIMESTAMPS="${RESTART_TIMESTAMPS:-}"
+    BACKOFF_UNTIL="${BACKOFF_UNTIL:-}"
+}
+
+_save_state() {
+    cat > "$STATE_FILE" <<EOF
+RESTART_COUNT=$RESTART_COUNT
+RESTART_TIMESTAMPS="$RESTART_TIMESTAMPS"
+BACKOFF_UNTIL="$BACKOFF_UNTIL"
+EOF
+}
+
+_purge_old_timestamps() {
+    local now
+    now=$(date +%s)
+    local cutoff=$((now - COOLDOWN_WINDOW))
+    local new_timestamps=""
+    local count=0
+
+    IFS=',' read -ra timestamps <<< "$RESTART_TIMESTAMPS"
+    for ts in "${timestamps[@]}"; do
+        if [[ -n "$ts" && "$ts" -gt "$cutoff" ]]; then
+            if [[ -n "$new_timestamps" ]]; then
+                new_timestamps="${new_timestamps},${ts}"
+            else
+                new_timestamps="$ts"
+            fi
+            ((count++)) || true
+        fi
+    done
+
+    RESTART_TIMESTAMPS="$new_timestamps"
+    RESTART_COUNT="$count"
+}
+
+_add_restart_timestamp() {
+    local now
+    now=$(date +%s)
+
+    if [[ -n "$RESTART_TIMESTAMPS" ]]; then
+        RESTART_TIMESTAMPS="${RESTART_TIMESTAMPS},${now}"
+    else
+        RESTART_TIMESTAMPS="$now"
+    fi
+
+    ((RESTART_COUNT++)) || true
+}
+
+# ==============================================================================
+# Notifications
+# ==============================================================================
+
+_notify_discord() {
+    local title="$1"
+    local message="$2"
+    local level="$3"
+
+    local color
+    case "$level" in
+        info)    color=3066993 ;;   # green
+        warning) color=16776960 ;;  # yellow
+        error)   color=15158332 ;;  # red
+        *)       color=3447003 ;;   # blue
+    esac
+
+    local payload
+    payload=$(cat <<EOF
+{
+    "embeds": [{
+        "title": "$title",
+        "description": "$message",
+        "color": $color,
+        "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    }]
+}
+EOF
+)
+
+    curl -sf -H "Content-Type: application/json" \
+        -d "$payload" \
+        "$DISCORD_WEBHOOK" >/dev/null 2>&1 || log_warn "Discord notification failed"
+}
+
+_notify_pushover() {
+    local title="$1"
+    local message="$2"
+    local level="$3"
+
+    local priority=0
+    case "$level" in
+        error)   priority=1 ;;
+        warning) priority=0 ;;
+        *)       priority=-1 ;;
+    esac
+
+    curl -sf \
+        --form-string "token=$PUSHOVER_TOKEN" \
+        --form-string "user=$PUSHOVER_USER" \
+        --form-string "title=$title" \
+        --form-string "message=$message" \
+        --form-string "priority=$priority" \
+        "https://api.pushover.net/1/messages.json" >/dev/null 2>&1 || log_warn "Pushover notification failed"
+}
+
+_notify_notifiarr() {
+    local title="$1"
+    local message="$2"
+    local level="$3"
+
+    local event
+    case "$level" in
+        error)   event="error" ;;
+        warning) event="warning" ;;
+        *)       event="info" ;;
+    esac
+
+    curl -sf -H "x-api-key: $NOTIFIARR_API_KEY" \
+        -H "Content-Type: application/json" \
+        -d "{\"event\": \"$event\", \"title\": \"$title\", \"message\": \"$message\"}" \
+        "https://notifiarr.com/api/v1/notification/passthrough" >/dev/null 2>&1 || log_warn "Notifiarr notification failed"
+}
+
+_notify_email() {
+    local title="$1"
+    local message="$2"
+    local level="$3"
+
+    if command -v sendmail &>/dev/null; then
+        echo -e "Subject: [$level] $title\n\n$message" | sendmail "$EMAIL_TO" 2>/dev/null || log_warn "Email notification failed"
+    elif command -v mail &>/dev/null; then
+        echo "$message" | mail -s "[$level] $title" "$EMAIL_TO" 2>/dev/null || log_warn "Email notification failed"
+    else
+        log_warn "No mail command available for email notification"
+    fi
+}
+
+_notify() {
+    local title="$1"
+    local message="$2"
+    local level="$3"
+
+    [[ -n "${DISCORD_WEBHOOK:-}" ]]   && _notify_discord "$title" "$message" "$level"
+    [[ -n "${PUSHOVER_USER:-}" && -n "${PUSHOVER_TOKEN:-}" ]] && _notify_pushover "$title" "$message" "$level"
+    [[ -n "${NOTIFIARR_API_KEY:-}" ]] && _notify_notifiarr "$title" "$message" "$level"
+    [[ -n "${EMAIL_TO:-}" ]]          && _notify_email "$title" "$message" "$level"
+
+    return 0
+}
+
+# ==============================================================================
+# Health Checks
+# ==============================================================================
+
+_check_process() {
+    systemctl is-active --quiet "$SERVICE_NAME"
+}
+
+_check_http() {
+    local response
+    response=$(curl -sf --max-time "$HEALTH_TIMEOUT" "$HEALTH_URL" 2>/dev/null) || return 1
+
+    # If HEALTH_EXPECT is set, verify it exists in response
+    if [[ -n "$HEALTH_EXPECT" ]]; then
+        echo "$response" | grep -q "$HEALTH_EXPECT" || return 1
+    fi
+
+    return 0
+}
+
+_is_healthy() {
+    if ! _check_process; then
+        log_warn "Process check failed: $SERVICE_NAME is not running"
+        return 1
+    fi
+
+    if ! _check_http; then
+        log_warn "HTTP health check failed: $HEALTH_URL"
+        return 1
+    fi
+
+    return 0
+}
+
+# ==============================================================================
+# Restart Logic
+# ==============================================================================
+
+_get_service_uptime() {
+    local active_enter
+    active_enter=$(systemctl show "$SERVICE_NAME" --property=ActiveEnterTimestamp --value 2>/dev/null)
+
+    if [[ -z "$active_enter" || "$active_enter" == "n/a" ]]; then
+        echo "0"
+        return
+    fi
+
+    local active_epoch
+    active_epoch=$(date -d "$active_enter" +%s 2>/dev/null) || echo "0"
+    local now
+    now=$(date +%s)
+
+    echo $((now - active_epoch))
+}
+
+_detect_manual_restart() {
+    local uptime
+    uptime=$(_get_service_uptime)
+
+    # If service was restarted recently (within cooldown window) and we're in backoff,
+    # someone manually restarted it
+    if [[ "$uptime" -lt "$COOLDOWN_WINDOW" && "$uptime" -gt 0 ]]; then
+        return 0
+    fi
+
+    return 1
+}
+
+_restart_service() {
+    log_info "Restarting $SERVICE_NAME..."
+
+    if ! systemctl restart "$SERVICE_NAME" 2>/dev/null; then
+        log_error "Failed to restart $SERVICE_NAME"
+        return 1
+    fi
+
+    log_info "Restart command issued, waiting 10 seconds for service to stabilize..."
+    sleep 10
+
+    # Verify health after restart
+    if _is_healthy; then
+        log_info "$SERVICE_NAME restarted successfully and is healthy"
+        return 0
+    else
+        log_error "$SERVICE_NAME restarted but health check failed"
+        return 1
+    fi
+}
+
+# ==============================================================================
+# Main Logic
+# ==============================================================================
+
+_run_watchdog() {
+    local now
+    now=$(date +%s)
+
+    # Check if in backoff mode
+    if [[ -n "$BACKOFF_UNTIL" && "$now" -lt "$BACKOFF_UNTIL" ]]; then
+        # Check for manual restart
+        if _check_process && _detect_manual_restart; then
+            log_info "Manual restart detected, clearing backoff state"
+            BACKOFF_UNTIL=""
+            RESTART_COUNT=0
+            RESTART_TIMESTAMPS=""
+            _save_state
+            _notify "$APP_NAME Watchdog" "Watchdog resumed after manual restart detected" "info"
+        else
+            log_info "In backoff mode until $(date -d "@$BACKOFF_UNTIL" '+%Y-%m-%d %H:%M:%S'), skipping"
+            return 0
+        fi
+    fi
+
+    # Run health checks
+    if _is_healthy; then
+        log_info "$APP_NAME is healthy"
+        return 0
+    fi
+
+    # Service is unhealthy - purge old timestamps and check if we can restart
+    _purge_old_timestamps
+
+    local window_minutes=$((COOLDOWN_WINDOW / 60))
+
+    if [[ "$RESTART_COUNT" -ge "$MAX_RESTARTS" ]]; then
+        # Max restarts reached - enter backoff
+        log_error "Max restarts ($MAX_RESTARTS in ${window_minutes}min) reached, entering backoff"
+        BACKOFF_UNTIL=$((now + COOLDOWN_WINDOW))
+        _save_state
+        _notify "$APP_NAME Watchdog" "Max restarts ($MAX_RESTARTS in ${window_minutes}min) reached. Giving up until manual intervention." "error"
+        return 1
+    fi
+
+    # Attempt restart
+    local attempt=$((RESTART_COUNT + 1))
+    _notify "$APP_NAME Watchdog" "Service unhealthy, restarting (attempt $attempt/$MAX_RESTARTS)" "warning"
+
+    if _restart_service; then
+        _add_restart_timestamp
+        _save_state
+        _notify "$APP_NAME Watchdog" "Restarted successfully, health check passed" "info"
+        return 0
+    else
+        _add_restart_timestamp
+        _save_state
+        _notify "$APP_NAME Watchdog" "Restart failed, service did not come up healthy" "error"
+        return 1
+    fi
+}
+
+# ==============================================================================
+# Entry Point
+# ==============================================================================
+
+main() {
+    if [[ $# -ne 1 ]]; then
+        echo "Usage: $0 /path/to/service.conf"
+        exit 1
+    fi
+
+    local service_config="$1"
+
+    # Load configurations
+    _load_global_config
+    _load_service_config "$service_config"
+
+    # Initialize state directory and files
+    _init_state
+
+    # Acquire lock
+    exec 200>"$LOCK_FILE"
+    if ! flock -n 200; then
+        echo "Another instance is already running for $SERVICE_NAME"
+        exit 0
+    fi
+
+    # Load state
+    _load_state
+
+    # Run watchdog
+    _run_watchdog
+}
+
+main "$@"

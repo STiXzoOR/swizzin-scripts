@@ -44,6 +44,8 @@ Each installer script follows a consistent pattern:
 - **sonarr.sh** - Multi-instance Sonarr manager (add/remove/list named instances)
 - **radarr.sh** - Multi-instance Radarr manager (add/remove/list named instances)
 - **panel_helpers.sh** - Shared utility for Swizzin panel app registration
+- **watchdog.sh** - Generic service watchdog with health checks and notifications
+- **emby-watchdog.sh** - Emby-specific watchdog installer/manager
 
 ### Python Apps (uv-based)
 
@@ -202,6 +204,45 @@ sonarr.sh --list               # List all instances with ports
 | `app_branch` | main | master |
 
 **Base app protection:** Base cannot be removed via these scripts. Remove all instances before running `box remove sonarr/radarr`.
+
+### Service Watchdog
+
+A cron-based monitoring system that checks service health and automatically restarts unhealthy services with cooldown protection.
+
+**Components:**
+- `watchdog.sh` - Generic engine (process + HTTP health checks, restart logic, notifications)
+- `emby-watchdog.sh` - Emby-specific installer/manager
+- `configs/watchdog.conf.example` - Global config template
+- `configs/emby-watchdog.conf.example` - Emby config template
+
+**Usage:**
+```bash
+bash emby-watchdog.sh              # Interactive setup
+bash emby-watchdog.sh --install    # Install watchdog for Emby
+bash emby-watchdog.sh --remove     # Remove watchdog for Emby
+bash emby-watchdog.sh --status     # Show current status
+bash emby-watchdog.sh --reset      # Clear backoff state, resume monitoring
+```
+
+**How it works:**
+1. Cron runs `watchdog.sh` every 2 minutes
+2. Checks if process is running (`systemctl is-active`)
+3. Checks HTTP health endpoint (`curl` + response validation)
+4. If unhealthy, restarts service (max 3 restarts per 15 minutes)
+5. Sends notifications via Discord, Pushover, Notifiarr, or email
+6. Enters backoff mode if max restarts reached
+
+**Runtime files:**
+| File | Purpose |
+|------|---------|
+| `/opt/swizzin/watchdog.sh` | Engine script |
+| `/opt/swizzin/watchdog.conf` | Global config (notifications, defaults) |
+| `/opt/swizzin/watchdog.d/emby.conf` | Emby-specific config |
+| `/var/log/watchdog/emby.log` | Log file |
+| `/var/run/watchdog/emby.state` | State (restart counts, backoff) |
+| `/etc/cron.d/emby-watchdog` | Cron job |
+
+**Adding new services:** Create a new wrapper script (copy `emby-watchdog.sh`) and adjust `SERVICE_NAME`, `HEALTH_URL`, and `HEALTH_EXPECT` for the target service.
 
 ### Key Swizzin Functions Used
 
