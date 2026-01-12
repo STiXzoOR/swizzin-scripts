@@ -281,9 +281,9 @@ The generic `watchdog.sh` engine requires no changes.
 
 ## Implementation Checklist
 
-- [ ] Create `watchdog.sh` (generic engine)
-- [ ] Create `configs/watchdog.conf.example`
-- [ ] Create `configs/emby-watchdog.conf.example`
-- [ ] Create `emby-watchdog.sh` (Emby wrapper)
+- [x] Create `watchdog.sh` (generic engine)
+- [x] Create `configs/watchdog.conf.example`
+- [x] Create `configs/emby-watchdog.conf.example`
+- [x] Create `emby-watchdog.sh` (Emby wrapper)
 - [ ] Test on Swizzin system with Emby installed
-- [ ] Update CLAUDE.md with new scripts
+- [x] Update CLAUDE.md with new scripts
