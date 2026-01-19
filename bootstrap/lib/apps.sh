@@ -820,38 +820,42 @@ install_app() {
         return 0
     fi
 
-    echo_progress_start "Installing $app"
+    echo_info "Installing $app..."
+    echo ""
 
     if [[ "$source" == "swizzin" ]]; then
-        # Install via box
-        box install "$app" >>"$LOG_FILE" 2>&1
+        # Install via box - show output for interactive prompts
+        box install "$app" 2>&1 | tee -a "$LOG_FILE"
+        local result=${PIPESTATUS[0]}
     else
         # Install via repo script
         local script="${APP_SCRIPT[$app]}"
         local script_path="$SCRIPTS_DIR/$script"
 
         if [[ ! -f "$script_path" ]]; then
-            echo_progress_fail "Script not found: $script_path"
+            echo_error "Script not found: $script_path"
             return 1
         fi
 
         # Export environment variables for this app
         _export_app_env "$app"
 
-        # Run the script
-        bash "$script_path" >>"$LOG_FILE" 2>&1
+        # Run the script - show output for interactive prompts
+        bash "$script_path" 2>&1 | tee -a "$LOG_FILE"
+        local result=${PIPESTATUS[0]}
     fi
 
-    local result=$?
+    echo ""
 
-    if [[ $result -eq 0 ]]; then
-        echo_progress_done "$app installed"
+    # Check if lock file was created (better indicator than exit code)
+    if [[ -f "/install/.${app}.lock" ]]; then
+        echo_success "$app installed"
+        return 0
     else
-        echo_progress_fail "$app installation failed"
+        echo_error "$app installation may have failed"
         echo_warn "Check $LOG_FILE for details"
+        return 1
     fi
-
-    return $result
 }
 
 _export_app_env() {
@@ -901,19 +905,23 @@ install_subdomain() {
         return 0
     fi
 
-    echo_progress_start "Configuring $app subdomain"
+    echo_info "Configuring $app subdomain..."
+    echo ""
 
     local script="${APP_SCRIPT[$app]}"
     local script_path="$SCRIPTS_DIR/$script"
 
     _export_app_env "$app"
 
-    bash "$script_path" --subdomain >>"$LOG_FILE" 2>&1
+    bash "$script_path" --subdomain 2>&1 | tee -a "$LOG_FILE"
+    local result=${PIPESTATUS[0]}
 
-    if [[ $? -eq 0 ]]; then
-        echo_progress_done "$app subdomain configured"
+    echo ""
+
+    if [[ $result -eq 0 ]]; then
+        echo_success "$app subdomain configured"
     else
-        echo_progress_fail "$app subdomain configuration failed"
+        echo_error "$app subdomain configuration failed"
     fi
 }
 
@@ -931,14 +939,18 @@ install_multi_instances() {
     IFS=',' read -ra instance_array <<< "$instances"
     for instance in "${instance_array[@]}"; do
         instance=$(echo "$instance" | tr -d ' ')
-        echo_progress_start "Adding $app instance: $instance"
+        echo_info "Adding $app instance: $instance..."
+        echo ""
 
-        bash "$script_path" --add "$instance" >>"$LOG_FILE" 2>&1
+        bash "$script_path" --add "$instance" 2>&1 | tee -a "$LOG_FILE"
+        local result=${PIPESTATUS[0]}
 
-        if [[ $? -eq 0 ]]; then
-            echo_progress_done "$app-$instance added"
+        echo ""
+
+        if [[ $result -eq 0 ]]; then
+            echo_success "$app-$instance added"
         else
-            echo_progress_fail "$app-$instance failed"
+            echo_error "$app-$instance failed"
         fi
     done
 }
