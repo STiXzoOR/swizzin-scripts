@@ -1045,6 +1045,23 @@ if [ "$1" = "--switch-version" ]; then
 	_switch_version "$target_version" "$current_version"
 fi
 
+# Check if already installed (unless switching versions)
+if [ "$switch_mode" != "true" ] && [ -f "/install/.$app_lockname.lock" ]; then
+	current_version=$(swizdb get "zurg/version" 2>/dev/null) || current_version="unknown"
+	echo_info "Zurg ($current_version) is already installed"
+
+	# Check if user wants to upgrade/reinstall
+	if [ "$1" = "--upgrade" ] || [ "$ZURG_UPGRADE" = "true" ]; then
+		echo_info "Upgrading zurg..."
+	elif [ "$ZURG_USE_LATEST_TAG" = "true" ] || [ -n "$ZURG_VERSION_TAG" ]; then
+		echo_info "Version change requested, proceeding with install..."
+	else
+		echo_info "Use --upgrade to reinstall/upgrade, or --switch-version to change versions"
+		echo_info "Use ZURG_USE_LATEST_TAG=true or ZURG_VERSION_TAG=vX.X.X to install specific version"
+		exit 0
+	fi
+fi
+
 # Set owner for install
 if [ -n "$ZURG_OWNER" ]; then
 	echo_info "Setting ${app_name^} owner = $ZURG_OWNER"
