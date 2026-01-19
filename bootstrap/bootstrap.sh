@@ -409,18 +409,19 @@ run_full_bootstrap() {
     if [[ $start_index -le 1 ]]; then
         collect_configuration
         save_step "config"
-    else
-        # Load saved config or prompt again
-        if [[ -z "${SSH_PORT:-}" ]]; then
-            SSH_PORT=$(prompt_value "SSH port" "22")
-        fi
-        if [[ -z "${REBOOT_TIME:-}" ]]; then
-            REBOOT_TIME="${REBOOT_TIME:-04:00}"
-        fi
     fi
 
     # Step 3: Hardening (index 2)
     if [[ $start_index -le 2 ]]; then
+        # Only prompt for config if we skipped the config step but need hardening
+        if [[ $start_index -gt 1 ]]; then
+            if [[ -z "${SSH_PORT:-}" ]]; then
+                SSH_PORT=$(prompt_value "SSH port" "22")
+            fi
+            if [[ -z "${REBOOT_TIME:-}" ]]; then
+                REBOOT_TIME="${REBOOT_TIME:-04:00}"
+            fi
+        fi
         run_hardening "$SSH_PORT" "${SSH_KEY:-}" "$REBOOT_TIME"
         save_step "hardening"
     fi
