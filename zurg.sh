@@ -115,7 +115,8 @@ _select_zurg_version() {
 _get_github_token() {
 	# Check environment variable first
 	if [ -n "$GITHUB_TOKEN" ]; then
-		echo_info "Using GitHub token from GITHUB_TOKEN environment variable"
+		local token_preview="${GITHUB_TOKEN:0:4}...${GITHUB_TOKEN: -4}"
+		echo_info "Using GitHub token from GITHUB_TOKEN environment variable ($token_preview)"
 		github_token="$GITHUB_TOKEN"
 		return 0
 	fi
@@ -135,8 +136,8 @@ _get_github_token() {
 	echo_info "Required scope: repo (to access private repositories)"
 	echo ""
 	echo_query "Enter your GitHub Personal Access Token"
-	read -rs github_token </dev/tty
-	echo ""
+	read -r github_token </dev/tty
+	echo "" >/dev/tty
 
 	if [ -z "$github_token" ]; then
 		echo_error "GitHub token is required for paid version"
@@ -442,10 +443,14 @@ _install_zurg() {
 	# For paid version, get GitHub authentication
 	if [ "$zurg_version" = "paid" ]; then
 		if ! _get_github_token; then
-			echo_error "GitHub authentication failed. Falling back to free version."
-			zurg_version="free"
+			echo_error "GitHub authentication failed for paid version."
+			echo_error "Please ensure GITHUB_TOKEN is set or re-run with correct token."
+			echo_info "To install free version instead, set ZURG_VERSION=free"
+			exit 1
 		fi
 	fi
+
+	echo_info "Installing zurg $zurg_version version"
 
 	# Prompt for Real-Debrid token if not already configured
 	echo_info "Checking for Real-Debrid API token"

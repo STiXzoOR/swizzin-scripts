@@ -707,10 +707,21 @@ collect_app_config() {
         if ask "Do you have the paid/sponsor version of Zurg?" N; then
             APP_ENV[ZURG_VERSION]="paid"
             APP_ENV[GITHUB_TOKEN]=$(prompt_secret "GitHub Personal Access Token (for paid Zurg)")
+
+            # Validate token was captured
+            if [[ -z "${APP_ENV[GITHUB_TOKEN]:-}" ]]; then
+                echo_error "GitHub token is required for paid version"
+                echo_info "Switching to free version"
+                APP_ENV[ZURG_VERSION]="free"
+            else
+                local token_preview="${APP_ENV[GITHUB_TOKEN]:0:4}...${APP_ENV[GITHUB_TOKEN]: -4}"
+                echo_info "GitHub token captured: $token_preview"
+            fi
         else
             APP_ENV[ZURG_VERSION]="free"
         fi
 
+        echo_info "Zurg version: ${APP_ENV[ZURG_VERSION]}"
         APP_ENV[ZURG_MOUNT_POINT]=$(prompt_value "Zurg mount point" "/mnt/zurg")
     fi
 
