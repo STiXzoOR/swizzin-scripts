@@ -489,11 +489,45 @@ _install_zurg() {
 		zurg_repo="debridmediamanager/zurg-testing"
 	fi
 
-	# Determine release endpoint (latest or specific tag)
+	# Determine which version to download
 	local release_endpoint
+	local version_tag=""
+
 	if [ -n "$ZURG_VERSION_TAG" ]; then
-		release_endpoint="repos/$zurg_repo/releases/tags/$ZURG_VERSION_TAG"
-		echo_progress_start "Downloading $zurg_version version $ZURG_VERSION_TAG"
+		# Use specific tag provided by user
+		version_tag="$ZURG_VERSION_TAG"
+	elif [ "$ZURG_USE_LATEST_TAG" = "true" ] || [ "$ZURG_USE_LATEST_TAG" = "1" ]; then
+		# Fetch latest tag from /tags endpoint (may be newer than /releases/latest)
+		echo_progress_start "Fetching latest tag"
+		local tags_json
+		if [ "$zurg_version" = "paid" ]; then
+			if [ "$github_token" = "gh_cli" ]; then
+				tags_json=$(gh api "repos/$zurg_repo/tags?per_page=1" 2>>"$log")
+			else
+				tags_json=$(curl -sL -H "Authorization: token $github_token" \
+					"https://api.github.com/repos/$zurg_repo/tags?per_page=1")
+			fi
+		else
+			tags_json=$(curl -sL "https://api.github.com/repos/$zurg_repo/tags?per_page=1")
+		fi
+
+		if command -v jq &>/dev/null; then
+			version_tag=$(echo "$tags_json" | jq -r '.[0].name')
+		else
+			version_tag=$(echo "$tags_json" | grep -o '"name"[^,]*' | head -1 | cut -d'"' -f4)
+		fi
+
+		if [ -z "$version_tag" ] || [ "$version_tag" = "null" ]; then
+			echo_error "Failed to get latest tag"
+			exit 1
+		fi
+		echo_progress_done "Latest tag: $version_tag"
+	fi
+
+	# Set release endpoint
+	if [ -n "$version_tag" ]; then
+		release_endpoint="repos/$zurg_repo/releases/tags/$version_tag"
+		echo_progress_start "Downloading $zurg_version version $version_tag"
 	else
 		release_endpoint="repos/$zurg_repo/releases/latest"
 		echo_progress_start "Downloading $zurg_version latest release"
