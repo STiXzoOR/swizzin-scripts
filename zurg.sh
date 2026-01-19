@@ -555,11 +555,15 @@ _install_zurg() {
 			tag_name=$(echo "$release_info" | jq -r '.tag_name')
 			echo_info "Found release: $tag_name"
 
-			latest=$(echo "$release_info" | jq -r ".assets[] | select(.name | contains(\"$arch\")) | .url")
-			if [ -z "$latest" ]; then
+			latest=$(echo "$release_info" | jq -r "[.assets[] | select(.name | contains(\"$arch\"))] | first | .url")
+			latest=$(echo "$latest" | tr -d '[:space:]')
+
+			if [ -z "$latest" ] || [ "$latest" = "null" ]; then
 				echo_error "Could not find release asset for $arch"
 				exit 1
 			fi
+
+			echo_info "Downloading from: $latest"
 
 			if ! gh api "$latest" -H "Accept: application/octet-stream" >/tmp/$app_name.zip 2>>"$log"; then
 				echo_error "Download failed, exiting"
@@ -596,8 +600,9 @@ _install_zurg() {
 			echo_info "Found release: $tag_name"
 
 			# Get the asset API URL using jq if available, fallback to python
+			# Use 'first' to ensure we only get one URL if multiple assets match
 			if command -v jq &>/dev/null; then
-				latest=$(echo "$release_json" | jq -r ".assets[] | select(.name | contains(\"$arch\")) | .url")
+				latest=$(echo "$release_json" | jq -r "[.assets[] | select(.name | contains(\"$arch\"))] | first | .url")
 			else
 				# Fallback: parse JSON with Python if available
 				if command -v python3 &>/dev/null; then
@@ -608,10 +613,15 @@ _install_zurg() {
 				fi
 			fi
 
-			if [ -z "$latest" ]; then
+			# Trim whitespace
+			latest=$(echo "$latest" | tr -d '[:space:]')
+
+			if [ -z "$latest" ] || [ "$latest" = "null" ]; then
 				echo_error "Could not find release asset for $arch"
 				exit 1
 			fi
+
+			echo_info "Downloading from: $latest"
 
 			if ! curl -H "Authorization: token $github_token" \
 				-H "Accept: application/octet-stream" \
