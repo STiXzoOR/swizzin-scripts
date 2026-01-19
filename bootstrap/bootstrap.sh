@@ -37,7 +37,18 @@ source "$SCRIPT_DIR/lib/notifications.sh"
 
 LOG_FILE="/root/logs/bootstrap.log"
 BOOTSTRAP_MARKER="/opt/swizzin/bootstrap.done"
+BOOTSTRAP_STATE="/opt/swizzin/bootstrap.state"
 VERSION="1.0.0"
+
+# Bootstrap steps in order
+BOOTSTRAP_STEPS=(
+    "preflight:Pre-flight checks"
+    "config:Configuration collection"
+    "hardening:Security hardening (SSH, fail2ban, UFW)"
+    "tuning:Kernel tuning"
+    "apps:App selection and installation"
+    "notifications:Notification setup"
+)
 
 # ==============================================================================
 # Help
@@ -51,6 +62,8 @@ Usage: $(basename "$0") [OPTIONS]
 
 Options:
   --full              Run full bootstrap (default if no options)
+  --resume            Resume from last completed step
+  --from <step>       Start from a specific step (see steps below)
   --hardening         Run security hardening only (SSH, fail2ban, UFW)
   --tuning            Run kernel tuning only (sysctl, limits)
   --apps              Run app installation only
@@ -76,9 +89,23 @@ Environment Variables:
   ZURG_VERSION        Zurg version (free/paid)
   GITHUB_TOKEN        GitHub token for paid Zurg
 
+Bootstrap Steps (for --from):
+  1. preflight      Pre-flight checks
+  2. config         Configuration collection
+  3. hardening      Security hardening (SSH, fail2ban, UFW)
+  4. tuning         Kernel tuning
+  5. apps           App selection and installation
+  6. notifications  Notification setup
+
 Examples:
   # Full interactive bootstrap
   sudo bash bootstrap.sh
+
+  # Resume from last completed step
+  sudo bash bootstrap.sh --resume
+
+  # Start from a specific step
+  sudo bash bootstrap.sh --from tuning
 
   # Hardening only with custom SSH port
   SSH_PORT=2222 sudo bash bootstrap.sh --hardening
@@ -87,6 +114,72 @@ Examples:
   SSH_PORT=2222 SSH_KEY="ssh-ed25519 AAAA..." sudo bash bootstrap.sh --hardening
 
 EOF
+}
+
+# ==============================================================================
+# Step Tracking
+# ==============================================================================
+
+# Get step index by name
+get_step_index() {
+    local step_name="$1"
+    local index=0
+    for step_info in "${BOOTSTRAP_STEPS[@]}"; do
+        local name="${step_info%%:*}"
+        if [[ "$name" == "$step_name" ]]; then
+            echo "$index"
+            return 0
+        fi
+        ((index++))
+    done
+    echo "-1"
+    return 1
+}
+
+# Save completed step to state file
+save_step() {
+    local step="$1"
+    mkdir -p "$(dirname "$BOOTSTRAP_STATE")"
+    echo "$step" > "$BOOTSTRAP_STATE"
+}
+
+# Get last completed step
+get_last_step() {
+    if [[ -f "$BOOTSTRAP_STATE" ]]; then
+        cat "$BOOTSTRAP_STATE"
+    else
+        echo ""
+    fi
+}
+
+# Clear step state
+clear_step_state() {
+    rm -f "$BOOTSTRAP_STATE"
+}
+
+# Show available steps
+show_steps() {
+    echo "Bootstrap Steps:"
+    echo ""
+    local index=1
+    for step_info in "${BOOTSTRAP_STEPS[@]}"; do
+        local name="${step_info%%:*}"
+        local desc="${step_info#*:}"
+        printf "  %d. %-14s %s\n" "$index" "$name" "$desc"
+        ((index++))
+    done
+}
+
+# Validate step name
+validate_step() {
+    local step="$1"
+    for step_info in "${BOOTSTRAP_STEPS[@]}"; do
+        local name="${step_info%%:*}"
+        if [[ "$name" == "$step" ]]; then
+            return 0
+        fi
+    done
+    return 1
 }
 
 # ==============================================================================
@@ -99,9 +192,17 @@ show_status() {
     # Check marker
     if [[ -f "$BOOTSTRAP_MARKER" ]]; then
         echo_success "Bootstrap has been run"
-        echo_info "Date: $(cat "$BOOTSTRAP_MARKER")"
+        echo_info "Completed: $(cat "$BOOTSTRAP_MARKER")"
     else
-        echo_warn "Bootstrap has NOT been run"
+        echo_warn "Bootstrap has NOT been completed"
+    fi
+
+    # Check for incomplete run
+    local last_step
+    last_step=$(get_last_step)
+    if [[ -n "$last_step" ]]; then
+        echo_info "Last completed step: $last_step"
+        echo_info "Resume with: sudo bash bootstrap.sh --resume"
     fi
 
     echo ""
@@ -247,19 +348,28 @@ collect_configuration() {
 # ==============================================================================
 
 run_full_bootstrap() {
+    local start_from="${1:-}"
+
     echo_header "Swizzin Server Bootstrap v${VERSION}"
     echo ""
-    echo "This script will:"
-    echo "  1. Harden SSH security"
-    echo "  2. Configure fail2ban"
-    echo "  3. Set up UFW firewall"
-    echo "  4. Tune kernel for streaming"
-    echo "  5. Configure unattended upgrades"
-    echo "  6. Install Swizzin and applications"
-    echo "  7. Set up notifications"
+    show_steps
     echo ""
 
-    if [[ -f "$BOOTSTRAP_MARKER" ]]; then
+    # Determine starting step
+    local start_index=0
+    if [[ -n "$start_from" ]]; then
+        start_index=$(get_step_index "$start_from")
+        if [[ "$start_index" == "-1" ]]; then
+            echo_error "Unknown step: $start_from"
+            echo ""
+            show_steps
+            exit 1
+        fi
+        echo_info "Starting from step: $start_from"
+        echo ""
+    fi
+
+    if [[ -f "$BOOTSTRAP_MARKER" ]] && [[ -z "$start_from" ]]; then
         echo_warn "Bootstrap has already been run on this system"
         echo_info "Previous run: $(cat "$BOOTSTRAP_MARKER")"
         echo ""
@@ -267,9 +377,11 @@ run_full_bootstrap() {
             echo_info "Aborting"
             exit 0
         fi
+        # Clear state for fresh run
+        clear_step_state
     fi
 
-    if ! ask "Ready to begin?" Y; then
+    if [[ -z "$start_from" ]] && ! ask "Ready to begin?" Y; then
         echo_info "Aborting"
         exit 0
     fi
@@ -281,32 +393,62 @@ run_full_bootstrap() {
     echo ""
     echo "=============================================="
     echo "Bootstrap started: $(date)"
+    if [[ -n "$start_from" ]]; then
+        echo "Starting from: $start_from"
+    fi
     echo "=============================================="
     echo ""
 
-    # Pre-flight
-    preflight_checks
+    # Step 1: Pre-flight (index 0)
+    if [[ $start_index -le 0 ]]; then
+        preflight_checks
+        save_step "preflight"
+    fi
 
-    # Collect configuration
-    collect_configuration
+    # Step 2: Configuration (index 1)
+    if [[ $start_index -le 1 ]]; then
+        collect_configuration
+        save_step "config"
+    else
+        # Load saved config or prompt again
+        if [[ -z "${SSH_PORT:-}" ]]; then
+            SSH_PORT=$(prompt_value "SSH port" "22")
+        fi
+        if [[ -z "${REBOOT_TIME:-}" ]]; then
+            REBOOT_TIME="${REBOOT_TIME:-04:00}"
+        fi
+    fi
 
-    # Run hardening
-    run_hardening "$SSH_PORT" "$SSH_KEY" "$REBOOT_TIME"
+    # Step 3: Hardening (index 2)
+    if [[ $start_index -le 2 ]]; then
+        run_hardening "$SSH_PORT" "${SSH_KEY:-}" "$REBOOT_TIME"
+        save_step "hardening"
+    fi
 
-    # Run tuning
-    run_tuning
+    # Step 4: Tuning (index 3)
+    if [[ $start_index -le 3 ]]; then
+        run_tuning
+        save_step "tuning"
+    fi
 
-    # App selection and installation
-    select_apps
-    collect_app_config
-    run_app_installation
+    # Step 5: Apps (index 4)
+    if [[ $start_index -le 4 ]]; then
+        select_apps
+        collect_app_config
+        run_app_installation
+        save_step "apps"
+    fi
 
-    # Notifications
-    run_notification_setup
+    # Step 6: Notifications (index 5)
+    if [[ $start_index -le 5 ]]; then
+        run_notification_setup
+        save_step "notifications"
+    fi
 
-    # Mark as complete
+    # Mark as complete and clear state
     mkdir -p "$(dirname "$BOOTSTRAP_MARKER")"
     date > "$BOOTSTRAP_MARKER"
+    clear_step_state
 
     echo ""
     echo "=============================================="
@@ -319,7 +461,7 @@ run_full_bootstrap() {
     echo_success "Your server has been bootstrapped successfully"
     echo ""
     echo_info "Next steps:"
-    echo "  1. Test SSH access in a new terminal: ssh -p $SSH_PORT root@<server-ip>"
+    echo "  1. Test SSH access in a new terminal: ssh -p ${SSH_PORT:-22} root@<server-ip>"
     echo "  2. Access Swizzin panel at: https://<server-ip>/panel"
     echo "  3. Configure your applications"
     echo ""
@@ -388,6 +530,43 @@ main() {
         --full|"")
             require_root
             run_full_bootstrap
+            ;;
+        --resume)
+            require_root
+            local last_step
+            last_step=$(get_last_step)
+            if [[ -z "$last_step" ]]; then
+                echo_error "No previous run to resume from"
+                echo_info "Use --from <step> to start from a specific step"
+                exit 1
+            fi
+            # Get next step after the last completed one
+            local last_index
+            last_index=$(get_step_index "$last_step")
+            local next_index=$((last_index + 1))
+            if [[ $next_index -ge ${#BOOTSTRAP_STEPS[@]} ]]; then
+                echo_info "All steps were completed. Run without --resume for a fresh start."
+                exit 0
+            fi
+            local next_step="${BOOTSTRAP_STEPS[$next_index]%%:*}"
+            echo_info "Resuming from step: $next_step (after $last_step)"
+            run_full_bootstrap "$next_step"
+            ;;
+        --from)
+            require_root
+            if [[ -z "${2:-}" ]]; then
+                echo_error "Missing step name"
+                echo ""
+                show_steps
+                exit 1
+            fi
+            if ! validate_step "$2"; then
+                echo_error "Invalid step: $2"
+                echo ""
+                show_steps
+                exit 1
+            fi
+            run_full_bootstrap "$2"
             ;;
         --hardening)
             require_root
