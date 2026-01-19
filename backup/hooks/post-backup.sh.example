@@ -1,0 +1,27 @@
+#!/bin/bash
+# ============================================
+# POST-BACKUP HOOK
+# ============================================
+# Runs after backup completes (success or failure).
+# Use this to restart services or cleanup.
+#
+# Copy to /opt/swizzin/backup/hooks/post-backup.sh
+
+set -euo pipefail
+
+# Passed by backup script
+BACKUP_STATUS="${1:-unknown}"  # success or failure
+
+log() {
+    echo "[post-backup] $(date '+%Y-%m-%d %H:%M:%S') $*"
+}
+
+# Restart any services stopped in pre-backup
+# log "Restarting services..."
+# systemctl start sonarr || true
+# systemctl start radarr || true
+
+# Cleanup temporary files
+# rm -f /tmp/backup-*.tmp
+
+log "Post-backup hook completed (status: $BACKUP_STATUS)"

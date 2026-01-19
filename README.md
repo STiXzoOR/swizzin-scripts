@@ -4,25 +4,26 @@ A collection of installer scripts for integrating additional applications into [
 
 ## Available Scripts
 
-| Script | Application | Description |
-|--------|-------------|-------------|
-| [sonarr.sh](#sonarr) | [Sonarr](https://sonarr.tv/) | Multi-instance Sonarr manager (4k, anime, etc.) |
-| [radarr.sh](#radarr) | [Radarr](https://radarr.video/) | Multi-instance Radarr manager (4k, anime, etc.) |
-| [cleanuparr.sh](#cleanuparr) | [Cleanuparr](https://github.com/Cleanuparr/Cleanuparr) | Download queue cleanup for *arr apps |
-| [decypharr.sh](#decypharr) | [Decypharr](https://github.com/sirrobot01/decypharr) | Encrypted file/torrent management via rclone and qBittorrent |
-| [notifiarr.sh](#notifiarr) | [Notifiarr](https://github.com/Notifiarr/notifiarr) | Notification relay client for *arr apps and Plex |
-| [plex.sh](#plex) | [Plex](https://plex.tv/) | Extended Plex installer with subdomain support |
-| [emby.sh](#emby) | [Emby](https://emby.media/) | Extended Emby installer with subdomain and Premiere bypass |
-| [jellyfin.sh](#jellyfin) | [Jellyfin](https://jellyfin.org/) | Extended Jellyfin installer with subdomain support |
-| [organizr.sh](#organizr) | [Organizr](https://github.com/causefx/Organizr) | Extended Organizr installer with subdomain and SSO support |
-| [seerr.sh](#seerr) | [Seerr](https://github.com/seerr-team/seerr) | Media request platform (Overseerr fork) |
-| [byparr.sh](#byparr) | [Byparr](https://github.com/ThePhaseless/Byparr) | FlareSolverr alternative for bypassing anti-bot protections |
-| [flaresolverr.sh](#flaresolverr) | [FlareSolverr](https://github.com/FlareSolverr/FlareSolverr) | Proxy server to bypass Cloudflare protection |
-| [huntarr.sh](#huntarr) | [Huntarr](https://github.com/plexguide/Huntarr.io) | Automated media discovery for Sonarr, Radarr, Lidarr, etc. |
-| [subgen.sh](#subgen) | [Subgen](https://github.com/McCloudS/subgen) | Automatic subtitle generation using Whisper AI |
-| [zurg.sh](#zurg) | [Zurg](https://github.com/debridmediamanager/zurg-testing) | Real-Debrid WebDAV server with rclone mount |
-| [dns-fix.sh](#dns-fix) | - | Fix DNS issues for FlareSolverr/Byparr cookie validation |
-| [emby-watchdog.sh](#service-watchdog) | - | Service watchdog with health checks and auto-restart |
+| Script                                | Application                                                  | Description                                                     |
+| ------------------------------------- | ------------------------------------------------------------ | --------------------------------------------------------------- |
+| [sonarr.sh](#sonarr)                  | [Sonarr](https://sonarr.tv/)                                 | Multi-instance Sonarr manager (4k, anime, etc.)                 |
+| [radarr.sh](#radarr)                  | [Radarr](https://radarr.video/)                              | Multi-instance Radarr manager (4k, anime, etc.)                 |
+| [cleanuparr.sh](#cleanuparr)          | [Cleanuparr](https://github.com/Cleanuparr/Cleanuparr)       | Download queue cleanup for \*arr apps                           |
+| [decypharr.sh](#decypharr)            | [Decypharr](https://github.com/sirrobot01/decypharr)         | Encrypted file/torrent management via rclone and qBittorrent    |
+| [notifiarr.sh](#notifiarr)            | [Notifiarr](https://github.com/Notifiarr/notifiarr)          | Notification relay client for \*arr apps and Plex               |
+| [plex.sh](#plex)                      | [Plex](https://plex.tv/)                                     | Extended Plex installer with subdomain support                  |
+| [emby.sh](#emby)                      | [Emby](https://emby.media/)                                  | Extended Emby installer with subdomain and Premiere bypass      |
+| [jellyfin.sh](#jellyfin)              | [Jellyfin](https://jellyfin.org/)                            | Extended Jellyfin installer with subdomain support              |
+| [organizr.sh](#organizr)              | [Organizr](https://github.com/causefx/Organizr)              | Extended Organizr installer with subdomain and SSO support      |
+| [seerr.sh](#seerr)                    | [Seerr](https://github.com/seerr-team/seerr)                 | Media request platform (Overseerr fork)                         |
+| [byparr.sh](#byparr)                  | [Byparr](https://github.com/ThePhaseless/Byparr)             | FlareSolverr alternative for bypassing anti-bot protections     |
+| [flaresolverr.sh](#flaresolverr)      | [FlareSolverr](https://github.com/FlareSolverr/FlareSolverr) | Proxy server to bypass Cloudflare protection                    |
+| [huntarr.sh](#huntarr)                | [Huntarr](https://github.com/plexguide/Huntarr.io)           | Automated media discovery for Sonarr, Radarr, Lidarr, etc.      |
+| [subgen.sh](#subgen)                  | [Subgen](https://github.com/McCloudS/subgen)                 | Automatic subtitle generation using Whisper AI                  |
+| [zurg.sh](#zurg)                      | [Zurg](https://github.com/debridmediamanager/zurg-testing)   | Real-Debrid WebDAV server with rclone mount                     |
+| [dns-fix.sh](#dns-fix)                | -                                                            | Fix DNS issues for FlareSolverr/Byparr cookie validation        |
+| [emby-watchdog.sh](#service-watchdog) | -                                                            | Service watchdog with health checks and auto-restart            |
+| [backup/](#backup-system)             | -                                                            | Automated backup system with dual destinations and GFS rotation |
 
 ## Requirements
 
@@ -75,6 +76,7 @@ bash sonarr.sh --remove 4k --force
 **Instance naming:** Alphanumeric only (e.g., `4k`, `anime`, `kids`, `remux`)
 
 **Per-instance files:**
+
 - Config: `/home/<user>/.config/sonarr-<name>/`
 - Service: `sonarr-<name>.service`
 - Access: `https://your-server/sonarr-<name>/`
@@ -110,6 +112,7 @@ bash radarr.sh --remove 4k --force
 **Instance naming:** Alphanumeric only (e.g., `4k`, `anime`, `kids`, `remux`)
 
 **Per-instance files:**
+
 - Config: `/home/<user>/.config/radarr-<name>/`
 - Service: `radarr-<name>.service`
 - Access: `https://your-server/radarr-<name>/`
@@ -120,7 +123,7 @@ bash radarr.sh --remove 4k --force
 
 ### Cleanuparr
 
-Automates cleanup of stalled, incomplete, or blocked downloads from your *arr applications. From the creators of Huntarr.
+Automates cleanup of stalled, incomplete, or blocked downloads from your \*arr applications. From the creators of Huntarr.
 
 ```bash
 # Optional: Set custom owner (defaults to master user)
@@ -137,6 +140,7 @@ bash cleanuparr.sh --remove
 **Config:** `/opt/cleanuparr/config/cleanuparr.json`
 
 **Features:**
+
 - Removes stalled, incomplete, or malicious downloads
 - Blocks problematic torrents across supported services
 - Triggers automatic searches to replace deleted content
@@ -164,7 +168,7 @@ bash decypharr.sh
 
 ### Notifiarr
 
-Official client for [Notifiarr.com](https://notifiarr.com/) - provides notifications and integrations for *arr apps, Plex, and more.
+Official client for [Notifiarr.com](https://notifiarr.com/) - provides notifications and integrations for \*arr apps, Plex, and more.
 
 ```bash
 # Optional: Set custom owner
@@ -205,9 +209,10 @@ bash plex.sh --remove
 **Subfolder Access:** `https://your-server/plex/`
 
 **Features:**
+
 - Interactive domain prompt (or set `PLEX_DOMAIN` env var to bypass)
 - Automatic Let's Encrypt certificate
-- Proper X-Plex-* proxy headers for client communication
+- Proper X-Plex-\* proxy headers for client communication
 - Frame-ancestors CSP header for Organizr embedding (if configured)
 
 ---
@@ -241,12 +246,14 @@ bash emby.sh --remove
 **Subfolder Access:** `https://your-server/emby/`
 
 **Features:**
+
 - Interactive domain prompt (or set `EMBY_DOMAIN` env var to bypass)
 - Automatic Let's Encrypt certificate
 - Range/If-Range headers for proper media streaming
 - Frame-ancestors CSP header for Organizr embedding (if configured)
 
 **Premiere Bypass:**
+
 - Intercepts Emby's license validation requests locally
 - Creates self-signed certificate for `mb3admin.com`
 - Adds certificate to system CA trust
@@ -278,6 +285,7 @@ bash jellyfin.sh --remove
 **Subfolder Access:** `https://your-server/jellyfin/`
 
 **Features:**
+
 - Interactive domain prompt (or set `JELLYFIN_DOMAIN` env var to bypass)
 - Automatic Let's Encrypt certificate
 - WebSocket support via `/socket` location
@@ -318,6 +326,7 @@ bash organizr.sh --remove
 **Config:** `/opt/swizzin/organizr-auth.conf`
 
 **Features:**
+
 - Interactive domain prompt (or set `ORGANIZR_DOMAIN` env var to bypass)
 - Automatic Let's Encrypt certificate
 - SSO authentication for selected apps (replaces htpasswd)
@@ -327,6 +336,7 @@ bash organizr.sh --remove
 **Auth Levels:** 0=Admin, 1=Co-Admin, 2=Super User, 3=Power User, 4=User, 998=Logged In
 
 **Notes:**
+
 - Swizzin's automated Organizr wizard may fail. If Organizr shows the setup wizard, complete it manually at your subdomain URL.
 
 ---
@@ -360,7 +370,7 @@ export SEERR_OWNER="username"
 
 ### Byparr
 
-FlareSolverr-compatible alternative using Camoufox browser for bypassing anti-bot protections. Used by Prowlarr and other *arr apps.
+FlareSolverr-compatible alternative using Camoufox browser for bypassing anti-bot protections. Used by Prowlarr and other \*arr apps.
 
 ```bash
 # Optional: Set custom owner
@@ -383,7 +393,7 @@ bash byparr.sh
 
 ### FlareSolverr
 
-Proxy server to bypass Cloudflare and DDoS-GUARD protection. Used by Prowlarr, Jackett, and other *arr apps to access protected indexers.
+Proxy server to bypass Cloudflare and DDoS-GUARD protection. Used by Prowlarr, Jackett, and other \*arr apps to access protected indexers.
 
 ```bash
 # Optional: Set custom owner
@@ -406,7 +416,7 @@ bash flaresolverr.sh
 
 ### Huntarr
 
-Automated media discovery tool that systematically searches for missing and upgradeable content across your *arr applications.
+Automated media discovery tool that systematically searches for missing and upgradeable content across your \*arr applications.
 
 ```bash
 # Optional: Set custom owner
@@ -419,7 +429,7 @@ bash huntarr.sh
 
 **Config:** `/home/<user>/.config/Huntarr/env.conf`
 
-**Post-Install:** Configure your *arr app connections via the web UI.
+**Post-Install:** Configure your \*arr app connections via the web UI.
 
 ---
 
@@ -439,11 +449,13 @@ bash subgen.sh
 **Config:** `/home/<user>/.config/Subgen/env.conf`
 
 **Default Settings:**
+
 - Model: `medium` (balance of speed and accuracy)
 - Device: `cpu` (GPU can be enabled by editing env.conf)
 - Format: `srt`
 
 **Media Server Setup:**
+
 - **Plex:** Settings → Webhooks → Add `http://127.0.0.1:<port>/webhook`
 - **Jellyfin:** Plugins → Webhook → Add endpoint
 - **Emby:** Server → Webhooks → Add URL
@@ -469,12 +481,13 @@ bash zurg.sh
 **Config:** `/home/<user>/.config/zurg/config.yml`
 
 **Services:**
+
 - `zurg.service` - The WebDAV server
 - `rclone-zurg.service` - The filesystem mount
 
 **Get your API token:** https://real-debrid.com/apitoken
 
-**Usage with *arr apps:** Point your *arr applications to `/mnt/zurg` for accessing Real-Debrid content.
+**Usage with \*arr apps:** Point your \*arr applications to `/mnt/zurg` for accessing Real-Debrid content.
 
 ---
 
@@ -502,6 +515,7 @@ bash dns-fix.sh --revert
 ```
 
 **What it does:**
+
 - Configures system to use public DNS (8.8.8.8, 1.1.1.1)
 - Optionally disables IPv6 (can cause resolution mismatches)
 - Backs up original configuration
@@ -533,6 +547,7 @@ bash emby-watchdog.sh --remove
 ```
 
 **How it works:**
+
 1. Cron runs every 2 minutes
 2. Checks process state (`systemctl is-active`)
 3. Checks HTTP health endpoint (configurable URL + expected response)
@@ -553,6 +568,7 @@ bash emby-watchdog.sh --remove
 | `/etc/cron.d/emby-watchdog` | Cron job |
 
 **Status output example:**
+
 ```
 Emby Watchdog Status
 ━━━━━━━━━━━━━━━━━━━━
@@ -566,30 +582,91 @@ State:       monitoring
 
 ---
 
+### Backup System
+
+Automated backup system for Swizzin servers with dual-destination redundancy, dynamic app discovery, and GFS retention.
+
+```bash
+# Copy backup folder to server and run installer
+cd backup/
+bash swizzin-backup-install.sh
+
+# Run backup manually
+swizzin-backup run
+
+# Check status
+swizzin-backup status
+
+# List available snapshots
+swizzin-backup list
+
+# Preview what would be backed up
+swizzin-backup discover
+
+# Restore (interactive wizard)
+swizzin-restore
+```
+
+**Features:**
+
+- Dual destinations: Google Drive (offsite) + Windows Server via SFTP
+- Dynamic app discovery via lock files
+- Multi-instance support (sonarr-4k, radarr-anime, etc.)
+- Symlink preservation for \*arr root folders
+- Smart exclusions (VFS caches, transcodes, regenerable data)
+- GFS rotation: 7 daily, 4 weekly, 3 monthly snapshots
+- Pushover notifications
+- Encrypted backups via restic (AES-256)
+
+**What gets backed up:**
+
+- Swizzin core, nginx, Let's Encrypt, systemd, cron
+- All \*arr apps (configs, databases, multi-instance)
+- Media servers (Plex, Emby, Jellyfin - config + DB only)
+- Custom apps (Notifiarr, Decypharr, Zurg, etc.)
+- Decypharr downloads and \*arr root folder symlinks
+
+**What's excluded:**
+
+- VFS caches (256GB+)
+- Media server caches and transcodes
+- Mount points (cloud data)
+
+**Restore modes:**
+
+- Full restore - rebuild entire server
+- App restore - single app only
+- Config restore - configs only, preserve databases
+- Browse files - interactive selection
+
+See [backup/README.md](backup/README.md) for full documentation.
+
+---
+
 ## Environment Variables
 
 All scripts now use **interactive prompts** for required values. Environment variables can be used to bypass prompts for automation.
 
-| Variable | Script | Description |
-|----------|--------|-------------|
-| `PLEX_DOMAIN` | plex.sh | Public FQDN for Plex (bypasses prompt) |
-| `PLEX_LE_HOSTNAME` | plex.sh | Let's Encrypt hostname (defaults to domain) |
-| `PLEX_LE_INTERACTIVE` | plex.sh | Set to `yes` for interactive LE (CloudFlare DNS) |
-| `EMBY_DOMAIN` | emby.sh | Public FQDN for Emby (bypasses prompt) |
-| `EMBY_LE_HOSTNAME` | emby.sh | Let's Encrypt hostname |
-| `EMBY_LE_INTERACTIVE` | emby.sh | Set to `yes` for interactive LE |
-| `JELLYFIN_DOMAIN` | jellyfin.sh | Public FQDN for Jellyfin (bypasses prompt) |
-| `JELLYFIN_LE_HOSTNAME` | jellyfin.sh | Let's Encrypt hostname |
-| `JELLYFIN_LE_INTERACTIVE` | jellyfin.sh | Set to `yes` for interactive LE |
-| `ORGANIZR_DOMAIN` | organizr.sh | Public FQDN for Organizr (bypasses prompt) |
-| `ORGANIZR_LE_HOSTNAME` | organizr.sh | Let's Encrypt hostname |
-| `ORGANIZR_LE_INTERACTIVE` | organizr.sh | Set to `yes` for interactive LE |
-| `SEERR_DOMAIN` | seerr.sh | Public FQDN for Seerr (bypasses prompt) |
-| `SEERR_LE_HOSTNAME` | seerr.sh | Let's Encrypt hostname |
-| `SEERR_LE_INTERACTIVE` | seerr.sh | Set to `yes` for interactive LE |
-| `DN_API_KEY` | notifiarr.sh | Notifiarr.com API key (prompted if not set) |
-| `RD_TOKEN` | zurg.sh | Real-Debrid API token (prompted if not set) |
-| `<APP>_OWNER` | All | Application owner username (defaults to master user) |
+| Variable                  | Script       | Description                                          |
+| ------------------------- | ------------ | ---------------------------------------------------- |
+| `PLEX_DOMAIN`             | plex.sh      | Public FQDN for Plex (bypasses prompt)               |
+| `PLEX_LE_HOSTNAME`        | plex.sh      | Let's Encrypt hostname (defaults to domain)          |
+| `PLEX_LE_INTERACTIVE`     | plex.sh      | Set to `yes` for interactive LE (CloudFlare DNS)     |
+| `EMBY_DOMAIN`             | emby.sh      | Public FQDN for Emby (bypasses prompt)               |
+| `EMBY_LE_HOSTNAME`        | emby.sh      | Let's Encrypt hostname                               |
+| `EMBY_LE_INTERACTIVE`     | emby.sh      | Set to `yes` for interactive LE                      |
+| `JELLYFIN_DOMAIN`         | jellyfin.sh  | Public FQDN for Jellyfin (bypasses prompt)           |
+| `JELLYFIN_LE_HOSTNAME`    | jellyfin.sh  | Let's Encrypt hostname                               |
+| `JELLYFIN_LE_INTERACTIVE` | jellyfin.sh  | Set to `yes` for interactive LE                      |
+| `ORGANIZR_DOMAIN`         | organizr.sh  | Public FQDN for Organizr (bypasses prompt)           |
+| `ORGANIZR_LE_HOSTNAME`    | organizr.sh  | Let's Encrypt hostname                               |
+| `ORGANIZR_LE_INTERACTIVE` | organizr.sh  | Set to `yes` for interactive LE                      |
+| `SEERR_DOMAIN`            | seerr.sh     | Public FQDN for Seerr (bypasses prompt)              |
+| `SEERR_LE_HOSTNAME`       | seerr.sh     | Let's Encrypt hostname                               |
+| `SEERR_LE_INTERACTIVE`    | seerr.sh     | Set to `yes` for interactive LE                      |
+| `DN_API_KEY`              | notifiarr.sh | Notifiarr.com API key (prompted if not set)          |
+| `RD_TOKEN`                | zurg.sh      | Real-Debrid API token (prompted if not set)          |
+| `<APP>_OWNER`             | All          | Application owner username (defaults to master user) |
 
 ## Panel Integration
 
@@ -611,6 +688,7 @@ bash <script>.sh --remove
 ```
 
 This will:
+
 - Stop and disable all related services
 - Remove the application binary/directory
 - Remove nginx configuration
@@ -653,6 +731,7 @@ bash <app>.sh --remove
 ### Python Apps (uv-based)
 
 Byparr, Huntarr, and Subgen use [uv](https://github.com/astral-sh/uv) for Python version and dependency management:
+
 - uv is installed per-user at `~/.local/bin/uv`
 - Applications are cloned to `/opt/<appname>`
 - Systemd runs apps via `uv run python main.py`

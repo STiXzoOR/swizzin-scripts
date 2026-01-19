@@ -29,12 +29,12 @@ Each installer script follows a consistent pattern:
 
 ### Files
 
-- **cleanuparr.sh** - Installs Cleanuparr (download queue cleanup for *arr apps)
+- **cleanuparr.sh** - Installs Cleanuparr (download queue cleanup for \*arr apps)
 - **decypharr.sh** - Installs Decypharr (encrypted file/torrent management via rclone)
 - **notifiarr.sh** - Installs Notifiarr client (notification relay for Starr apps)
 - **seerr.sh** - Extended Seerr installer with subdomain support (media request platform)
 - **byparr.sh** - Installs Byparr (FlareSolverr alternative, uses uv + Python 3.13)
-- **huntarr.sh** - Installs Huntarr (automated media discovery for *arr apps, uses uv)
+- **huntarr.sh** - Installs Huntarr (automated media discovery for \*arr apps, uses uv)
 - **subgen.sh** - Installs Subgen (Whisper-based subtitle generation, uses uv + ffmpeg)
 - **zurg.sh** - Installs Zurg (Real-Debrid WebDAV server + rclone mount)
 - **organizr.sh** - Extended Organizr installer with subdomain and SSO support
@@ -46,10 +46,12 @@ Each installer script follows a consistent pattern:
 - **panel_helpers.sh** - Shared utility for Swizzin panel app registration
 - **watchdog.sh** - Generic service watchdog with health checks and notifications
 - **emby-watchdog.sh** - Emby-specific watchdog installer/manager
+- **backup/** - Automated backup system with dual destinations and GFS rotation
 
 ### Python Apps (uv-based)
 
 Byparr, Huntarr, and Subgen use `uv` for Python version and dependency management:
+
 - uv is installed per-user at `~/.local/bin/uv`
 - Apps are cloned to `/opt/<appname>`
 - Dependencies installed via `uv sync` or `uv add`
@@ -58,6 +60,7 @@ Byparr, Huntarr, and Subgen use `uv` for Python version and dependency managemen
 ### Zurg (Real-Debrid)
 
 Zurg creates two systemd services:
+
 - `zurg.service` - The WebDAV server
 - `rclone-zurg.service` - The rclone filesystem mount at `/mnt/zurg`
 
@@ -66,6 +69,7 @@ Zurg creates two systemd services:
 Media server scripts (plex.sh, emby.sh, jellyfin.sh, organizr.sh, seerr.sh) follow a unified pattern:
 
 **Usage:**
+
 ```bash
 bash <app>.sh                    # Interactive setup - installs app, asks about features
 bash <app>.sh --subdomain        # Convert to subdomain mode (prompts for domain)
@@ -74,6 +78,7 @@ bash <app>.sh --remove [--force]    # Complete removal
 ```
 
 **Script structure:**
+
 - `_get_domain()` / `_prompt_domain()` - Domain management with swizdb persistence
 - `_prompt_le_mode()` - Let's Encrypt mode selection (interactive vs automatic)
 - `_get_install_state()` - Detect current state (not_installed, subfolder, subdomain)
@@ -83,6 +88,7 @@ bash <app>.sh --remove [--force]    # Complete removal
 - `_remove()` - Complete removal
 
 **Environment variable bypass:** All prompts can be bypassed via environment variables:
+
 - `<APP>_DOMAIN` - Skip domain prompt
 - `<APP>_LE_HOSTNAME` - Custom Let's Encrypt hostname (defaults to domain)
 - `<APP>_LE_INTERACTIVE` - Set to "yes" for interactive LE (CloudFlare DNS)
@@ -90,6 +96,7 @@ bash <app>.sh --remove [--force]    # Complete removal
 ### Organizr (SSO Gateway)
 
 organizr.sh is an extended installer that:
+
 - Runs `box install organizr` first if Organizr isn't installed
 - Converts from subfolder (`/organizr`) to subdomain mode
 - Uses Organizr as SSO authentication gateway for other apps via `auth_request`
@@ -97,6 +104,7 @@ organizr.sh is an extended installer that:
 - Backups at `/opt/swizzin/organizr-backups/`
 
 **Flags:**
+
 - `--subdomain` - Convert to subdomain mode
 - `--subdomain --revert` - Revert to subfolder mode
 - `--configure` - Modify which apps are protected
@@ -106,6 +114,7 @@ organizr.sh is an extended installer that:
 **Auth levels:** 0=Admin, 1=Co-Admin, 2=Super User, 3=Power User, 4=User, 998=Logged In
 
 **Key files:**
+
 - `/etc/nginx/sites-available/organizr` - Subdomain vhost with auth endpoint
 - `/etc/nginx/snippets/organizr-apps.conf` - Dynamic includes (excludes panel.conf)
 - `/opt/swizzin/organizr-auth.conf` - Protected apps configuration
@@ -119,12 +128,14 @@ organizr.sh is an extended installer that:
 emby.sh includes Emby Premiere bypass functionality:
 
 **Usage:**
+
 ```bash
 bash emby.sh --premiere           # Enable Premiere bypass
 bash emby.sh --premiere --revert  # Disable Premiere bypass
 ```
 
 **How it works:**
+
 1. Retrieves Emby ServerId from API or config file
 2. Computes Premiere key: `MD5("MBSupporter" + serverId + "Ae3#fP!wi")`
 3. Generates self-signed SSL cert for `mb3admin.com`
@@ -133,12 +144,14 @@ bash emby.sh --premiere --revert  # Disable Premiere bypass
 6. Patches `/etc/hosts` to redirect `mb3admin.com` to localhost
 
 **Key files:**
+
 - `/etc/nginx/ssl/mb3admin.com/` - Self-signed certificate
 - `/usr/local/share/ca-certificates/mb3admin.crt` - CA trust entry
 - `/etc/nginx/sites-available/mb3admin.com` - Validation nginx site
 - `/etc/hosts.emby-premiere.bak` - Hosts file backup
 
 **Endpoints handled:**
+
 - `/admin/service/registration/validateDevice`
 - `/admin/service/registration/validate`
 - `/admin/service/registration/getStatus`
@@ -158,12 +171,14 @@ plex.sh, emby.sh, and jellyfin.sh follow a common pattern:
 - Exclude app from Organizr SSO protection (removes from both `/opt/swizzin/organizr-auth.conf` and `/etc/nginx/snippets/organizr-apps.conf`)
 
 **Ports:**
+
 - Plex: 32400 (HTTP)
 - Emby: 8096 (HTTP)
 - Jellyfin: 8922 (HTTPS)
 
 **Nginx features per app:**
-- **Plex**: X-Plex-* proxy headers, `/library/streams/` location
+
+- **Plex**: X-Plex-\* proxy headers, `/library/streams/` location
 - **Emby**: Range/If-Range headers for streaming
 - **Jellyfin**: WebSocket `/socket` location, WebOS CORS headers, Range/If-Range headers, `/metrics` with private network ACL
 
@@ -172,6 +187,7 @@ plex.sh, emby.sh, and jellyfin.sh follow a common pattern:
 sonarr.sh and radarr.sh manage multiple named instances of Sonarr/Radarr:
 
 **Commands:**
+
 ```bash
 sonarr.sh                      # Install base if needed, then add instances interactively
 sonarr.sh --add [name]         # Add a named instance (e.g., 4k, anime, kids)
@@ -190,6 +206,7 @@ sonarr.sh --list               # List all instances with ports
 | Lock file | `/install/.sonarr-<name>.lock` | `/install/.sonarr-4k.lock` |
 
 **Instance name validation:**
+
 - Alphanumeric only (a-z, 0-9), converted to lowercase
 - Checked against existing lock files for uniqueness
 - Reserved words blocked: "base"
@@ -210,12 +227,14 @@ sonarr.sh --list               # List all instances with ports
 A cron-based monitoring system that checks service health and automatically restarts unhealthy services with cooldown protection.
 
 **Components:**
+
 - `watchdog.sh` - Generic engine (process + HTTP health checks, restart logic, notifications)
 - `emby-watchdog.sh` - Emby-specific installer/manager
 - `configs/watchdog.conf.example` - Global config template
 - `configs/emby-watchdog.conf.example` - Emby config template
 
 **Usage:**
+
 ```bash
 bash emby-watchdog.sh              # Interactive setup
 bash emby-watchdog.sh --install    # Install watchdog for Emby
@@ -225,6 +244,7 @@ bash emby-watchdog.sh --reset      # Clear backoff state, resume monitoring
 ```
 
 **How it works:**
+
 1. Cron runs `watchdog.sh` every 2 minutes
 2. Checks if process is running (`systemctl is-active`)
 3. Checks HTTP health endpoint (`curl` + response validation)
@@ -244,6 +264,69 @@ bash emby-watchdog.sh --reset      # Clear backoff state, resume monitoring
 
 **Adding new services:** Create a new wrapper script (copy `emby-watchdog.sh`) and adjust `SERVICE_NAME`, `HEALTH_URL`, and `HEALTH_EXPECT` for the target service.
 
+### Backup System
+
+Automated backup system using restic with dual-destination support.
+
+**Directory structure:**
+
+```
+backup/
+├── swizzin-backup-install.sh    # Interactive installer
+├── swizzin-backup.sh            # Main backup script
+├── swizzin-restore.sh           # Restore script
+├── configs/
+│   ├── backup.conf.example      # Configuration template
+│   ├── app-registry.conf        # App → path mappings
+│   └── excludes.conf            # Global exclusions
+└── hooks/
+    ├── pre-backup.sh.example    # Pre-backup hook
+    └── post-backup.sh.example   # Post-backup hook
+```
+
+**Runtime files (on server):**
+| File | Purpose |
+|------|---------|
+| `/opt/swizzin/backup/` | Installation directory |
+| `/opt/swizzin/backup/backup.conf` | Configuration |
+| `/opt/swizzin/backup/manifests/` | Generated symlink/path manifests |
+| `/root/.swizzin-backup-password` | Restic encryption password |
+| `/etc/cron.d/swizzin-backup` | Daily cron job |
+| `/var/log/swizzin-backup.log` | Backup log |
+
+**App discovery:** Uses lock files (`/install/.<app>.lock`) as source of truth. Multi-instance apps use underscore separator (`.sonarr_4k.lock`).
+
+**App registry format (`app-registry.conf`):**
+
+```
+APP|CONFIG_PATHS|DATA_PATHS|EXCLUDES|TYPE
+sonarr|/home/*/.config/Sonarr/|/opt/Sonarr/|*.pid,logs/*|arr
+```
+
+**Dynamic path resolution:**
+
+- `DYNAMIC:decypharr_downloads` - Reads from Decypharr config.json
+- `DYNAMIC:arr_root_folders` - Queries SQLite RootFolders table
+- `SWIZDB:key` - Reads from swizdb
+
+**Backup targets:**
+
+- Google Drive via rclone backend
+- Windows Server via SFTP (OpenSSH)
+
+**Retention (GFS):** 7 daily, 4 weekly, 3 monthly snapshots
+
+**Commands:**
+
+```bash
+swizzin-backup run              # Run backup
+swizzin-backup discover         # Preview paths
+swizzin-backup list             # List snapshots
+swizzin-backup status           # Show status
+swizzin-restore                 # Interactive restore
+swizzin-restore --app sonarr    # Restore single app
+```
+
 ### Key Swizzin Functions Used
 
 ```bash
@@ -259,26 +342,26 @@ ask "question?" Y/N          # Interactive yes/no prompts
 
 ### Environment Variables
 
-| Script | Variable | Description |
-|--------|----------|-------------|
-| plex.sh | `PLEX_DOMAIN` | Public FQDN (bypasses prompt) |
-| plex.sh | `PLEX_LE_HOSTNAME` | Let's Encrypt hostname (defaults to domain) |
-| plex.sh | `PLEX_LE_INTERACTIVE` | Set to `yes` for interactive LE (CloudFlare DNS) |
-| emby.sh | `EMBY_DOMAIN` | Public FQDN (bypasses prompt) |
-| emby.sh | `EMBY_LE_HOSTNAME` | Let's Encrypt hostname |
-| emby.sh | `EMBY_LE_INTERACTIVE` | Set to `yes` for interactive LE |
-| jellyfin.sh | `JELLYFIN_DOMAIN` | Public FQDN (bypasses prompt) |
-| jellyfin.sh | `JELLYFIN_LE_HOSTNAME` | Let's Encrypt hostname |
-| jellyfin.sh | `JELLYFIN_LE_INTERACTIVE` | Set to `yes` for interactive LE |
-| organizr.sh | `ORGANIZR_DOMAIN` | Public FQDN (bypasses prompt) |
-| organizr.sh | `ORGANIZR_LE_HOSTNAME` | Let's Encrypt hostname |
-| organizr.sh | `ORGANIZR_LE_INTERACTIVE` | Set to `yes` for interactive LE |
-| seerr.sh | `SEERR_DOMAIN` | Public FQDN (bypasses prompt) |
-| seerr.sh | `SEERR_LE_HOSTNAME` | Let's Encrypt hostname |
-| seerr.sh | `SEERR_LE_INTERACTIVE` | Set to `yes` for interactive LE |
-| notifiarr.sh | `DN_API_KEY` | Notifiarr.com API key (prompted if not set) |
-| zurg.sh | Real-Debrid token | Real-Debrid API token (prompted if not set) |
-| All scripts | `<APP>_OWNER` | App owner username (defaults to master user) |
+| Script       | Variable                  | Description                                      |
+| ------------ | ------------------------- | ------------------------------------------------ |
+| plex.sh      | `PLEX_DOMAIN`             | Public FQDN (bypasses prompt)                    |
+| plex.sh      | `PLEX_LE_HOSTNAME`        | Let's Encrypt hostname (defaults to domain)      |
+| plex.sh      | `PLEX_LE_INTERACTIVE`     | Set to `yes` for interactive LE (CloudFlare DNS) |
+| emby.sh      | `EMBY_DOMAIN`             | Public FQDN (bypasses prompt)                    |
+| emby.sh      | `EMBY_LE_HOSTNAME`        | Let's Encrypt hostname                           |
+| emby.sh      | `EMBY_LE_INTERACTIVE`     | Set to `yes` for interactive LE                  |
+| jellyfin.sh  | `JELLYFIN_DOMAIN`         | Public FQDN (bypasses prompt)                    |
+| jellyfin.sh  | `JELLYFIN_LE_HOSTNAME`    | Let's Encrypt hostname                           |
+| jellyfin.sh  | `JELLYFIN_LE_INTERACTIVE` | Set to `yes` for interactive LE                  |
+| organizr.sh  | `ORGANIZR_DOMAIN`         | Public FQDN (bypasses prompt)                    |
+| organizr.sh  | `ORGANIZR_LE_HOSTNAME`    | Let's Encrypt hostname                           |
+| organizr.sh  | `ORGANIZR_LE_INTERACTIVE` | Set to `yes` for interactive LE                  |
+| seerr.sh     | `SEERR_DOMAIN`            | Public FQDN (bypasses prompt)                    |
+| seerr.sh     | `SEERR_LE_HOSTNAME`       | Let's Encrypt hostname                           |
+| seerr.sh     | `SEERR_LE_INTERACTIVE`    | Set to `yes` for interactive LE                  |
+| notifiarr.sh | `DN_API_KEY`              | Notifiarr.com API key (prompted if not set)      |
+| zurg.sh      | Real-Debrid token         | Real-Debrid API token (prompted if not set)      |
+| All scripts  | `<APP>_OWNER`             | App owner username (defaults to master user)     |
 
 ## Conventions
 
@@ -293,6 +376,7 @@ ask "question?" Y/N          # Interactive yes/no prompts
 Most installers use `port 10000 12000` to find an available port in the 10000-12000 range.
 
 **Fixed ports:**
+
 - **Byparr**: 8191 (FlareSolverr compatibility)
 - **Zurg**: 9999 (WebDAV server default)
 
@@ -310,6 +394,7 @@ Most installers use `port 10000 12000` to find an available port in the 10000-12
 For apps with their own logo, set `app_icon_name="$app_name"` and `app_icon_url` to the icon URL.
 
 For apps without a logo, use the placeholder (automatically downloaded by `panel_helpers.sh`):
+
 ```bash
 app_icon_name="placeholder"
 app_icon_url=""
@@ -318,6 +403,7 @@ app_icon_url=""
 ### ShellCheck
 
 Scripts source Swizzin globals and utilities:
+
 ```bash
 . /etc/swizzin/sources/globals.sh
 
@@ -328,12 +414,14 @@ Scripts source Swizzin globals and utilities:
 ### Coding Standards
 
 **Bracket style:** Use Bash `[[ ]]` for conditionals in new code, but `[ ]` is acceptable:
+
 ```bash
 if [[ -f "$file" ]]; then
 if [ -n "$var" ]; then
 ```
 
 **Variable quoting:** Always quote variables and use braces for clarity:
+
 ```bash
 touch "$log"
 chown "${user}:${user}" "$config_dir"
@@ -341,6 +429,7 @@ mkdir -p "${app_dir}/${app_name}"
 ```
 
 **Confirmations:** Use Swizzin's `ask` function for yes/no prompts:
+
 ```bash
 if ask "Would you like to purge the configuration?" N; then
     rm -rf "$config_dir"
@@ -348,6 +437,7 @@ fi
 ```
 
 **Panel helper loading:** Use the download-and-cache pattern:
+
 ```bash
 PANEL_HELPER_LOCAL="/opt/swizzin/panel_helpers.sh"
 PANEL_HELPER_URL="https://raw.githubusercontent.com/STiXzoOR/swizzin-scripts/main/panel_helpers.sh"
@@ -369,14 +459,15 @@ _load_panel_helper() {
 
 The `templates/` directory contains starter templates for common script types:
 
-| Template | Use Case | Examples |
-|----------|----------|----------|
-| `template-binary.sh` | Single binary apps installed to `/usr/bin` | decypharr, notifiarr |
-| `template-python.sh` | Python apps using uv for dependencies | byparr, huntarr, subgen |
-| `template-subdomain.sh` | Extended installers with subdomain support | plex, emby, jellyfin |
-| `template-multiinstance.sh` | Managing multiple instances of a base app | sonarr, radarr |
+| Template                    | Use Case                                   | Examples                |
+| --------------------------- | ------------------------------------------ | ----------------------- |
+| `template-binary.sh`        | Single binary apps installed to `/usr/bin` | decypharr, notifiarr    |
+| `template-python.sh`        | Python apps using uv for dependencies      | byparr, huntarr, subgen |
+| `template-subdomain.sh`     | Extended installers with subdomain support | plex, emby, jellyfin    |
+| `template-multiinstance.sh` | Managing multiple instances of a base app  | sonarr, radarr          |
 
 Each template includes:
+
 - Detailed header with customization points (marked `# CUSTOMIZE:`)
 - Standard function structure
 - Inline documentation
