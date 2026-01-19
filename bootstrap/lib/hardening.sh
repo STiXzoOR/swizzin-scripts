@@ -67,7 +67,12 @@ EOF
     fi
 
     echo_progress_start "Restarting SSH service"
-    systemctl restart sshd
+    # Ubuntu uses ssh.service, RHEL/CentOS uses sshd.service
+    if systemctl list-units --type=service | grep -q "ssh.service"; then
+        systemctl restart ssh
+    else
+        systemctl restart sshd
+    fi
     echo_progress_done "SSH service restarted"
 
     echo_success "SSH hardened on port $ssh_port"

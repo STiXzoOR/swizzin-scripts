@@ -30,7 +30,12 @@ restore_ssh() {
     # Validate and restart
     if sshd -t &>/dev/null; then
         echo_progress_start "Restarting SSH service"
-        systemctl restart sshd
+        # Ubuntu uses ssh.service, RHEL/CentOS uses sshd.service
+        if systemctl list-units --type=service | grep -q "ssh.service"; then
+            systemctl restart ssh
+        else
+            systemctl restart sshd
+        fi
         echo_progress_done "SSH service restarted"
     else
         echo_error "SSH config is invalid after restore!"
