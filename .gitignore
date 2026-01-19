@@ -13,3 +13,6 @@ local/
 
 # Logs
 *.log
+
+# Bootstrap config (contains secrets)
+bootstrap/configs/bootstrap.conf
