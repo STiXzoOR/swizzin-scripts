@@ -694,7 +694,7 @@ collect_app_config() {
     if [[ " ${SELECTED_APPS[*]} " =~ " zurg " ]]; then
         echo_info "Zurg requires Real-Debrid API token"
 
-        if [[ -z "${APP_ENV[RD_TOKEN]}" ]]; then
+        if [[ -z "${APP_ENV[RD_TOKEN]:-}" ]]; then
             APP_ENV[RD_TOKEN]=$(prompt_secret "Real-Debrid API token (from https://real-debrid.com/apitoken)")
         fi
 
@@ -711,7 +711,7 @@ collect_app_config() {
 
     # Collect Notifiarr config if selected
     if [[ " ${SELECTED_APPS[*]} " =~ " notifiarr " ]]; then
-        if [[ -z "${APP_ENV[DN_API_KEY]}" ]]; then
+        if [[ -z "${APP_ENV[DN_API_KEY]:-}" ]]; then
             APP_ENV[DN_API_KEY]=$(prompt_secret "Notifiarr API key (from notifiarr.com)")
         fi
     fi
@@ -829,32 +829,32 @@ _export_app_env() {
     # Export relevant environment variables
     case "$app" in
         zurg)
-            [[ -n "${APP_ENV[RD_TOKEN]}" ]] && export RD_TOKEN="${APP_ENV[RD_TOKEN]}"
-            [[ -n "${APP_ENV[ZURG_VERSION]}" ]] && export ZURG_VERSION="${APP_ENV[ZURG_VERSION]}"
-            [[ -n "${APP_ENV[GITHUB_TOKEN]}" ]] && export GITHUB_TOKEN="${APP_ENV[GITHUB_TOKEN]}"
-            [[ -n "${APP_ENV[ZURG_MOUNT_POINT]}" ]] && export ZURG_MOUNT_POINT="${APP_ENV[ZURG_MOUNT_POINT]}"
+            [[ -n "${APP_ENV[RD_TOKEN]:-}" ]] && export RD_TOKEN="${APP_ENV[RD_TOKEN]}"
+            [[ -n "${APP_ENV[ZURG_VERSION]:-}" ]] && export ZURG_VERSION="${APP_ENV[ZURG_VERSION]}"
+            [[ -n "${APP_ENV[GITHUB_TOKEN]:-}" ]] && export GITHUB_TOKEN="${APP_ENV[GITHUB_TOKEN]}"
+            [[ -n "${APP_ENV[ZURG_MOUNT_POINT]:-}" ]] && export ZURG_MOUNT_POINT="${APP_ENV[ZURG_MOUNT_POINT]}"
             ;;
         decypharr)
-            [[ -n "${APP_ENV[ZURG_MOUNT_POINT]}" ]] && export DECYPHARR_MOUNT_PATH="${APP_ENV[ZURG_MOUNT_POINT]}"
+            [[ -n "${APP_ENV[ZURG_MOUNT_POINT]:-}" ]] && export DECYPHARR_MOUNT_PATH="${APP_ENV[ZURG_MOUNT_POINT]}"
             ;;
         notifiarr)
-            [[ -n "${APP_ENV[DN_API_KEY]}" ]] && export DN_API_KEY="${APP_ENV[DN_API_KEY]}"
+            [[ -n "${APP_ENV[DN_API_KEY]:-}" ]] && export DN_API_KEY="${APP_ENV[DN_API_KEY]}"
             ;;
         plex)
-            [[ -n "${APP_ENV[PLEX_DOMAIN]}" ]] && export PLEX_DOMAIN="${APP_ENV[PLEX_DOMAIN]}"
-            [[ -n "${APP_ENV[PLEX_LE_INTERACTIVE]}" ]] && export PLEX_LE_INTERACTIVE="${APP_ENV[PLEX_LE_INTERACTIVE]}"
+            [[ -n "${APP_ENV[PLEX_DOMAIN]:-}" ]] && export PLEX_DOMAIN="${APP_ENV[PLEX_DOMAIN]}"
+            [[ -n "${APP_ENV[PLEX_LE_INTERACTIVE]:-}" ]] && export PLEX_LE_INTERACTIVE="${APP_ENV[PLEX_LE_INTERACTIVE]}"
             ;;
         emby)
-            [[ -n "${APP_ENV[EMBY_DOMAIN]}" ]] && export EMBY_DOMAIN="${APP_ENV[EMBY_DOMAIN]}"
-            [[ -n "${APP_ENV[EMBY_LE_INTERACTIVE]}" ]] && export EMBY_LE_INTERACTIVE="${APP_ENV[EMBY_LE_INTERACTIVE]}"
+            [[ -n "${APP_ENV[EMBY_DOMAIN]:-}" ]] && export EMBY_DOMAIN="${APP_ENV[EMBY_DOMAIN]}"
+            [[ -n "${APP_ENV[EMBY_LE_INTERACTIVE]:-}" ]] && export EMBY_LE_INTERACTIVE="${APP_ENV[EMBY_LE_INTERACTIVE]}"
             ;;
         jellyfin)
-            [[ -n "${APP_ENV[JELLYFIN_DOMAIN]}" ]] && export JELLYFIN_DOMAIN="${APP_ENV[JELLYFIN_DOMAIN]}"
-            [[ -n "${APP_ENV[JELLYFIN_LE_INTERACTIVE]}" ]] && export JELLYFIN_LE_INTERACTIVE="${APP_ENV[JELLYFIN_LE_INTERACTIVE]}"
+            [[ -n "${APP_ENV[JELLYFIN_DOMAIN]:-}" ]] && export JELLYFIN_DOMAIN="${APP_ENV[JELLYFIN_DOMAIN]}"
+            [[ -n "${APP_ENV[JELLYFIN_LE_INTERACTIVE]:-}" ]] && export JELLYFIN_LE_INTERACTIVE="${APP_ENV[JELLYFIN_LE_INTERACTIVE]}"
             ;;
         organizr)
-            [[ -n "${APP_ENV[ORGANIZR_DOMAIN]}" ]] && export ORGANIZR_DOMAIN="${APP_ENV[ORGANIZR_DOMAIN]}"
-            [[ -n "${APP_ENV[ORGANIZR_LE_INTERACTIVE]}" ]] && export ORGANIZR_LE_INTERACTIVE="${APP_ENV[ORGANIZR_LE_INTERACTIVE]}"
+            [[ -n "${APP_ENV[ORGANIZR_DOMAIN]:-}" ]] && export ORGANIZR_DOMAIN="${APP_ENV[ORGANIZR_DOMAIN]}"
+            [[ -n "${APP_ENV[ORGANIZR_LE_INTERACTIVE]:-}" ]] && export ORGANIZR_LE_INTERACTIVE="${APP_ENV[ORGANIZR_LE_INTERACTIVE]}"
             ;;
     esac
 }
