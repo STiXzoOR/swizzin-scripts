@@ -472,8 +472,6 @@ _install_zurg() {
 		RD_TOKEN=$(grep -E '^token: ' "$app_configdir/config.yml" | sed 's/token: //')
 	fi
 
-	echo_progress_start "Downloading $zurg_version release archive"
-
 	case "$(_os_arch)" in
 	"amd64") arch='linux-amd64' ;;
 	"arm64") arch="linux-arm64" ;;
@@ -491,15 +489,36 @@ _install_zurg() {
 		zurg_repo="debridmediamanager/zurg-testing"
 	fi
 
+	# Determine release endpoint (latest or specific tag)
+	local release_endpoint
+	if [ -n "$ZURG_VERSION_TAG" ]; then
+		release_endpoint="repos/$zurg_repo/releases/tags/$ZURG_VERSION_TAG"
+		echo_progress_start "Downloading $zurg_version version $ZURG_VERSION_TAG"
+	else
+		release_endpoint="repos/$zurg_repo/releases/latest"
+		echo_progress_start "Downloading $zurg_version latest release"
+	fi
+
 	# Download release
 	if [ "$zurg_version" = "paid" ]; then
 		# Paid version requires authentication
 		if [ "$github_token" = "gh_cli" ]; then
 			# Use gh CLI
-			latest=$(gh api "repos/$zurg_repo/releases/latest" --jq ".assets[] | select(.name | contains(\"$arch\")) | .url") || {
-				echo_error "Failed to query GitHub for latest version"
+			local release_info
+			release_info=$(gh api "$release_endpoint" 2>>"$log") || {
+				echo_error "Failed to query GitHub for release"
 				exit 1
 			}
+			local tag_name
+			tag_name=$(echo "$release_info" | jq -r '.tag_name')
+			echo_info "Found release: $tag_name"
+
+			latest=$(echo "$release_info" | jq -r ".assets[] | select(.name | contains(\"$arch\")) | .url")
+			if [ -z "$latest" ]; then
+				echo_error "Could not find release asset for $arch"
+				exit 1
+			fi
+
 			if ! gh api "$latest" -H "Accept: application/octet-stream" >/tmp/$app_name.zip 2>>"$log"; then
 				echo_error "Download failed, exiting"
 				exit 1
@@ -508,12 +527,21 @@ _install_zurg() {
 			# Use token - must use asset API URL, not browser_download_url for private repos
 			local release_json
 			release_json=$(curl -sL -H "Authorization: token $github_token" \
-				"https://api.github.com/repos/$zurg_repo/releases/latest") || {
-				echo_error "Failed to query GitHub for latest version"
+				"https://api.github.com/$release_endpoint") || {
+				echo_error "Failed to query GitHub for release"
 				exit 1
 			}
 
-			# Get the asset API URL using jq if available, fallback to grep
+			# Show which version we're downloading
+			local tag_name
+			if command -v jq &>/dev/null; then
+				tag_name=$(echo "$release_json" | jq -r '.tag_name')
+			else
+				tag_name=$(echo "$release_json" | grep -o '"tag_name"[^,]*' | cut -d'"' -f4)
+			fi
+			echo_info "Found release: $tag_name"
+
+			# Get the asset API URL using jq if available, fallback to python
 			if command -v jq &>/dev/null; then
 				latest=$(echo "$release_json" | jq -r ".assets[] | select(.name | contains(\"$arch\")) | .url")
 			else
@@ -540,11 +568,23 @@ _install_zurg() {
 		fi
 	else
 		# Free version - no auth needed
-		latest=$(curl -sL "https://api.github.com/repos/$zurg_repo/releases/latest" | \
-			grep "browser_download_url" | grep "$arch" | cut -d \" -f4) || {
-			echo_error "Failed to query GitHub for latest version"
+		local release_json
+		release_json=$(curl -sL "https://api.github.com/$release_endpoint") || {
+			echo_error "Failed to query GitHub for release"
 			exit 1
 		}
+
+		# Show which version we're downloading
+		local tag_name
+		tag_name=$(echo "$release_json" | grep -o '"tag_name"[^,]*' | cut -d'"' -f4)
+		echo_info "Found release: $tag_name"
+
+		latest=$(echo "$release_json" | grep "browser_download_url" | grep "$arch" | cut -d \" -f4)
+		if [ -z "$latest" ]; then
+			echo_error "Could not find release asset for $arch"
+			exit 1
+		fi
+
 		if ! curl "$latest" -L -o "/tmp/$app_name.zip" >>"$log" 2>&1; then
 			echo_error "Download failed, exiting"
 			exit 1
