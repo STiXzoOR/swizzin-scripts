@@ -13,9 +13,26 @@ export log=/root/logs/swizzin.log
 touch "$log"
 
 app_name="jellyfin"
-app_port="8922"
 app_protocol="https"
 app_lockname="jellyfin"
+
+# ==============================================================================
+# Port Configuration (avoid conflict with Emby)
+# ==============================================================================
+# Emby uses: HTTP 8096, HTTPS 8920
+# Jellyfin default: HTTP 8096, HTTPS 8920
+# Swizzin default: HTTPS 8922
+# If emby installed: HTTP 8097, HTTPS 8923
+
+if [[ -f "/install/.emby.lock" ]]; then
+	app_port_http="8097"
+	app_port_https="8923"
+	echo_info "Emby detected - Jellyfin will use ports $app_port_http (HTTP) / $app_port_https (HTTPS)"
+else
+	app_port_http="8096"
+	app_port_https="8922"
+fi
+app_port="$app_port_https"
 
 backup_dir="/opt/swizzin/${app_name}-backups"
 subfolder_conf="/etc/nginx/apps/${app_name}.conf"
@@ -155,9 +172,81 @@ _install_app() {
 			echo_error "Failed to install ${app_name^}"
 			exit 1
 		}
+		# Configure ports if emby is installed
+		_configure_ports
 	else
 		echo_info "${app_name^} already installed"
+		# Check if ports need reconfiguration (emby installed after jellyfin)
+		if [[ -f "/install/.emby.lock" ]]; then
+			_configure_ports
+		fi
 	fi
+}
+
+# ==============================================================================
+# Port Configuration (for Emby coexistence)
+# ==============================================================================
+
+_configure_ports() {
+	# Only configure if we're using non-default ports (emby detected)
+	if [[ "$app_port_http" == "8096" ]]; then
+		return 0
+	fi
+
+	local network_xml="/var/lib/jellyfin/config/network.xml"
+
+	# Wait for Jellyfin to create its config
+	local wait_count=0
+	while [[ ! -f "$network_xml" ]] && (( wait_count < 30 )); do
+		sleep 1
+		(( wait_count++ ))
+	done
+
+	if [[ ! -f "$network_xml" ]]; then
+		echo_warn "Jellyfin network.xml not found, creating default config..."
+		mkdir -p "$(dirname "$network_xml")"
+		cat > "$network_xml" <<-XML
+			<?xml version="1.0" encoding="utf-8"?>
+			<NetworkConfiguration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+			  <BaseUrl />
+			  <EnableHttps>true</EnableHttps>
+			  <RequireHttps>false</RequireHttps>
+			  <InternalHttpPort>${app_port_http}</InternalHttpPort>
+			  <InternalHttpsPort>${app_port_https}</InternalHttpsPort>
+			  <PublicHttpPort>${app_port_http}</PublicHttpPort>
+			  <PublicHttpsPort>${app_port_https}</PublicHttpsPort>
+			  <EnableIPv4>true</EnableIPv4>
+			  <EnableIPv6>false</EnableIPv6>
+			</NetworkConfiguration>
+		XML
+		chown jellyfin:jellyfin "$network_xml"
+	else
+		echo_progress_start "Configuring Jellyfin ports (HTTP: $app_port_http, HTTPS: $app_port_https)"
+
+		# Update HTTP port
+		if grep -q "<InternalHttpPort>" "$network_xml"; then
+			sed -i "s|<InternalHttpPort>[0-9]*</InternalHttpPort>|<InternalHttpPort>${app_port_http}</InternalHttpPort>|g" "$network_xml"
+		fi
+		if grep -q "<PublicHttpPort>" "$network_xml"; then
+			sed -i "s|<PublicHttpPort>[0-9]*</PublicHttpPort>|<PublicHttpPort>${app_port_http}</PublicHttpPort>|g" "$network_xml"
+		fi
+
+		# Update HTTPS port
+		if grep -q "<InternalHttpsPort>" "$network_xml"; then
+			sed -i "s|<InternalHttpsPort>[0-9]*</InternalHttpsPort>|<InternalHttpsPort>${app_port_https}</InternalHttpsPort>|g" "$network_xml"
+		fi
+		if grep -q "<PublicHttpsPort>" "$network_xml"; then
+			sed -i "s|<PublicHttpsPort>[0-9]*</PublicHttpsPort>|<PublicHttpsPort>${app_port_https}</PublicHttpsPort>|g" "$network_xml"
+		fi
+
+		echo_progress_done "Jellyfin ports configured"
+	fi
+
+	# Restart Jellyfin to apply changes
+	echo_progress_start "Restarting Jellyfin to apply port changes"
+	systemctl restart jellyfin
+	sleep 3
+	echo_progress_done "Jellyfin restarted"
 }
 
 # ==============================================================================
@@ -165,19 +254,19 @@ _install_app() {
 # ==============================================================================
 
 _create_subfolder_config() {
-	cat >"$subfolder_conf" <<-'NGX'
+	cat >"$subfolder_conf" <<-NGX
 		location /jellyfin {
-		    proxy_pass https://127.0.0.1:8922;
+		    proxy_pass https://127.0.0.1:${app_port_https};
 		    proxy_pass_request_headers on;
-		    proxy_set_header Host $proxy_host;
+		    proxy_set_header Host \$proxy_host;
 		    proxy_http_version 1.1;
-		    proxy_set_header X-Real-IP $remote_addr;
-		    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-		    proxy_set_header X-Forwarded-Proto $scheme;
-		    proxy_set_header X-Forwarded-Protocol $scheme;
-		    proxy_set_header X-Forwarded-Host $http_host;
-		    proxy_set_header Upgrade $http_upgrade;
-		    proxy_set_header Connection $http_connection;
+		    proxy_set_header X-Real-IP \$remote_addr;
+		    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+		    proxy_set_header X-Forwarded-Proto \$scheme;
+		    proxy_set_header X-Forwarded-Protocol \$scheme;
+		    proxy_set_header X-Forwarded-Host \$http_host;
+		    proxy_set_header Upgrade \$http_upgrade;
+		    proxy_set_header Connection \$http_connection;
 		    proxy_set_header X-Forwarded-Ssl on;
 		    proxy_redirect off;
 		    proxy_buffering off;
