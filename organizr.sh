@@ -532,40 +532,45 @@ _protect_app() {
 	temp_conf=$(mktemp)
 
 	awk -v level="$auth_level" '
-	BEGIN { in_location = 0; buffer = ""; has_proxy = 0; added_global = 0 }
+	BEGIN { brace_depth = 0; buffer = ""; has_proxy = 0; added_global = 0 }
 
-	/location.*\{/ {
-		# Start of location block
-		in_location = 1
+	# Track brace depth for nested location blocks
+	/location.*\{/ && brace_depth == 0 {
+		# Start of top-level location block
+		brace_depth = 1
 		has_proxy = 0
 		buffer = $0 "\n"
 		next
 	}
 
-	in_location {
+	brace_depth > 0 {
 		buffer = buffer $0 "\n"
+
+		# Count braces to handle nested blocks
+		if (/\{/) brace_depth++
+		if (/\}/) brace_depth--
 
 		# Check if this block has proxy_pass (real content, not just redirect)
 		if (/proxy_pass/) {
 			has_proxy = 1
 		}
 
-		# End of location block
-		if (/^\s*\}/) {
-			in_location = 0
+		# End of top-level location block (all braces closed)
+		if (brace_depth == 0) {
 			# Only add auth_request to first proxy location block
 			if (has_proxy && !added_global) {
 				# Insert auth_request after the opening brace line
 				n = split(buffer, lines, "\n")
 				for (i = 1; i <= n; i++) {
-					if (lines[i] ~ /location.*\{/) {
+					# Only add auth_request after the FIRST (outer) location brace
+					if (lines[i] ~ /location.*\{/ && !added_global) {
 						print lines[i]
 						print "        auth_request /organizr-auth/auth-" level ";"
+						added_global = 1
 					} else if (lines[i] != "") {
 						print lines[i]
 					}
 				}
-				added_global = 1
 			} else {
 				# Print buffer without modification
 				printf "%s", buffer
@@ -645,36 +650,37 @@ _migrate_auth_placement() {
 		# Remove all auth_request lines first
 		sed -i '/auth_request \/organizr-auth\/auth-[0-9]*;/d' "$conf"
 
-		# Re-apply auth correctly using the fixed awk logic
+		# Re-apply auth correctly using brace depth for nested locations
 		local temp_conf
 		temp_conf=$(mktemp)
 
 		awk -v level="$auth_level" '
-		BEGIN { in_location = 0; buffer = ""; has_proxy = 0; added_global = 0 }
+		BEGIN { brace_depth = 0; buffer = ""; has_proxy = 0; added_global = 0 }
 
-		/location.*\{/ {
-			in_location = 1
+		/location.*\{/ && brace_depth == 0 {
+			brace_depth = 1
 			has_proxy = 0
 			buffer = $0 "\n"
 			next
 		}
 
-		in_location {
+		brace_depth > 0 {
 			buffer = buffer $0 "\n"
+			if (/\{/) brace_depth++
+			if (/\}/) brace_depth--
 			if (/proxy_pass/) { has_proxy = 1 }
-			if (/^\s*\}/) {
-				in_location = 0
+			if (brace_depth == 0) {
 				if (has_proxy && !added_global) {
 					n = split(buffer, lines, "\n")
 					for (i = 1; i <= n; i++) {
-						if (lines[i] ~ /location.*\{/) {
+						if (lines[i] ~ /location.*\{/ && !added_global) {
 							print lines[i]
 							print "        auth_request /organizr-auth/auth-" level ";"
+							added_global = 1
 						} else if (lines[i] != "") {
 							print lines[i]
 						}
 					}
-					added_global = 1
 				} else {
 					printf "%s", buffer
 				}
