@@ -96,11 +96,16 @@ _install_rclone() {
 	if command -v rclone &>/dev/null; then
 		local current_version
 		current_version=$(rclone version 2>/dev/null | head -1 | awk '{print $2}')
-		echo_info "rclone $current_version already installed, checking for updates..."
+		echo_info "rclone $current_version already installed"
+		return 0
 	fi
 
-	echo_progress_start "Installing latest rclone"
-	if curl -fsSL https://rclone.org/install.sh | bash >>"$log" 2>&1; then
+	echo_progress_start "Installing rclone"
+	# The official install script may return non-zero if already latest
+	curl -fsSL https://rclone.org/install.sh | bash >>"$log" 2>&1 || true
+
+	# Verify rclone is now available
+	if command -v rclone &>/dev/null; then
 		echo_progress_done "rclone installed: $(rclone version 2>/dev/null | head -1 | awk '{print $2}')"
 	else
 		echo_error "Failed to install rclone"
