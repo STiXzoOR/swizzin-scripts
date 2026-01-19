@@ -22,7 +22,7 @@ APP_BUNDLES[core]="nginx panel"
 APP_BUNDLES[streaming]="plex emby jellyfin"
 
 # Arr Stack: Media management
-APP_BUNDLES[arr]="sonarr radarr bazarr prowlarr"
+APP_BUNDLES[arr]="sonarr radarr bazarr prowlarr jackett"
 
 # Debrid: Real-Debrid integration
 APP_BUNDLES[debrid]="zurg decypharr"
@@ -31,7 +31,7 @@ APP_BUNDLES[debrid]="zurg decypharr"
 APP_BUNDLES[helpers]="huntarr cleanuparr byparr notifiarr"
 
 # Full Stack: Everything
-APP_BUNDLES[full]="plex emby jellyfin sonarr radarr bazarr prowlarr zurg decypharr huntarr cleanuparr byparr notifiarr organizr"
+APP_BUNDLES[full]="plex emby jellyfin sonarr radarr bazarr prowlarr jackett zurg decypharr huntarr cleanuparr byparr notifiarr organizr"
 
 # ==============================================================================
 # Installation Order
@@ -45,28 +45,84 @@ INSTALL_ORDER=(
     "plex"
     "emby"
     "jellyfin"
+    "airsonic"
+    "calibreweb"
+    "mango"
+    "navidrome"
+    "tautulli"
 
     # Phase 3: Arr stack (multi-instance capable)
     "sonarr"
     "radarr"
     "bazarr"
+    "lidarr"
     "prowlarr"
+    "jackett"
+    "autobrr"
+    "autodl"
+    "medusa"
+    "mylar"
+    "ombi"
+    "sickchill"
+    "sickgear"
 
-    # Phase 4: Debrid (zurg before decypharr)
+    # Phase 4: Torrent clients
+    "rtorrent"
+    "rutorrent"
+    "flood"
+    "qbittorrent"
+    "deluge"
+    "transmission"
+
+    # Phase 5: Usenet clients
+    "sabnzbd"
+    "nzbget"
+    "nzbhydra2"
+
+    # Phase 6: Debrid / Cloud (zurg before decypharr)
+    "rclone"
     "zurg"
     "decypharr"
 
-    # Phase 5: Helpers
+    # Phase 7: Helpers (from this repo)
     "huntarr"
     "cleanuparr"
     "byparr"
     "notifiarr"
     "subgen"
 
-    # Phase 6: Watchdog (after media servers)
+    # Phase 8: Backup & Sync
+    "nextcloud"
+    "syncthing"
+    "btsync"
+    "vsftpd"
+
+    # Phase 9: IRC
+    "lounge"
+    "quassel"
+    "znc"
+
+    # Phase 10: Utilities
+    "ffmpeg"
+    "librespeed"
+    "netdata"
+    "pyload"
+    "quota"
+    "wireguard"
+    "x2go"
+    "xmrig"
+
+    # Phase 11: Web features
+    "filebrowser"
+    "shellinabox"
+    "webmin"
+    "duckdns"
+    "letsencrypt"
+
+    # Phase 12: Watchdog (after media servers)
     "emby-watchdog"
 
-    # Phase 7: SSO Gateway (ALWAYS LAST)
+    # Phase 13: SSO Gateway (ALWAYS LAST)
     "organizr"
 )
 
@@ -83,6 +139,7 @@ APP_SOURCE[sonarr]="repo"      # Uses sonarr.sh (multi-instance)
 APP_SOURCE[radarr]="repo"      # Uses radarr.sh (multi-instance)
 APP_SOURCE[bazarr]="repo"      # Uses bazarr.sh (multi-instance)
 APP_SOURCE[prowlarr]="swizzin" # Uses box install prowlarr
+APP_SOURCE[jackett]="swizzin"  # Uses box install jackett
 APP_SOURCE[zurg]="repo"
 APP_SOURCE[decypharr]="repo"
 APP_SOURCE[huntarr]="repo"
@@ -94,6 +151,51 @@ APP_SOURCE[organizr]="repo"
 APP_SOURCE[emby-watchdog]="repo"
 APP_SOURCE[nginx]="swizzin"
 APP_SOURCE[panel]="swizzin"
+
+# All other Swizzin apps default to swizzin source
+APP_SOURCE[airsonic]="swizzin"
+APP_SOURCE[autobrr]="swizzin"
+APP_SOURCE[autodl]="swizzin"
+APP_SOURCE[btsync]="swizzin"
+APP_SOURCE[calibreweb]="swizzin"
+APP_SOURCE[deluge]="swizzin"
+APP_SOURCE[duckdns]="swizzin"
+APP_SOURCE[ffmpeg]="swizzin"
+APP_SOURCE[filebrowser]="swizzin"
+APP_SOURCE[flood]="swizzin"
+APP_SOURCE[letsencrypt]="swizzin"
+APP_SOURCE[librespeed]="swizzin"
+APP_SOURCE[lidarr]="swizzin"
+APP_SOURCE[lounge]="swizzin"
+APP_SOURCE[mango]="swizzin"
+APP_SOURCE[medusa]="swizzin"
+APP_SOURCE[mylar]="swizzin"
+APP_SOURCE[navidrome]="swizzin"
+APP_SOURCE[netdata]="swizzin"
+APP_SOURCE[nextcloud]="swizzin"
+APP_SOURCE[nzbget]="swizzin"
+APP_SOURCE[nzbhydra2]="swizzin"
+APP_SOURCE[ombi]="swizzin"
+APP_SOURCE[pyload]="swizzin"
+APP_SOURCE[qbittorrent]="swizzin"
+APP_SOURCE[quassel]="swizzin"
+APP_SOURCE[quota]="swizzin"
+APP_SOURCE[rclone]="swizzin"
+APP_SOURCE[rtorrent]="swizzin"
+APP_SOURCE[rutorrent]="swizzin"
+APP_SOURCE[sabnzbd]="swizzin"
+APP_SOURCE[shellinabox]="swizzin"
+APP_SOURCE[sickchill]="swizzin"
+APP_SOURCE[sickgear]="swizzin"
+APP_SOURCE[syncthing]="swizzin"
+APP_SOURCE[tautulli]="swizzin"
+APP_SOURCE[transmission]="swizzin"
+APP_SOURCE[vsftpd]="swizzin"
+APP_SOURCE[webmin]="swizzin"
+APP_SOURCE[wireguard]="swizzin"
+APP_SOURCE[x2go]="swizzin"
+APP_SOURCE[xmrig]="swizzin"
+APP_SOURCE[znc]="swizzin"
 
 # Script files for repo apps
 declare -A APP_SCRIPT
@@ -173,34 +275,224 @@ select_apps() {
 select_custom_apps() {
     echo_header "Custom App Selection"
 
-    local all_apps=(
+    SELECTED_APPS=("nginx" "panel")  # Always include core
+
+    echo "Select apps to install (Y/n for each):"
+    echo "(nginx and panel are always installed)"
+    echo ""
+
+    # -------------------------------------------------------------------------
+    # Media Servers
+    # -------------------------------------------------------------------------
+    echo_info "=== Media Servers ==="
+    local media_servers=(
         "plex:Plex Media Server"
         "emby:Emby Media Server"
         "jellyfin:Jellyfin Media Server"
+        "airsonic:Airsonic (Music Streaming)"
+        "calibreweb:Calibre-Web (eBook Library)"
+        "mango:Mango (Manga Reader)"
+        "navidrome:Navidrome (Music Streaming)"
+        "tautulli:Tautulli (Plex Monitoring)"
+    )
+    for app_info in "${media_servers[@]}"; do
+        local app="${app_info%%:*}"
+        local desc="${app_info#*:}"
+        if ask "  Install $desc?" N; then
+            SELECTED_APPS+=("$app")
+        fi
+    done
+
+    echo ""
+
+    # -------------------------------------------------------------------------
+    # Automation / Arr Stack
+    # -------------------------------------------------------------------------
+    echo_info "=== Automation (Arr Stack) ==="
+    local automation_apps=(
         "sonarr:Sonarr (TV Shows)"
         "radarr:Radarr (Movies)"
         "bazarr:Bazarr (Subtitles)"
+        "lidarr:Lidarr (Music)"
         "prowlarr:Prowlarr (Indexer Manager)"
+        "jackett:Jackett (Indexer Proxy)"
+        "autobrr:Autobrr (Autodl Alternative)"
+        "autodl:Autodl-irssi (IRC Autodl)"
+        "medusa:Medusa (TV Shows)"
+        "mylar:Mylar3 (Comics)"
+        "ombi:Ombi (Media Requests)"
+        "sickchill:SickChill (TV Shows)"
+        "sickgear:SickGear (TV Shows)"
+    )
+    for app_info in "${automation_apps[@]}"; do
+        local app="${app_info%%:*}"
+        local desc="${app_info#*:}"
+        if ask "  Install $desc?" N; then
+            SELECTED_APPS+=("$app")
+        fi
+    done
+
+    echo ""
+
+    # -------------------------------------------------------------------------
+    # Torrent Clients
+    # -------------------------------------------------------------------------
+    echo_info "=== Torrent Clients ==="
+    local torrent_apps=(
+        "qbittorrent:qBittorrent"
+        "deluge:Deluge"
+        "rtorrent:rTorrent"
+        "rutorrent:ruTorrent (rTorrent Web UI)"
+        "flood:Flood (rTorrent Web UI)"
+        "transmission:Transmission"
+    )
+    for app_info in "${torrent_apps[@]}"; do
+        local app="${app_info%%:*}"
+        local desc="${app_info#*:}"
+        if ask "  Install $desc?" N; then
+            SELECTED_APPS+=("$app")
+        fi
+    done
+
+    echo ""
+
+    # -------------------------------------------------------------------------
+    # Usenet Clients
+    # -------------------------------------------------------------------------
+    echo_info "=== Usenet Clients ==="
+    local usenet_apps=(
+        "sabnzbd:SABnzbd"
+        "nzbget:NZBGet"
+        "nzbhydra2:NZBHydra2 (Usenet Indexer)"
+    )
+    for app_info in "${usenet_apps[@]}"; do
+        local app="${app_info%%:*}"
+        local desc="${app_info#*:}"
+        if ask "  Install $desc?" N; then
+            SELECTED_APPS+=("$app")
+        fi
+    done
+
+    echo ""
+
+    # -------------------------------------------------------------------------
+    # Real-Debrid / Cloud Integration
+    # -------------------------------------------------------------------------
+    echo_info "=== Real-Debrid / Cloud ==="
+    local debrid_apps=(
         "zurg:Zurg (Real-Debrid WebDAV)"
         "decypharr:Decypharr (Debrid Manager)"
+        "rclone:Rclone (Cloud Storage Mount)"
+    )
+    for app_info in "${debrid_apps[@]}"; do
+        local app="${app_info%%:*}"
+        local desc="${app_info#*:}"
+        if ask "  Install $desc?" N; then
+            SELECTED_APPS+=("$app")
+        fi
+    done
+
+    echo ""
+
+    # -------------------------------------------------------------------------
+    # Helpers (from this repo)
+    # -------------------------------------------------------------------------
+    echo_info "=== Helpers (swizzin-scripts) ==="
+    local helper_apps=(
         "huntarr:Huntarr (Media Discovery)"
         "cleanuparr:Cleanuparr (Queue Cleanup)"
         "byparr:Byparr (FlareSolverr Alternative)"
         "notifiarr:Notifiarr (Notifications)"
-        "subgen:Subgen (Subtitle Generation)"
-        "organizr:Organizr (SSO Dashboard)"
+        "subgen:Subgen (Whisper Subtitles)"
     )
-
-    SELECTED_APPS=("nginx" "panel")  # Always include core
-
-    echo "Select apps to install (space to toggle, enter to confirm):"
-    echo "(nginx and panel are always installed)"
-    echo ""
-
-    for app_info in "${all_apps[@]}"; do
+    for app_info in "${helper_apps[@]}"; do
         local app="${app_info%%:*}"
         local desc="${app_info#*:}"
+        if ask "  Install $desc?" N; then
+            SELECTED_APPS+=("$app")
+        fi
+    done
 
+    echo ""
+
+    # -------------------------------------------------------------------------
+    # Backup & Sync
+    # -------------------------------------------------------------------------
+    echo_info "=== Backup & Sync ==="
+    local backup_apps=(
+        "nextcloud:Nextcloud"
+        "syncthing:Syncthing"
+        "btsync:Resilio Sync"
+        "vsftpd:vsftpd (FTP Server)"
+    )
+    for app_info in "${backup_apps[@]}"; do
+        local app="${app_info%%:*}"
+        local desc="${app_info#*:}"
+        if ask "  Install $desc?" N; then
+            SELECTED_APPS+=("$app")
+        fi
+    done
+
+    echo ""
+
+    # -------------------------------------------------------------------------
+    # IRC
+    # -------------------------------------------------------------------------
+    echo_info "=== IRC ==="
+    local irc_apps=(
+        "lounge:The Lounge (IRC Client)"
+        "quassel:Quassel (IRC Client)"
+        "znc:ZNC (IRC Bouncer)"
+    )
+    for app_info in "${irc_apps[@]}"; do
+        local app="${app_info%%:*}"
+        local desc="${app_info#*:}"
+        if ask "  Install $desc?" N; then
+            SELECTED_APPS+=("$app")
+        fi
+    done
+
+    echo ""
+
+    # -------------------------------------------------------------------------
+    # Utilities
+    # -------------------------------------------------------------------------
+    echo_info "=== Utilities ==="
+    local utility_apps=(
+        "ffmpeg:FFmpeg"
+        "librespeed:LibreSpeed (Speed Test)"
+        "netdata:Netdata (Monitoring)"
+        "pyload:pyLoad (Download Manager)"
+        "quota:Disk Quota"
+        "wireguard:WireGuard VPN"
+        "x2go:X2Go (Remote Desktop)"
+        "xmrig:XMRig (Crypto Miner)"
+    )
+    for app_info in "${utility_apps[@]}"; do
+        local app="${app_info%%:*}"
+        local desc="${app_info#*:}"
+        if ask "  Install $desc?" N; then
+            SELECTED_APPS+=("$app")
+        fi
+    done
+
+    echo ""
+
+    # -------------------------------------------------------------------------
+    # Web Features
+    # -------------------------------------------------------------------------
+    echo_info "=== Web Features ==="
+    local web_apps=(
+        "organizr:Organizr (SSO Dashboard)"
+        "filebrowser:FileBrowser"
+        "shellinabox:Shell In A Box (Web Terminal)"
+        "webmin:Webmin (Server Admin)"
+        "duckdns:DuckDNS (Dynamic DNS)"
+        "letsencrypt:Let's Encrypt SSL"
+    )
+    for app_info in "${web_apps[@]}"; do
+        local app="${app_info%%:*}"
+        local desc="${app_info#*:}"
         if ask "  Install $desc?" N; then
             SELECTED_APPS+=("$app")
         fi
