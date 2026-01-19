@@ -30,8 +30,14 @@ restore_ssh() {
     # Validate and restart
     if sshd -t &>/dev/null; then
         echo_progress_start "Restarting SSH service"
-        # Ubuntu uses ssh.service, RHEL/CentOS uses sshd.service
-        if systemctl list-units --type=service | grep -q "ssh.service"; then
+        # Reload systemd to pick up config changes
+        systemctl daemon-reload
+
+        # Ubuntu 24.04+ uses socket activation, earlier versions use service only
+        if systemctl list-units --type=socket | grep -q "ssh.socket"; then
+            systemctl restart ssh.socket
+            systemctl restart ssh.service
+        elif systemctl list-units --type=service | grep -q "ssh.service"; then
             systemctl restart ssh
         else
             systemctl restart sshd
