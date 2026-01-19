@@ -18,8 +18,8 @@ declare -A APP_BUNDLES
 # Core: Just Swizzin base
 APP_BUNDLES[core]="nginx panel"
 
-# Streaming: Media servers
-APP_BUNDLES[streaming]="plex emby jellyfin"
+# Streaming: Media servers + requests
+APP_BUNDLES[streaming]="plex emby jellyfin seerr"
 
 # Arr Stack: Media management
 APP_BUNDLES[arr]="sonarr radarr bazarr prowlarr jackett"
@@ -31,7 +31,7 @@ APP_BUNDLES[debrid]="zurg decypharr"
 APP_BUNDLES[helpers]="huntarr cleanuparr byparr notifiarr filebrowser librespeed"
 
 # Full Stack: Everything
-APP_BUNDLES[full]="plex emby jellyfin sonarr radarr bazarr prowlarr jackett zurg decypharr huntarr cleanuparr byparr notifiarr filebrowser librespeed organizr"
+APP_BUNDLES[full]="plex emby jellyfin seerr sonarr radarr bazarr prowlarr jackett zurg decypharr huntarr cleanuparr byparr notifiarr filebrowser librespeed organizr"
 
 # ==============================================================================
 # Installation Order
@@ -50,6 +50,7 @@ INSTALL_ORDER=(
     "mango"
     "navidrome"
     "tautulli"
+    "seerr"
 
     # Phase 3: Arr stack (multi-instance capable)
     "sonarr"
@@ -148,6 +149,7 @@ APP_SOURCE[byparr]="repo"
 APP_SOURCE[notifiarr]="repo"
 APP_SOURCE[subgen]="repo"
 APP_SOURCE[organizr]="repo"
+APP_SOURCE[seerr]="repo"
 APP_SOURCE[emby-watchdog]="repo"
 APP_SOURCE[nginx]="swizzin"
 APP_SOURCE[panel]="swizzin"
@@ -213,6 +215,7 @@ APP_SCRIPT[byparr]="byparr.sh"
 APP_SCRIPT[notifiarr]="notifiarr.sh"
 APP_SCRIPT[subgen]="subgen.sh"
 APP_SCRIPT[organizr]="organizr.sh"
+APP_SCRIPT[seerr]="seerr.sh"
 APP_SCRIPT[emby-watchdog]="emby-watchdog.sh"
 
 # ==============================================================================
@@ -379,6 +382,7 @@ select_custom_apps() {
         "mango" "Mango (Manga Reader)" "OFF"
         "navidrome" "Navidrome (Music Streaming)" "OFF"
         "tautulli" "Tautulli (Plex Monitoring)" "OFF"
+        "seerr" "Seerr/Overseerr (Media Requests)" "OFF"
         # Automation / Arr Stack
         "sonarr" "Sonarr (TV Shows)" "OFF"
         "radarr" "Radarr (Movies)" "OFF"
@@ -476,6 +480,7 @@ _select_custom_apps_fallback() {
         "mango:Mango (Manga Reader)"
         "navidrome:Navidrome (Music Streaming)"
         "tautulli:Tautulli (Plex Monitoring)"
+        "seerr:Seerr/Overseerr (Media Requests)"
     )
     for app_info in "${media_servers[@]}"; do
         local app="${app_info%%:*}"
@@ -855,6 +860,10 @@ _export_app_env() {
         organizr)
             [[ -n "${APP_ENV[ORGANIZR_DOMAIN]:-}" ]] && export ORGANIZR_DOMAIN="${APP_ENV[ORGANIZR_DOMAIN]}"
             [[ -n "${APP_ENV[ORGANIZR_LE_INTERACTIVE]:-}" ]] && export ORGANIZR_LE_INTERACTIVE="${APP_ENV[ORGANIZR_LE_INTERACTIVE]}"
+            ;;
+        seerr)
+            [[ -n "${APP_ENV[SEERR_DOMAIN]:-}" ]] && export SEERR_DOMAIN="${APP_ENV[SEERR_DOMAIN]}"
+            [[ -n "${APP_ENV[SEERR_LE_INTERACTIVE]:-}" ]] && export SEERR_LE_INTERACTIVE="${APP_ENV[SEERR_LE_INTERACTIVE]}"
             ;;
     esac
 }
