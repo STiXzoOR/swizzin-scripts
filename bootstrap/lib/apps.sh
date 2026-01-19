@@ -768,7 +768,7 @@ install_swizzin_base() {
     echo ""
 
     if ask "Ready to run Swizzin installer?" Y; then
-        curl -sL https://swizzin.ltd/setup.sh | bash
+        bash <(curl -sL git.io/swizzin)
     else
         echo_error "Swizzin installation required"
         exit 1
