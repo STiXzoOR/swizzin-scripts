@@ -167,9 +167,11 @@ prompt_value() {
 
     if [[ -n "$default" ]]; then
         read -rp "$prompt [$default]: " value </dev/tty
+        echo "" >/dev/tty  # Ensure newline on terminal
         echo "${value:-$default}"
     else
         read -rp "$prompt: " value </dev/tty
+        echo "" >/dev/tty  # Ensure newline on terminal
         echo "$value"
     fi
 }
@@ -180,6 +182,7 @@ prompt_secret() {
 
     # Using visible input - secrets are entered during interactive setup anyway
     read -rp "$prompt: " value </dev/tty
+    echo "" >/dev/tty  # Ensure newline on terminal
     echo "$value"
 }
 

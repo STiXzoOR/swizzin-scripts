@@ -495,13 +495,32 @@ _install_zurg() {
 				exit 1
 			fi
 		else
-			# Use token
-			latest=$(curl -sL -H "Authorization: token $github_token" \
-				"https://api.github.com/repos/$zurg_repo/releases/latest" | \
-				grep "browser_download_url" | grep "$arch" | cut -d \" -f4) || {
+			# Use token - must use asset API URL, not browser_download_url for private repos
+			local release_json
+			release_json=$(curl -sL -H "Authorization: token $github_token" \
+				"https://api.github.com/repos/$zurg_repo/releases/latest") || {
 				echo_error "Failed to query GitHub for latest version"
 				exit 1
 			}
+
+			# Get the asset API URL using jq if available, fallback to grep
+			if command -v jq &>/dev/null; then
+				latest=$(echo "$release_json" | jq -r ".assets[] | select(.name | contains(\"$arch\")) | .url")
+			else
+				# Fallback: parse JSON with Python if available
+				if command -v python3 &>/dev/null; then
+					latest=$(echo "$release_json" | python3 -c "import sys,json; d=json.load(sys.stdin); print(next((a['url'] for a in d['assets'] if '$arch' in a['name']), ''))")
+				else
+					echo_error "jq or python3 required to parse GitHub API response"
+					exit 1
+				fi
+			fi
+
+			if [ -z "$latest" ]; then
+				echo_error "Could not find release asset for $arch"
+				exit 1
+			fi
+
 			if ! curl -H "Authorization: token $github_token" \
 				-H "Accept: application/octet-stream" \
 				"$latest" -L -o "/tmp/$app_name.zip" >>"$log" 2>&1; then
