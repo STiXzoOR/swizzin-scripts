@@ -18,6 +18,19 @@ configure_ssh() {
     # Create hardening config directory
     mkdir -p /etc/ssh/sshd_config.d
 
+    # Ensure sshd_config includes the .d directory
+    if ! grep -q "^Include /etc/ssh/sshd_config.d/\*.conf" /etc/ssh/sshd_config 2>/dev/null; then
+        echo_progress_start "Enabling sshd_config.d includes"
+        # Check if there's a commented Include line to uncomment
+        if grep -q "^#Include /etc/ssh/sshd_config.d/\*.conf" /etc/ssh/sshd_config 2>/dev/null; then
+            sed -i 's/^#Include \/etc\/ssh\/sshd_config.d\/\*.conf/Include \/etc\/ssh\/sshd_config.d\/*.conf/' /etc/ssh/sshd_config
+        else
+            # Add Include at the beginning of the file
+            sed -i '1i Include /etc/ssh/sshd_config.d/*.conf' /etc/ssh/sshd_config
+        fi
+        echo_progress_done "sshd_config.d includes enabled"
+    fi
+
     echo_progress_start "Configuring SSH hardening"
 
     cat > /etc/ssh/sshd_config.d/99-hardening.conf <<EOF
