@@ -745,14 +745,23 @@ collect_app_config() {
 # ==============================================================================
 
 _is_swizzin_installed() {
-    # Check multiple indicators of Swizzin installation
-    # 1. box command exists
-    # 2. /etc/swizzin directory exists
-    # 3. /install directory exists with lock files
-    if command -v box &>/dev/null && [[ -d /etc/swizzin ]]; then
+    # Check for Swizzin installation by looking for actual files
+    # Note: 'box' command may not be in PATH until new shell session
+    # So we check for the actual script and directory instead
+    if [[ -d /etc/swizzin ]] && [[ -f /usr/local/bin/swizzin/box ]]; then
         return 0
     fi
     return 1
+}
+
+_ensure_box_in_path() {
+    # Ensure box command is available in current session
+    # Swizzin adds to PATH in .bashrc but current shell may not have it
+    if ! command -v box &>/dev/null; then
+        if [[ -f /usr/local/bin/swizzin/box ]]; then
+            export PATH="$PATH:/usr/local/bin/swizzin"
+        fi
+    fi
 }
 
 install_swizzin_base() {
@@ -760,6 +769,9 @@ install_swizzin_base() {
 
     if _is_swizzin_installed; then
         echo_info "Swizzin already installed"
+
+        # Ensure box is in PATH for current session
+        _ensure_box_in_path
 
         # Check for nginx and panel
         if [[ ! -f /install/.nginx.lock ]]; then
@@ -785,11 +797,14 @@ install_swizzin_base() {
         exit 1
     fi
 
-    # Verify installation - check if box command now exists
+    # Verify installation - check if swizzin files exist
     if ! _is_swizzin_installed; then
         echo_error "Swizzin installation failed"
         exit 1
     fi
+
+    # Ensure box is in PATH for current session
+    _ensure_box_in_path
 
     echo_success "Swizzin installed"
 }
