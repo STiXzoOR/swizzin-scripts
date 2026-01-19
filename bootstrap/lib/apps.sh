@@ -28,10 +28,10 @@ APP_BUNDLES[arr]="sonarr radarr bazarr prowlarr jackett"
 APP_BUNDLES[debrid]="zurg decypharr"
 
 # Helpers: Additional tools
-APP_BUNDLES[helpers]="huntarr cleanuparr byparr notifiarr filebrowser"
+APP_BUNDLES[helpers]="huntarr cleanuparr byparr notifiarr filebrowser librespeed"
 
 # Full Stack: Everything
-APP_BUNDLES[full]="plex emby jellyfin sonarr radarr bazarr prowlarr jackett zurg decypharr huntarr cleanuparr byparr notifiarr filebrowser organizr"
+APP_BUNDLES[full]="plex emby jellyfin sonarr radarr bazarr prowlarr jackett zurg decypharr huntarr cleanuparr byparr notifiarr filebrowser librespeed organizr"
 
 # ==============================================================================
 # Installation Order
