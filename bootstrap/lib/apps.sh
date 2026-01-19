@@ -744,10 +744,21 @@ collect_app_config() {
 # Installation Functions
 # ==============================================================================
 
+_is_swizzin_installed() {
+    # Check multiple indicators of Swizzin installation
+    # 1. box command exists
+    # 2. /etc/swizzin directory exists
+    # 3. /install directory exists with lock files
+    if command -v box &>/dev/null && [[ -d /etc/swizzin ]]; then
+        return 0
+    fi
+    return 1
+}
+
 install_swizzin_base() {
     echo_header "Swizzin Installation"
 
-    if [[ -f /install/.swizzin.lock ]]; then
+    if _is_swizzin_installed; then
         echo_info "Swizzin already installed"
 
         # Check for nginx and panel
@@ -774,8 +785,8 @@ install_swizzin_base() {
         exit 1
     fi
 
-    # Verify installation
-    if [[ ! -f /install/.swizzin.lock ]]; then
+    # Verify installation - check if box command now exists
+    if ! _is_swizzin_installed; then
         echo_error "Swizzin installation failed"
         exit 1
     fi
