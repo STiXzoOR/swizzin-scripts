@@ -509,9 +509,6 @@ _install_zurg() {
 	local use_latest_tag="${ZURG_USE_LATEST_TAG:-}"
 	use_latest_tag="${use_latest_tag,,}"  # lowercase
 
-	# Debug: show version selection mode
-	echo_info "Version selection: ZURG_VERSION_TAG='${ZURG_VERSION_TAG:-}', ZURG_USE_LATEST_TAG='${ZURG_USE_LATEST_TAG:-}' (normalized: '$use_latest_tag')"
-
 	if [ -n "${ZURG_VERSION_TAG:-}" ]; then
 		# Use specific tag provided by user
 		version_tag="$ZURG_VERSION_TAG"
@@ -521,7 +518,6 @@ _install_zurg() {
 		# Use /releases endpoint (returns in reverse chronological order, includes prereleases)
 		# This is better than /tags which returns alphabetically
 		release_endpoint="repos/$zurg_repo/releases?per_page=1"
-		echo_info "Will fetch latest release (including prereleases/nightlies)"
 	else
 		# Use /releases/latest (only returns latest non-prerelease)
 		release_endpoint="repos/$zurg_repo/releases/latest"
@@ -563,7 +559,6 @@ _install_zurg() {
 				exit 1
 			fi
 
-			echo_info "Downloading from: $latest"
 
 			if ! gh api "$latest" -H "Accept: application/octet-stream" >/tmp/$app_name.zip 2>>"$log"; then
 				echo_error "Download failed, exiting"
@@ -621,7 +616,6 @@ _install_zurg() {
 				exit 1
 			fi
 
-			echo_info "Downloading from: $latest"
 
 			if ! curl -H "Authorization: token $github_token" \
 				-H "Accept: application/octet-stream" \
