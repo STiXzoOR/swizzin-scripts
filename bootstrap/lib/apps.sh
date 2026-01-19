@@ -722,6 +722,12 @@ collect_app_config() {
         fi
 
         echo_info "Zurg version: ${APP_ENV[ZURG_VERSION]}"
+
+        # Ask about using latest tag (pre-release) vs latest stable release
+        if ask "Use latest tag instead of latest release? (recommended for newest features)" Y; then
+            APP_ENV[ZURG_USE_LATEST_TAG]="true"
+        fi
+
         APP_ENV[ZURG_MOUNT_POINT]=$(prompt_value "Zurg mount point" "/mnt/zurg")
     fi
 
@@ -879,6 +885,8 @@ _export_app_env() {
             [[ -n "${APP_ENV[ZURG_VERSION]:-}" ]] && export ZURG_VERSION="${APP_ENV[ZURG_VERSION]}"
             [[ -n "${APP_ENV[GITHUB_TOKEN]:-}" ]] && export GITHUB_TOKEN="${APP_ENV[GITHUB_TOKEN]}"
             [[ -n "${APP_ENV[ZURG_MOUNT_POINT]:-}" ]] && export ZURG_MOUNT_POINT="${APP_ENV[ZURG_MOUNT_POINT]}"
+            [[ -n "${APP_ENV[ZURG_USE_LATEST_TAG]:-}" ]] && export ZURG_USE_LATEST_TAG="${APP_ENV[ZURG_USE_LATEST_TAG]}"
+            [[ -n "${APP_ENV[ZURG_UPGRADE]:-}" ]] && export ZURG_UPGRADE="${APP_ENV[ZURG_UPGRADE]}"
             ;;
         decypharr)
             [[ -n "${APP_ENV[ZURG_MOUNT_POINT]:-}" ]] && export DECYPHARR_MOUNT_PATH="${APP_ENV[ZURG_MOUNT_POINT]}"

@@ -493,10 +493,13 @@ _install_zurg() {
 	local release_endpoint
 	local version_tag=""
 
+	# Debug: show version selection mode
+	echo_info "Version selection: ZURG_VERSION_TAG=${ZURG_VERSION_TAG:-<not set>}, ZURG_USE_LATEST_TAG=${ZURG_USE_LATEST_TAG:-<not set>}"
+
 	if [ -n "$ZURG_VERSION_TAG" ]; then
 		# Use specific tag provided by user
 		version_tag="$ZURG_VERSION_TAG"
-	elif [ "$ZURG_USE_LATEST_TAG" = "true" ] || [ "$ZURG_USE_LATEST_TAG" = "1" ]; then
+	elif [ "${ZURG_USE_LATEST_TAG:-}" = "true" ] || [ "${ZURG_USE_LATEST_TAG:-}" = "1" ]; then
 		# Fetch latest tag from /tags endpoint (may be newer than /releases/latest)
 		echo_progress_start "Fetching latest tag"
 		local tags_json
