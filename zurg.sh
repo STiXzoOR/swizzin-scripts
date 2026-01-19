@@ -440,8 +440,8 @@ _install_zurg() {
 	# Select zurg version (free/paid)
 	_select_zurg_version
 
-	# For paid version, get GitHub authentication
-	if [ "$zurg_version" = "paid" ]; then
+	# For paid version, get GitHub authentication (skip if already authenticated from switch)
+	if [ "$zurg_version" = "paid" ] && [ -z "$github_token" ]; then
 		if ! _get_github_token; then
 			echo_error "GitHub authentication failed for paid version."
 			echo_error "Please ensure GITHUB_TOKEN is set or re-run with correct token."
