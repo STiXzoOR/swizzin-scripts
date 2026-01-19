@@ -65,7 +65,7 @@ _select_zurg_version() {
 	existing_version=$(swizdb get "zurg/version" 2>/dev/null) || true
 
 	# Check environment variable - may trigger switch if different
-	if [ -n "$ZURG_VERSION" ]; then
+	if [ -n "${ZURG_VERSION:-}" ]; then
 		if [[ "$ZURG_VERSION" == "paid" || "$ZURG_VERSION" == "free" ]]; then
 			# If env var differs from existing, trigger switch
 			if [ -n "$existing_version" ] && [ "$ZURG_VERSION" != "$existing_version" ]; then
@@ -79,8 +79,20 @@ _select_zurg_version() {
 		fi
 	fi
 
-	# If already installed, offer to switch versions (unless switch_mode already set)
+	# If already installed, check if we're just doing a tag upgrade (not a version switch)
 	if [ -n "$existing_version" ] && [ "$switch_mode" != "true" ]; then
+		# Normalize ZURG_USE_LATEST_TAG for comparison
+		local _use_latest="${ZURG_USE_LATEST_TAG:-}"
+		_use_latest="${_use_latest,,}"  # lowercase
+
+		# If tag specified, keep same version (free/paid) - no need to prompt
+		if [[ "$_use_latest" == "true" || "$_use_latest" == "1" || "$_use_latest" == "yes" ]] || [ -n "${ZURG_VERSION_TAG:-}" ]; then
+			zurg_version="$existing_version"
+			echo_info "Tag upgrade requested - keeping $existing_version version"
+			return
+		fi
+
+		# Otherwise offer to switch versions
 		local other_version
 		if [ "$existing_version" = "free" ]; then
 			other_version="paid"
@@ -493,13 +505,18 @@ _install_zurg() {
 	local release_endpoint
 	local version_tag=""
 
-	# Debug: show version selection mode
-	echo_info "Version selection: ZURG_VERSION_TAG=${ZURG_VERSION_TAG:-<not set>}, ZURG_USE_LATEST_TAG=${ZURG_USE_LATEST_TAG:-<not set>}"
+	# Normalize ZURG_USE_LATEST_TAG to lowercase for comparison
+	local use_latest_tag="${ZURG_USE_LATEST_TAG:-}"
+	use_latest_tag="${use_latest_tag,,}"  # lowercase
 
-	if [ -n "$ZURG_VERSION_TAG" ]; then
+	# Debug: show version selection mode
+	echo_info "Version selection: ZURG_VERSION_TAG='${ZURG_VERSION_TAG:-}', ZURG_USE_LATEST_TAG='${ZURG_USE_LATEST_TAG:-}' (normalized: '$use_latest_tag')"
+
+	if [ -n "${ZURG_VERSION_TAG:-}" ]; then
 		# Use specific tag provided by user
 		version_tag="$ZURG_VERSION_TAG"
-	elif [ "${ZURG_USE_LATEST_TAG:-}" = "true" ] || [ "${ZURG_USE_LATEST_TAG:-}" = "1" ]; then
+		echo_info "Using specific version tag: $version_tag"
+	elif [[ "$use_latest_tag" == "true" || "$use_latest_tag" == "1" || "$use_latest_tag" == "yes" ]]; then
 		# Fetch latest tag from /tags endpoint (may be newer than /releases/latest)
 		echo_progress_start "Fetching latest tag"
 		local tags_json
@@ -1053,11 +1070,15 @@ if [ "$switch_mode" != "true" ] && [ -f "/install/.$app_lockname.lock" ]; then
 	current_version=$(swizdb get "zurg/version" 2>/dev/null) || current_version="unknown"
 	echo_info "Zurg ($current_version) is already installed"
 
+	# Normalize ZURG_USE_LATEST_TAG for comparison
+	_use_latest="${ZURG_USE_LATEST_TAG:-}"
+	_use_latest="${_use_latest,,}"  # lowercase
+
 	# Check if user wants to upgrade/reinstall
-	if [ "$1" = "--upgrade" ] || [ "$ZURG_UPGRADE" = "true" ]; then
+	if [ "$1" = "--upgrade" ] || [ "${ZURG_UPGRADE:-}" = "true" ]; then
 		echo_info "Upgrading zurg..."
-	elif [ "$ZURG_USE_LATEST_TAG" = "true" ] || [ -n "$ZURG_VERSION_TAG" ]; then
-		echo_info "Version change requested, proceeding with install..."
+	elif [[ "$_use_latest" == "true" || "$_use_latest" == "1" || "$_use_latest" == "yes" ]] || [ -n "${ZURG_VERSION_TAG:-}" ]; then
+		echo_info "Version change requested (tag mode), proceeding with install..."
 	else
 		echo_info "Use --upgrade to reinstall/upgrade, or --switch-version to change versions"
 		echo_info "Use ZURG_USE_LATEST_TAG=true or ZURG_VERSION_TAG=vX.X.X to install specific version"
