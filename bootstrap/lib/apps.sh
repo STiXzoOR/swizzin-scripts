@@ -222,11 +222,57 @@ APP_SCRIPT[emby-watchdog]="emby-watchdog.sh"
 select_apps() {
     echo_header "App Selection"
 
+    # Check if whiptail is available
+    if ! command -v whiptail &>/dev/null; then
+        echo_warn "whiptail not found, using fallback menu"
+        _select_apps_fallback
+        return
+    fi
+
+    # Bundle selection using whiptail radiolist
+    local choice
+    choice=$(whiptail --title "App Selection" \
+        --radiolist "Select installation bundle:\n(Use arrow keys and space to select)" \
+        20 70 6 \
+        "core" "Core only - nginx + panel" OFF \
+        "streaming" "Streaming - Core + Plex + Emby + Jellyfin" OFF \
+        "arr" "Arr Stack - Core + Sonarr + Radarr + Bazarr + Prowlarr + Jackett" OFF \
+        "debrid" "Debrid - Core + Zurg + Decypharr" OFF \
+        "full" "Full Stack - Everything (recommended)" ON \
+        "custom" "Custom - Choose individual apps" OFF \
+        3>&1 1>&2 2>&3) || {
+        echo_error "Bundle selection cancelled"
+        exit 1
+    }
+
+    case "$choice" in
+        core) SELECTED_APPS=(${APP_BUNDLES[core]}) ;;
+        streaming) SELECTED_APPS=(${APP_BUNDLES[core]} ${APP_BUNDLES[streaming]}) ;;
+        arr) SELECTED_APPS=(${APP_BUNDLES[core]} ${APP_BUNDLES[arr]}) ;;
+        debrid) SELECTED_APPS=(${APP_BUNDLES[core]} ${APP_BUNDLES[debrid]}) ;;
+        full) SELECTED_APPS=(${APP_BUNDLES[core]} ${APP_BUNDLES[full]}) ;;
+        custom) select_custom_apps ;;
+        *) echo_error "Invalid choice"; exit 1 ;;
+    esac
+
+    # Remove duplicates while preserving order
+    SELECTED_APPS=($(echo "${SELECTED_APPS[@]}" | tr ' ' '\n' | awk '!seen[$0]++'))
+
+    echo_info "Selected apps: ${SELECTED_APPS[*]}"
+
+    # Subdomain configuration for media servers
+    _select_subdomain_apps
+
+    # Multi-instance configuration for arr apps
+    _select_multi_instances
+}
+
+_select_apps_fallback() {
     echo "Select installation bundle:"
     echo ""
     echo "  1) Core only      - nginx + panel"
     echo "  2) Streaming      - Core + Plex + Emby + Jellyfin"
-    echo "  3) Arr Stack      - Core + Sonarr + Radarr + Bazarr + Prowlarr"
+    echo "  3) Arr Stack      - Core + Sonarr + Radarr + Bazarr + Prowlarr + Jackett"
     echo "  4) Debrid         - Core + Zurg + Decypharr"
     echo "  5) Full Stack     - Everything (recommended)"
     echo "  6) Custom         - Choose individual apps"
@@ -248,19 +294,56 @@ select_apps() {
     # Remove duplicates while preserving order
     SELECTED_APPS=($(echo "${SELECTED_APPS[@]}" | tr ' ' '\n' | awk '!seen[$0]++'))
 
-    echo ""
     echo_info "Selected apps: ${SELECTED_APPS[*]}"
 
-    # Ask about subdomain for media servers
+    # Subdomain and multi-instance config
+    _select_subdomain_apps
+    _select_multi_instances
+}
+
+_select_subdomain_apps() {
+    # Build list of subdomain-capable apps that are selected
+    local subdomain_capable=()
     for app in plex emby jellyfin organizr seerr; do
         if [[ " ${SELECTED_APPS[*]} " =~ " ${app} " ]]; then
-            if ask "Configure $app with subdomain?" N; then
-                SUBDOMAIN_APPS+=("$app")
-            fi
+            subdomain_capable+=("$app")
         fi
     done
 
-    # Ask about multi-instance for arr apps
+    if [[ ${#subdomain_capable[@]} -eq 0 ]]; then
+        return
+    fi
+
+    if command -v whiptail &>/dev/null; then
+        # Build whiptail options
+        local options=()
+        for app in "${subdomain_capable[@]}"; do
+            options+=("$app" "" "OFF")
+        done
+
+        local selected
+        selected=$(whiptail --title "Subdomain Configuration" \
+            --checklist "Select apps to configure with subdomain:\n(Space to toggle, Enter to confirm)" \
+            20 60 ${#subdomain_capable[@]} \
+            "${options[@]}" \
+            3>&1 1>&2 2>&3) || true
+
+        # Parse selected (whiptail returns "app1" "app2" format)
+        selected=$(echo "$selected" | tr -d '"')
+        for app in $selected; do
+            SUBDOMAIN_APPS+=("$app")
+        done
+    else
+        # Fallback to ask
+        for app in "${subdomain_capable[@]}"; do
+            if ask "Configure $app with subdomain?" N; then
+                SUBDOMAIN_APPS+=("$app")
+            fi
+        done
+    fi
+}
+
+_select_multi_instances() {
     for app in sonarr radarr bazarr; do
         if [[ " ${SELECTED_APPS[*]} " =~ " ${app} " ]]; then
             if ask "Add additional $app instances (e.g., 4k, anime)?" N; then
@@ -277,6 +360,105 @@ select_custom_apps() {
 
     SELECTED_APPS=("nginx" "panel")  # Always include core
 
+    # Check if whiptail is available
+    if ! command -v whiptail &>/dev/null; then
+        echo_warn "whiptail not found, using fallback menu"
+        _select_custom_apps_fallback
+        return
+    fi
+
+    # All apps organized by category for whiptail
+    # Format: "app" "description" "ON/OFF"
+    local options=(
+        # Media Servers
+        "plex" "Plex Media Server" "OFF"
+        "emby" "Emby Media Server" "OFF"
+        "jellyfin" "Jellyfin Media Server" "OFF"
+        "airsonic" "Airsonic (Music Streaming)" "OFF"
+        "calibreweb" "Calibre-Web (eBook Library)" "OFF"
+        "mango" "Mango (Manga Reader)" "OFF"
+        "navidrome" "Navidrome (Music Streaming)" "OFF"
+        "tautulli" "Tautulli (Plex Monitoring)" "OFF"
+        # Automation / Arr Stack
+        "sonarr" "Sonarr (TV Shows)" "OFF"
+        "radarr" "Radarr (Movies)" "OFF"
+        "bazarr" "Bazarr (Subtitles)" "OFF"
+        "lidarr" "Lidarr (Music)" "OFF"
+        "prowlarr" "Prowlarr (Indexer Manager)" "OFF"
+        "jackett" "Jackett (Indexer Proxy)" "OFF"
+        "autobrr" "Autobrr (Autodl Alternative)" "OFF"
+        "autodl" "Autodl-irssi (IRC Autodl)" "OFF"
+        "medusa" "Medusa (TV Shows)" "OFF"
+        "mylar" "Mylar3 (Comics)" "OFF"
+        "ombi" "Ombi (Media Requests)" "OFF"
+        "sickchill" "SickChill (TV Shows)" "OFF"
+        "sickgear" "SickGear (TV Shows)" "OFF"
+        # Torrent Clients
+        "qbittorrent" "qBittorrent" "OFF"
+        "deluge" "Deluge" "OFF"
+        "rtorrent" "rTorrent" "OFF"
+        "rutorrent" "ruTorrent (rTorrent Web UI)" "OFF"
+        "flood" "Flood (rTorrent Web UI)" "OFF"
+        "transmission" "Transmission" "OFF"
+        # Usenet Clients
+        "sabnzbd" "SABnzbd" "OFF"
+        "nzbget" "NZBGet" "OFF"
+        "nzbhydra2" "NZBHydra2 (Usenet Indexer)" "OFF"
+        # Real-Debrid / Cloud
+        "zurg" "Zurg (Real-Debrid WebDAV)" "OFF"
+        "decypharr" "Decypharr (Debrid Manager)" "OFF"
+        "rclone" "Rclone (Cloud Storage Mount)" "OFF"
+        # Helpers (from this repo)
+        "huntarr" "Huntarr (Media Discovery)" "OFF"
+        "cleanuparr" "Cleanuparr (Queue Cleanup)" "OFF"
+        "byparr" "Byparr (FlareSolverr Alternative)" "OFF"
+        "notifiarr" "Notifiarr (Notifications)" "OFF"
+        "subgen" "Subgen (Whisper Subtitles)" "OFF"
+        # Backup & Sync
+        "nextcloud" "Nextcloud" "OFF"
+        "syncthing" "Syncthing" "OFF"
+        "btsync" "Resilio Sync" "OFF"
+        "vsftpd" "vsftpd (FTP Server)" "OFF"
+        # IRC
+        "lounge" "The Lounge (IRC Client)" "OFF"
+        "quassel" "Quassel (IRC Client)" "OFF"
+        "znc" "ZNC (IRC Bouncer)" "OFF"
+        # Utilities
+        "ffmpeg" "FFmpeg" "OFF"
+        "librespeed" "LibreSpeed (Speed Test)" "OFF"
+        "netdata" "Netdata (Monitoring)" "OFF"
+        "pyload" "pyLoad (Download Manager)" "OFF"
+        "quota" "Disk Quota" "OFF"
+        "wireguard" "WireGuard VPN" "OFF"
+        "x2go" "X2Go (Remote Desktop)" "OFF"
+        "xmrig" "XMRig (Crypto Miner)" "OFF"
+        # Web Features
+        "organizr" "Organizr (SSO Dashboard)" "OFF"
+        "filebrowser" "FileBrowser" "OFF"
+        "shellinabox" "Shell In A Box (Web Terminal)" "OFF"
+        "webmin" "Webmin (Server Admin)" "OFF"
+        "duckdns" "DuckDNS (Dynamic DNS)" "OFF"
+        "letsencrypt" "Let's Encrypt SSL" "OFF"
+    )
+
+    local selected
+    selected=$(whiptail --title "Custom App Selection" \
+        --checklist "Select apps to install:\n(nginx and panel are always installed)\n\nSpace to toggle, Enter to confirm" \
+        30 70 20 \
+        "${options[@]}" \
+        3>&1 1>&2 2>&3) || {
+        echo_info "App selection cancelled"
+        exit 1
+    }
+
+    # Parse selected (whiptail returns "app1" "app2" format)
+    selected=$(echo "$selected" | tr -d '"')
+    for app in $selected; do
+        SELECTED_APPS+=("$app")
+    done
+}
+
+_select_custom_apps_fallback() {
     echo "Select apps to install (Y/n for each):"
     echo "(nginx and panel are always installed)"
     echo ""
