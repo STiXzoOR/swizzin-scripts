@@ -515,43 +515,25 @@ _install_zurg() {
 	if [ -n "${ZURG_VERSION_TAG:-}" ]; then
 		# Use specific tag provided by user
 		version_tag="$ZURG_VERSION_TAG"
+		release_endpoint="repos/$zurg_repo/releases/tags/$version_tag"
 		echo_info "Using specific version tag: $version_tag"
 	elif [[ "$use_latest_tag" == "true" || "$use_latest_tag" == "1" || "$use_latest_tag" == "yes" ]]; then
-		# Fetch latest tag from /tags endpoint (may be newer than /releases/latest)
-		echo_progress_start "Fetching latest tag"
-		local tags_json
-		if [ "$zurg_version" = "paid" ]; then
-			if [ "$github_token" = "gh_cli" ]; then
-				tags_json=$(gh api "repos/$zurg_repo/tags?per_page=1" 2>>"$log")
-			else
-				tags_json=$(curl -sL -H "Authorization: token $github_token" \
-					"https://api.github.com/repos/$zurg_repo/tags?per_page=1")
-			fi
-		else
-			tags_json=$(curl -sL "https://api.github.com/repos/$zurg_repo/tags?per_page=1")
-		fi
-
-		if command -v jq &>/dev/null; then
-			version_tag=$(echo "$tags_json" | jq -r '.[0].name')
-		else
-			version_tag=$(echo "$tags_json" | grep -o '"name"[^,]*' | head -1 | cut -d'"' -f4)
-		fi
-
-		if [ -z "$version_tag" ] || [ "$version_tag" = "null" ]; then
-			echo_error "Failed to get latest tag"
-			exit 1
-		fi
-		echo_progress_done "Latest tag: $version_tag"
-	fi
-
-	# Set release endpoint
-	if [ -n "$version_tag" ]; then
-		release_endpoint="repos/$zurg_repo/releases/tags/$version_tag"
-		echo_progress_start "Downloading $zurg_version version $version_tag"
+		# Use /releases endpoint (returns in reverse chronological order, includes prereleases)
+		# This is better than /tags which returns alphabetically
+		release_endpoint="repos/$zurg_repo/releases?per_page=1"
+		echo_info "Will fetch latest release (including prereleases/nightlies)"
 	else
+		# Use /releases/latest (only returns latest non-prerelease)
 		release_endpoint="repos/$zurg_repo/releases/latest"
-		echo_progress_start "Downloading $zurg_version latest release"
 	fi
+
+	# Check if endpoint returns array (releases?per_page=1) or object (releases/latest, releases/tags/X)
+	local is_array_response="false"
+	if [[ "$release_endpoint" == *"per_page="* ]]; then
+		is_array_response="true"
+	fi
+
+	echo_progress_start "Downloading $zurg_version release"
 
 	# Download release
 	if [ "$zurg_version" = "paid" ]; then
@@ -563,6 +545,12 @@ _install_zurg() {
 				echo_error "Failed to query GitHub for release"
 				exit 1
 			}
+
+			# Handle array response
+			if [ "$is_array_response" = "true" ]; then
+				release_info=$(echo "$release_info" | jq '.[0]')
+			fi
+
 			local tag_name
 			tag_name=$(echo "$release_info" | jq -r '.tag_name')
 			echo_info "Found release: $tag_name"
@@ -585,6 +573,18 @@ _install_zurg() {
 				echo_error "Failed to query GitHub for release"
 				exit 1
 			}
+
+			# Handle array response - extract first element
+			if [ "$is_array_response" = "true" ]; then
+				if command -v jq &>/dev/null; then
+					release_json=$(echo "$release_json" | jq '.[0]')
+				elif command -v python3 &>/dev/null; then
+					release_json=$(echo "$release_json" | python3 -c "import sys,json; print(json.dumps(json.load(sys.stdin)[0]))")
+				else
+					echo_error "jq or python3 required to parse array response"
+					exit 1
+				fi
+			fi
 
 			# Show which version we're downloading
 			local tag_name
@@ -628,12 +628,33 @@ _install_zurg() {
 			exit 1
 		}
 
+		# Handle array response - extract first element
+		if [ "$is_array_response" = "true" ]; then
+			if command -v jq &>/dev/null; then
+				release_json=$(echo "$release_json" | jq '.[0]')
+			elif command -v python3 &>/dev/null; then
+				release_json=$(echo "$release_json" | python3 -c "import sys,json; print(json.dumps(json.load(sys.stdin)[0]))")
+			else
+				# Fallback: use grep to find first tag_name (less reliable but works)
+				: # Continue with full array, grep will find first match
+			fi
+		fi
+
 		# Show which version we're downloading
 		local tag_name
-		tag_name=$(echo "$release_json" | grep -o '"tag_name"[^,]*' | cut -d'"' -f4)
+		if command -v jq &>/dev/null; then
+			tag_name=$(echo "$release_json" | jq -r '.tag_name')
+		else
+			tag_name=$(echo "$release_json" | grep -o '"tag_name"[^,]*' | head -1 | cut -d'"' -f4)
+		fi
 		echo_info "Found release: $tag_name"
 
-		latest=$(echo "$release_json" | grep "browser_download_url" | grep "$arch" | cut -d \" -f4)
+		if command -v jq &>/dev/null; then
+			latest=$(echo "$release_json" | jq -r ".assets[] | select(.name | contains(\"$arch\")) | .browser_download_url")
+		else
+			latest=$(echo "$release_json" | grep "browser_download_url" | grep "$arch" | head -1 | cut -d \" -f4)
+		fi
+
 		if [ -z "$latest" ]; then
 			echo_error "Could not find release asset for $arch"
 			exit 1
