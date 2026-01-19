@@ -178,8 +178,8 @@ prompt_secret() {
     local prompt="$1"
     local value
 
-    read -rsp "$prompt: " value </dev/tty
-    echo ""  # Newline after hidden input
+    # Using visible input - secrets are entered during interactive setup anyway
+    read -rp "$prompt: " value </dev/tty
     echo "$value"
 }
 
