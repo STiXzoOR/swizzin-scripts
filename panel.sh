@@ -16,8 +16,7 @@ app_name="panel"
 app_lockname="panel"
 
 backup_dir="/opt/swizzin/${app_name}-backups"
-default_site="/etc/nginx/sites-available/default"
-default_enabled="/etc/nginx/sites-enabled/default"
+default_site="/etc/nginx/sites-enabled/default"
 organizr_config="/opt/swizzin/organizr-auth.conf"
 
 # ==============================================================================
