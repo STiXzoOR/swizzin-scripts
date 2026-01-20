@@ -14,7 +14,7 @@ WATCHDOG_ENGINE="$SCRIPT_DIR/watchdog.sh"
 GLOBAL_CONFIG_EXAMPLE="$SCRIPT_DIR/configs/watchdog.conf.example"
 SERVICE_CONFIG_EXAMPLE="$SCRIPT_DIR/configs/emby-watchdog.conf.example"
 
-INSTALL_DIR="/opt/swizzin"
+INSTALL_DIR="/opt/swizzin-extras"
 WATCHDOG_DEST="$INSTALL_DIR/watchdog.sh"
 GLOBAL_CONFIG="$INSTALL_DIR/watchdog.conf"
 CONFIG_DIR="$INSTALL_DIR/watchdog.d"
@@ -118,7 +118,7 @@ _create_global_config() {
     _prompt_notifications
 
     cat > "$GLOBAL_CONFIG" <<EOF
-# /opt/swizzin/watchdog.conf - Global watchdog configuration
+# /opt/swizzin-extras/watchdog.conf - Global watchdog configuration
 
 # Notifications
 DISCORD_WEBHOOK="${DISCORD_WEBHOOK:-}"

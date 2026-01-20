@@ -15,7 +15,7 @@
 export log=/root/logs/swizzin.log
 touch "$log"
 
-config_dir="/opt/swizzin"
+config_dir="/opt/swizzin-extras"
 config_file="$config_dir/organizr-auth.conf"
 backup_dir="$config_dir/organizr-backups"
 auth_snippet="/etc/nginx/snippets/organizr-auth.conf"

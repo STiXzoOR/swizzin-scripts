@@ -2,7 +2,7 @@
 # restore.sh - Restore default configurations
 # Part of swizzin-scripts bootstrap
 
-BACKUP_DIR="/opt/swizzin/bootstrap-backups"
+BACKUP_DIR="/opt/swizzin-extras/bootstrap-backups"
 
 # ==============================================================================
 # SSH Restore
@@ -213,8 +213,8 @@ restore_all() {
     restore_unattended_upgrades
 
     # Remove bootstrap marker
-    rm -f /opt/swizzin/bootstrap.done
-    rm -f /opt/swizzin/bootstrap.conf
+    rm -f /opt/swizzin-extras/bootstrap.done
+    rm -f /opt/swizzin-extras/bootstrap.conf
 
     echo ""
     echo_success "All bootstrap configurations restored to defaults"

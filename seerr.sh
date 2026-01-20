@@ -19,13 +19,13 @@ app_reqs=("curl" "jq" "wget")
 app_icon_name="$app_name"
 app_icon_url="https://cdn.jsdelivr.net/gh/selfhst/icons@main/png/overseerr.png"
 
-backup_dir="/opt/swizzin/${app_name}-backups"
+backup_dir="/opt/swizzin-extras/${app_name}-backups"
 subdomain_vhost="/etc/nginx/sites-available/${app_name}"
 subdomain_enabled="/etc/nginx/sites-enabled/${app_name}"
 profiles_py="/opt/swizzin/core/custom/profiles.py"
-organizr_config="/opt/swizzin/organizr-auth.conf"
+organizr_config="/opt/swizzin-extras/organizr-auth.conf"
 
-PANEL_HELPER_LOCAL="/opt/swizzin/panel_helpers.sh"
+PANEL_HELPER_LOCAL="/opt/swizzin-extras/panel_helpers.sh"
 PANEL_HELPER_URL="https://raw.githubusercontent.com/STiXzoOR/swizzin-scripts/main/panel_helpers.sh"
 
 # ==============================================================================

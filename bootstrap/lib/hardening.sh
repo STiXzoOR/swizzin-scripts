@@ -13,7 +13,7 @@ configure_ssh() {
     echo_header "SSH Hardening"
 
     # Backup original config
-    backup_file "/etc/ssh/sshd_config" "/opt/swizzin/bootstrap-backups/ssh"
+    backup_file "/etc/ssh/sshd_config" "/opt/swizzin-extras/bootstrap-backups/ssh"
 
     # Create hardening config directory
     mkdir -p /etc/ssh/sshd_config.d
@@ -144,7 +144,7 @@ configure_fail2ban() {
     echo_progress_done "fail2ban installed"
 
     # Backup existing config
-    backup_file "/etc/fail2ban/jail.local" "/opt/swizzin/bootstrap-backups/fail2ban"
+    backup_file "/etc/fail2ban/jail.local" "/opt/swizzin-extras/bootstrap-backups/fail2ban"
 
     echo_progress_start "Configuring fail2ban jails"
 
@@ -220,7 +220,7 @@ configure_ufw() {
 
     # Backup existing rules
     if [[ -f /etc/ufw/user.rules ]]; then
-        backup_file "/etc/ufw/user.rules" "/opt/swizzin/bootstrap-backups/ufw"
+        backup_file "/etc/ufw/user.rules" "/opt/swizzin-extras/bootstrap-backups/ufw"
     fi
 
     echo_progress_start "Configuring UFW rules"
@@ -290,7 +290,7 @@ configure_unattended_upgrades() {
     echo_progress_done "unattended-upgrades installed"
 
     # Backup existing config
-    backup_file "/etc/apt/apt.conf.d/50unattended-upgrades" "/opt/swizzin/bootstrap-backups/apt"
+    backup_file "/etc/apt/apt.conf.d/50unattended-upgrades" "/opt/swizzin-extras/bootstrap-backups/apt"
 
     echo_progress_start "Configuring automatic updates"
 

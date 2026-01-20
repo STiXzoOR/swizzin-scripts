@@ -10,7 +10,7 @@ configure_sysctl() {
     echo_header "Kernel Tuning"
 
     # Backup existing sysctl config
-    backup_file "/etc/sysctl.conf" "/opt/swizzin/bootstrap-backups/sysctl"
+    backup_file "/etc/sysctl.conf" "/opt/swizzin-extras/bootstrap-backups/sysctl"
 
     echo_progress_start "Configuring sysctl for streaming"
 
@@ -161,7 +161,7 @@ configure_limits() {
     echo_header "System Limits Configuration"
 
     # Backup existing limits
-    backup_file "/etc/security/limits.conf" "/opt/swizzin/bootstrap-backups/limits"
+    backup_file "/etc/security/limits.conf" "/opt/swizzin-extras/bootstrap-backups/limits"
 
     echo_progress_start "Configuring file descriptor limits"
 

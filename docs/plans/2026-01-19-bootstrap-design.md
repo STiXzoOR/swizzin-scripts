@@ -149,7 +149,7 @@ bash bootstrap.sh --skip-apps
 │    • Print access URLs                                           │
 │    • Print SSH connection info (new port!)                       │
 │    • Print credentials reminder                                  │
-│    • Create /opt/swizzin/bootstrap.done marker                   │
+│    • Create /opt/swizzin-extras/bootstrap.done marker                   │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -409,7 +409,7 @@ DefaultLimitNPROC=65535
 Before modifying any config, bootstrap backs up originals:
 
 ```
-/opt/swizzin/bootstrap-backups/
+/opt/swizzin-extras/bootstrap-backups/
 ├── ssh/
 │   └── sshd_config.original
 ├── sysctl/
@@ -482,17 +482,17 @@ _notify_pushover() {
 **`/etc/apt/apt.conf.d/99-pushover`:**
 
 ```
-Dpkg::Pre-Install-Pkgs {"/opt/swizzin/notify-updates.sh";};
+Dpkg::Pre-Install-Pkgs {"/opt/swizzin-extras/notify-updates.sh";};
 ```
 
 ## Files Created
 
 | Location                          | Purpose                 |
 | --------------------------------- | ----------------------- |
-| `/opt/swizzin/bootstrap-backups/` | Original config backups |
-| `/opt/swizzin/bootstrap.conf`     | Saved configuration     |
-| `/opt/swizzin/bootstrap.done`     | Completion marker       |
-| `/opt/swizzin/notify-updates.sh`  | Pushover hook for apt   |
+| `/opt/swizzin-extras/bootstrap-backups/` | Original config backups |
+| `/opt/swizzin-extras/bootstrap.conf`     | Saved configuration     |
+| `/opt/swizzin-extras/bootstrap.done`     | Completion marker       |
+| `/opt/swizzin-extras/notify-updates.sh`  | Pushover hook for apt   |
 
 ## Implementation Checklist
 

@@ -34,7 +34,7 @@ Automated backup system for Swizzin servers with dual-destination redundancy, dy
 ### Directory Structure
 
 ```
-/opt/swizzin/backup/
+/opt/swizzin-extras/backup/
 ├── swizzin-backup.sh           # Main backup script
 ├── swizzin-restore.sh          # Restore script
 ├── backup.conf                 # Main configuration
@@ -88,7 +88,7 @@ For apps with configurable paths:
 
 | Category       | Paths                                                               |
 | -------------- | ------------------------------------------------------------------- |
-| Swizzin core   | `/etc/swizzin/`, `/opt/swizzin/`, `/opt/swizzin/db/`                |
+| Swizzin core   | `/etc/swizzin/`, `/opt/swizzin-extras/`, `/opt/swizzin-extras/db/`                |
 | Lock files     | `/install/.*.lock`                                                  |
 | Nginx          | `/etc/nginx/` (apps, sites, snippets, ssl, htpasswd)                |
 | Let's Encrypt  | `/etc/letsencrypt/`                                                 |

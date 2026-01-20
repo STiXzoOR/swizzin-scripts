@@ -49,7 +49,7 @@ bash panel.sh --remove --force      # Remove without prompts
 
 ### Created
 
-- `/opt/swizzin/panel-backups/default.bak` - Original config backup
+- `/opt/swizzin-extras/panel-backups/default.bak` - Original config backup
 - swizdb entry: `panel_domain` - Stores configured domain
 
 ### On Revert
@@ -113,7 +113,7 @@ server {
 | `_prompt_le_mode()`      | Let's Encrypt mode selection (interactive vs automatic)  |
 | `_get_install_state()`   | Detect: not_installed, subfolder, subdomain              |
 | `_install_panel()`       | Run `box install panel` if needed                        |
-| `_backup_default_site()` | Copy to `/opt/swizzin/panel-backups/`                    |
+| `_backup_default_site()` | Copy to `/opt/swizzin-extras/panel-backups/`                    |
 | `_install_subdomain()`   | Update default site with domain + LE certs               |
 | `_revert_subdomain()`    | Restore from backup                                      |
 | `_remove()`              | Run `box remove panel`, restore default site if modified |
@@ -135,7 +135,7 @@ server {
 
 **Action:** If user chooses to exclude:
 
-- Update `/opt/swizzin/organizr-auth.conf`
+- Update `/opt/swizzin-extras/organizr-auth.conf`
 - Update `/etc/nginx/snippets/organizr-apps.conf`
 
 ## Consistency with Other Scripts
@@ -152,6 +152,6 @@ Including:
 
 - Same argument handling (`--subdomain`, `--revert`, `--remove`, `--force`)
 - Same environment variable naming convention (`<APP>_DOMAIN`, `<APP>_LE_*`)
-- Same backup location pattern (`/opt/swizzin/<app>-backups/`)
+- Same backup location pattern (`/opt/swizzin-extras/<app>-backups/`)
 - Same swizdb usage for domain persistence
 - Same Organizr integration logic

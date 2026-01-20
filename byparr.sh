@@ -8,7 +8,7 @@
 #shellcheck source=sources/functions/utils
 . /etc/swizzin/sources/functions/utils
 
-PANEL_HELPER_LOCAL="/opt/swizzin/panel_helpers.sh"
+PANEL_HELPER_LOCAL="/opt/swizzin-extras/panel_helpers.sh"
 PANEL_HELPER_URL="https://raw.githubusercontent.com/STiXzoOR/swizzin-scripts/main/panel_helpers.sh"
 
 _load_panel_helper() {

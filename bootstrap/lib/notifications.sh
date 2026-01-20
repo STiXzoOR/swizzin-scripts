@@ -113,7 +113,7 @@ configure_pushover() {
 create_notification_scripts() {
     echo_header "Creating Notification Scripts"
 
-    local script_dir="/opt/swizzin"
+    local script_dir="/opt/swizzin-extras"
     mkdir -p "$script_dir"
 
     # Create main notification helper
@@ -124,7 +124,7 @@ create_notification_scripts() {
 # Swizzin notification helper
 # Usage: notify.sh <title> <message> [priority] [sound]
 
-CONF_FILE="/opt/swizzin/bootstrap.conf"
+CONF_FILE="/opt/swizzin-extras/bootstrap.conf"
 
 # Load config
 if [[ -f "$CONF_FILE" ]]; then
@@ -171,7 +171,7 @@ HOSTNAME=$(hostname -f 2>/dev/null || hostname)
 UPTIME=$(uptime -p 2>/dev/null || echo "unknown")
 BOOT_TIME=$(who -b 2>/dev/null | awk '{print $3, $4}' || echo "unknown")
 
-/opt/swizzin/notify.sh \
+/opt/swizzin-extras/notify.sh \
     "Server Rebooted" \
     "Server: $HOSTNAME
 Boot time: $BOOT_TIME
@@ -200,7 +200,7 @@ while read -r line; do
 done
 
 if [[ $PACKAGE_COUNT -gt 0 ]]; then
-    /opt/swizzin/notify.sh \
+    /opt/swizzin-extras/notify.sh \
         "System Updates" \
         "Server: $HOSTNAME
 $PACKAGE_COUNT package(s) being updated" \
@@ -227,7 +227,7 @@ setup_reboot_notification() {
 
     cat > "$cron_file" <<'CRON'
 # Notify on system reboot
-@reboot root sleep 60 && /opt/swizzin/notify-reboot.sh
+@reboot root sleep 60 && /opt/swizzin-extras/notify-reboot.sh
 CRON
 
     chmod 644 "$cron_file"
@@ -240,7 +240,7 @@ setup_apt_notification() {
     # Add apt hook for update notifications
     cat > /etc/apt/apt.conf.d/99-notify <<'APT'
 // Notify about package updates
-Dpkg::Pre-Install-Pkgs {"/opt/swizzin/notify-updates.sh";};
+Dpkg::Pre-Install-Pkgs {"/opt/swizzin-extras/notify-updates.sh";};
 APT
 
     echo_progress_done "Apt notifications configured"
@@ -251,7 +251,7 @@ APT
 # ==============================================================================
 
 save_notification_config() {
-    local conf_file="/opt/swizzin/bootstrap.conf"
+    local conf_file="/opt/swizzin-extras/bootstrap.conf"
 
     echo_progress_start "Saving notification configuration"
 

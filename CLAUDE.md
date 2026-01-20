@@ -101,8 +101,8 @@ organizr.sh is an extended installer that:
 - Runs `box install organizr` first if Organizr isn't installed
 - Converts from subfolder (`/organizr`) to subdomain mode
 - Uses Organizr as SSO authentication gateway for other apps via `auth_request`
-- Stores config at `/opt/swizzin/organizr-auth.conf`
-- Backups at `/opt/swizzin/organizr-backups/`
+- Stores config at `/opt/swizzin-extras/organizr-auth.conf`
+- Backups at `/opt/swizzin-extras/organizr-backups/`
 
 **Flags:**
 
@@ -118,7 +118,7 @@ organizr.sh is an extended installer that:
 
 - `/etc/nginx/sites-available/organizr` - Subdomain vhost with auth endpoint
 - `/etc/nginx/snippets/organizr-apps.conf` - Dynamic includes (excludes panel.conf)
-- `/opt/swizzin/organizr-auth.conf` - Protected apps configuration
+- `/opt/swizzin-extras/organizr-auth.conf` - Protected apps configuration
 
 **Auth mechanism:** Uses internal rewrite to `/api/v2/auth?group=N` which is handled by the existing PHP location block. Apps add `auth_request /organizr-auth/auth-0;` to their location blocks (only on proxy_pass blocks, not return 301 redirects).
 
@@ -166,10 +166,10 @@ plex.sh, emby.sh, and jellyfin.sh follow a common pattern:
 - Install app via `box install <app>` if not installed
 - Convert from subfolder (`/<app>`) to dedicated subdomain
 - Request Let's Encrypt certificate via `box install letsencrypt`
-- Backup original nginx config to `/opt/swizzin/<app>-backups/`
+- Backup original nginx config to `/opt/swizzin-extras/<app>-backups/`
 - Update panel meta with `baseurl = None` and `urloverride` in `/opt/swizzin/core/custom/profiles.py`
 - Add `Content-Security-Policy: frame-ancestors` header for Organizr embedding (if configured)
-- Exclude app from Organizr SSO protection (removes from both `/opt/swizzin/organizr-auth.conf` and `/etc/nginx/snippets/organizr-apps.conf`)
+- Exclude app from Organizr SSO protection (removes from both `/opt/swizzin-extras/organizr-auth.conf` and `/etc/nginx/snippets/organizr-apps.conf`)
 
 **Ports:**
 
@@ -209,7 +209,7 @@ bash panel.sh --remove [--force]    # Complete removal
 
 **Key files:**
 
-- `/opt/swizzin/panel-backups/default.bak` - Original config backup
+- `/opt/swizzin-extras/panel-backups/default.bak` - Original config backup
 - swizdb entry: `panel/domain` - Stores configured domain
 
 **Organizr integration:** Only prompts for Organizr exclusion if Organizr is in subdomain mode (`/etc/nginx/sites-enabled/organizr` exists).
@@ -287,9 +287,9 @@ bash emby-watchdog.sh --reset      # Clear backoff state, resume monitoring
 **Runtime files:**
 | File | Purpose |
 |------|---------|
-| `/opt/swizzin/watchdog.sh` | Engine script |
-| `/opt/swizzin/watchdog.conf` | Global config (notifications, defaults) |
-| `/opt/swizzin/watchdog.d/emby.conf` | Emby-specific config |
+| `/opt/swizzin-extras/watchdog.sh` | Engine script |
+| `/opt/swizzin-extras/watchdog.conf` | Global config (notifications, defaults) |
+| `/opt/swizzin-extras/watchdog.d/emby.conf` | Emby-specific config |
 | `/var/log/watchdog/emby.log` | Log file |
 | `/var/run/watchdog/emby.state` | State (restart counts, backoff) |
 | `/etc/cron.d/emby-watchdog` | Cron job |
@@ -319,9 +319,9 @@ backup/
 **Runtime files (on server):**
 | File | Purpose |
 |------|---------|
-| `/opt/swizzin/backup/` | Installation directory |
-| `/opt/swizzin/backup/backup.conf` | Configuration |
-| `/opt/swizzin/backup/manifests/` | Generated symlink/path manifests |
+| `/opt/swizzin-extras/backup/` | Installation directory |
+| `/opt/swizzin-extras/backup/backup.conf` | Configuration |
+| `/opt/swizzin-extras/backup/manifests/` | Generated symlink/path manifests |
 | `/root/.swizzin-backup-password` | Restic encryption password |
 | `/etc/cron.d/swizzin-backup` | Daily cron job |
 | `/var/log/swizzin-backup.log` | Backup log |
@@ -474,7 +474,7 @@ fi
 **Panel helper loading:** Use the download-and-cache pattern:
 
 ```bash
-PANEL_HELPER_LOCAL="/opt/swizzin/panel_helpers.sh"
+PANEL_HELPER_LOCAL="/opt/swizzin-extras/panel_helpers.sh"
 PANEL_HELPER_URL="https://raw.githubusercontent.com/STiXzoOR/swizzin-scripts/main/panel_helpers.sh"
 
 _load_panel_helper() {

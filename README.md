@@ -323,7 +323,7 @@ bash organizr.sh --remove
 
 **Subfolder Access:** `https://your-server/organizr/`
 
-**Config:** `/opt/swizzin/organizr-auth.conf`
+**Config:** `/opt/swizzin-extras/organizr-auth.conf`
 
 **Features:**
 
@@ -561,9 +561,9 @@ bash emby-watchdog.sh --remove
 **Files:**
 | File | Purpose |
 |------|---------|
-| `/opt/swizzin/watchdog.sh` | Generic watchdog engine |
-| `/opt/swizzin/watchdog.conf` | Global config (notifications) |
-| `/opt/swizzin/watchdog.d/emby.conf` | Emby-specific config |
+| `/opt/swizzin-extras/watchdog.sh` | Generic watchdog engine |
+| `/opt/swizzin-extras/watchdog.conf` | Global config (notifications) |
+| `/opt/swizzin-extras/watchdog.d/emby.conf` | Emby-specific config |
 | `/var/log/watchdog/emby.log` | Log file |
 | `/etc/cron.d/emby-watchdog` | Cron job |
 

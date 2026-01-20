@@ -65,7 +65,7 @@ Common structure for `plex-subdomain.sh`, `emby-subdomain.sh`, `jellyfin-subdoma
 
 1. Check `<APP>_DOMAIN` is set
 2. Run `box install <app>` if not installed (for Plex, run `plex.sh` to ensure nginx config exists)
-3. Backup subfolder config to `/opt/swizzin/<app>-backups/`
+3. Backup subfolder config to `/opt/swizzin-extras/<app>-backups/`
 4. Request Let's Encrypt certificate
 5. Create subdomain vhost at `/etc/nginx/sites-available/<app>`
 6. Remove subfolder config
@@ -85,7 +85,7 @@ Common structure for `plex-subdomain.sh`, `emby-subdomain.sh`, `jellyfin-subdoma
 1. Check for lock file (skip if `--force`)
 2. Run `--revert` steps first
 3. Run `box remove <app>`
-4. Remove backup dir at `/opt/swizzin/<app>-backups/`
+4. Remove backup dir at `/opt/swizzin-extras/<app>-backups/`
 5. LE cert not removed
 
 ## Subdomain Vhost Template
@@ -142,7 +142,7 @@ Remove on `--revert` by deleting the class definition.
 
 For Organizr iframe embedding:
 
-1. Read `ORGANIZR_DOMAIN` from `/opt/swizzin/organizr-auth.conf`
+1. Read `ORGANIZR_DOMAIN` from `/opt/swizzin-extras/organizr-auth.conf`
 2. If found: `add_header Content-Security-Policy "frame-ancestors 'self' https://<organizr_domain>";`
 3. If not found: use `'self'` only or skip header
 
@@ -157,7 +157,7 @@ For Organizr iframe embedding:
 ## File Structure
 
 ```
-/opt/swizzin/
+/opt/swizzin-extras/
 ├── <app>-backups/
 │   └── <app>.conf.bak          # Subfolder config backup
 

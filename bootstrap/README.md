@@ -197,10 +197,10 @@ After bootstrap, these files are created:
 
 | File                                       | Purpose                     |
 | ------------------------------------------ | --------------------------- |
-| `/opt/swizzin/bootstrap.done`              | Bootstrap completion marker |
-| `/opt/swizzin/bootstrap.conf`              | Saved notification config   |
-| `/opt/swizzin/bootstrap-backups/`          | Pre-bootstrap backups       |
-| `/opt/swizzin/notify.sh`                   | Notification helper script  |
+| `/opt/swizzin-extras/bootstrap.done`              | Bootstrap completion marker |
+| `/opt/swizzin-extras/bootstrap.conf`              | Saved notification config   |
+| `/opt/swizzin-extras/bootstrap-backups/`          | Pre-bootstrap backups       |
+| `/opt/swizzin-extras/notify.sh`                   | Notification helper script  |
 | `/root/logs/bootstrap.log`                 | Bootstrap log file          |
 | `/etc/sysctl.d/99-streaming.conf`          | Kernel tuning               |
 | `/etc/ssh/sshd_config.d/99-hardening.conf` | SSH hardening               |

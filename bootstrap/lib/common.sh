@@ -274,7 +274,7 @@ require_root() {
 
 backup_file() {
     local file="$1"
-    local backup_dir="${2:-/opt/swizzin/bootstrap-backups}"
+    local backup_dir="${2:-/opt/swizzin-extras/bootstrap-backups}"
 
     if [[ -f "$file" ]]; then
         mkdir -p "$backup_dir"

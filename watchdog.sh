@@ -9,7 +9,7 @@ set -euo pipefail
 # Constants
 # ==============================================================================
 
-GLOBAL_CONFIG="/opt/swizzin/watchdog.conf"
+GLOBAL_CONFIG="/opt/swizzin-extras/watchdog.conf"
 LOG_DIR="/var/log/watchdog"
 STATE_DIR="/var/run/watchdog"
 

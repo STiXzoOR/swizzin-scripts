@@ -11,7 +11,7 @@ Establish consistent coding conventions across all Swizzin scripts and create re
 Use Pattern A - download and cache permanently:
 
 ```bash
-PANEL_HELPER_LOCAL="/opt/swizzin/panel_helpers.sh"
+PANEL_HELPER_LOCAL="/opt/swizzin-extras/panel_helpers.sh"
 PANEL_HELPER_URL="https://raw.githubusercontent.com/STiXzoOR/swizzin-scripts/main/panel_helpers.sh"
 
 _load_panel_helper() {

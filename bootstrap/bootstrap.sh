@@ -36,8 +36,8 @@ source "$SCRIPT_DIR/lib/notifications.sh"
 # ==============================================================================
 
 LOG_FILE="/root/logs/bootstrap.log"
-BOOTSTRAP_MARKER="/opt/swizzin/bootstrap.done"
-BOOTSTRAP_STATE="/opt/swizzin/bootstrap.state"
+BOOTSTRAP_MARKER="/opt/swizzin-extras/bootstrap.done"
+BOOTSTRAP_STATE="/opt/swizzin-extras/bootstrap.state"
 VERSION="1.0.0"
 
 # Bootstrap steps in order
@@ -256,7 +256,7 @@ show_status() {
     fi
 
     # Pushover
-    if [[ -f /opt/swizzin/bootstrap.conf ]] && grep -q "PUSHOVER_USER=" /opt/swizzin/bootstrap.conf; then
+    if [[ -f /opt/swizzin-extras/bootstrap.conf ]] && grep -q "PUSHOVER_USER=" /opt/swizzin-extras/bootstrap.conf; then
         echo -e "  ${GREEN}✓${NC} Notifications configured"
     else
         echo -e "  ${YELLOW}○${NC} Notifications not configured"

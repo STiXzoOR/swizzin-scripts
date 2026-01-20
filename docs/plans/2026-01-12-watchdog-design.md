@@ -32,9 +32,9 @@ swizzin-scripts/
 ### Runtime Files (Target System)
 
 ```
-/opt/swizzin/watchdog.sh              # The engine
-/opt/swizzin/watchdog.conf            # Global config (notifications, defaults)
-/opt/swizzin/watchdog.d/              # Per-service configs
+/opt/swizzin-extras/watchdog.sh              # The engine
+/opt/swizzin-extras/watchdog.conf            # Global config (notifications, defaults)
+/opt/swizzin-extras/watchdog.d/              # Per-service configs
     └── emby.conf
 /var/log/watchdog/                    # Logs
     └── emby.log
@@ -46,12 +46,12 @@ swizzin-scripts/
 ### Cron Entry
 
 ```
-*/2 * * * * /opt/swizzin/watchdog.sh /opt/swizzin/watchdog.d/emby.conf
+*/2 * * * * /opt/swizzin-extras/watchdog.sh /opt/swizzin-extras/watchdog.d/emby.conf
 ```
 
 ## Configuration
 
-### Global Config (`/opt/swizzin/watchdog.conf`)
+### Global Config (`/opt/swizzin-extras/watchdog.conf`)
 
 Shared settings across all monitored services:
 
@@ -69,7 +69,7 @@ DEFAULT_COOLDOWN_WINDOW=900      # 15 minutes in seconds
 DEFAULT_HEALTH_TIMEOUT=10        # seconds to wait for HTTP response
 ```
 
-### Per-Service Config (`/opt/swizzin/watchdog.d/emby.conf`)
+### Per-Service Config (`/opt/swizzin-extras/watchdog.d/emby.conf`)
 
 Service-specific settings:
 
@@ -225,9 +225,9 @@ bash emby-watchdog.sh --reset      # Clear backoff state, resume monitoring
 ### Install Flow
 
 1. Check Emby is installed (`/install/.emby.lock`)
-2. Copy `watchdog.sh` to `/opt/swizzin/` if not present
-3. Create `/opt/swizzin/watchdog.conf` if not present (prompt for notification settings)
-4. Create `/opt/swizzin/watchdog.d/emby.conf`
+2. Copy `watchdog.sh` to `/opt/swizzin-extras/` if not present
+3. Create `/opt/swizzin-extras/watchdog.conf` if not present (prompt for notification settings)
+4. Create `/opt/swizzin-extras/watchdog.d/emby.conf`
 5. Create `/var/log/watchdog/` and `/var/run/watchdog/` directories
 6. Add cron entry via `/etc/cron.d/emby-watchdog`
 7. Run initial health check to verify setup

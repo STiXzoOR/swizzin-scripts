@@ -15,9 +15,9 @@ touch "$log"
 app_name="panel"
 app_lockname="panel"
 
-backup_dir="/opt/swizzin/${app_name}-backups"
+backup_dir="/opt/swizzin-extras/${app_name}-backups"
 default_site="/etc/nginx/sites-enabled/default"
-organizr_config="/opt/swizzin/organizr-auth.conf"
+organizr_config="/opt/swizzin-extras/organizr-auth.conf"
 
 # ==============================================================================
 # Domain/LE Helper Functions

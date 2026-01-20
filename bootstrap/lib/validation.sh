@@ -118,7 +118,7 @@ validate_network() {
 }
 
 validate_not_already_run() {
-    local marker_file="/opt/swizzin/bootstrap.done"
+    local marker_file="/opt/swizzin-extras/bootstrap.done"
 
     if [[ -f "$marker_file" ]]; then
         echo_warn "Bootstrap has already been run on this server"

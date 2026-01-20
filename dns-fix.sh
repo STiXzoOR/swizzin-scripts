@@ -14,7 +14,7 @@
 export log=/root/logs/swizzin.log
 touch "$log"
 
-backup_dir="/opt/swizzin/dns-backups"
+backup_dir="/opt/swizzin-extras/dns-backups"
 sysctl_conf="/etc/sysctl.d/99-disable-ipv6.conf"
 
 # Detect DNS configuration method

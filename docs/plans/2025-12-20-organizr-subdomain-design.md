@@ -101,7 +101,7 @@ location @organizr_login {
 
 ## Config File
 
-Location: `/opt/swizzin/organizr-auth.conf`
+Location: `/opt/swizzin-extras/organizr-auth.conf`
 
 ```bash
 # Organizr SSO Configuration
@@ -150,14 +150,14 @@ auth_request /organizr-auth/auth-0;
 
 1. Run revert steps first
 2. Run `box remove organizr`
-3. Remove `/opt/swizzin/organizr-auth.conf`
+3. Remove `/opt/swizzin-extras/organizr-auth.conf`
 4. Remove `/etc/nginx/snippets/organizr-auth.conf`
 5. Let's Encrypt cert is kept
 
 ## File Structure
 
 ```
-/opt/swizzin/
+/opt/swizzin-extras/
 ├── organizr-auth.conf              # Protected apps config
 ├── organizr-backups/
 │   ├── organizr-subfolder.conf.bak # Original nginx apps config

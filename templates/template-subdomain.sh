@@ -46,12 +46,12 @@ app_protocol="http"  # http or https for backend
 app_lockname="myapp" # Lock file name (usually same as app_name)
 
 # File paths
-backup_dir="/opt/swizzin/${app_name}-backups"
+backup_dir="/opt/swizzin-extras/${app_name}-backups"
 subfolder_conf="/etc/nginx/apps/${app_name}.conf"
 subdomain_vhost="/etc/nginx/sites-available/${app_name}"
 subdomain_enabled="/etc/nginx/sites-enabled/${app_name}"
 profiles_py="/opt/swizzin/core/custom/profiles.py"
-organizr_config="/opt/swizzin/organizr-auth.conf"
+organizr_config="/opt/swizzin-extras/organizr-auth.conf"
 
 # ==============================================================================
 # Domain/LE Helper Functions
