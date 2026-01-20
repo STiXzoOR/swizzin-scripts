@@ -224,20 +224,42 @@ _configure_ports() {
 	else
 		echo_progress_start "Configuring Jellyfin ports (HTTP: $app_port_http, HTTPS: $app_port_https)"
 
-		# Update HTTP port
-		if grep -q "<InternalHttpPort>" "$network_xml"; then
-			sed -i "s|<InternalHttpPort>[0-9]*</InternalHttpPort>|<InternalHttpPort>${app_port_http}</InternalHttpPort>|g" "$network_xml"
+		# Migrate old Swizzin element names to Jellyfin 10.9+ names
+		# HttpServerPortNumber -> InternalHttpPort
+		if grep -q "<HttpServerPortNumber>" "$network_xml"; then
+			sed -i "s|<HttpServerPortNumber>[^<]*</HttpServerPortNumber>|<InternalHttpPort>${app_port_http}</InternalHttpPort>|g" "$network_xml"
 		fi
-		if grep -q "<PublicHttpPort>" "$network_xml"; then
-			sed -i "s|<PublicHttpPort>[0-9]*</PublicHttpPort>|<PublicHttpPort>${app_port_http}</PublicHttpPort>|g" "$network_xml"
+		# HttpsPortNumber -> InternalHttpsPort
+		if grep -q "<HttpsPortNumber>" "$network_xml"; then
+			sed -i "s|<HttpsPortNumber>[^<]*</HttpsPortNumber>|<InternalHttpsPort>${app_port_https}</InternalHttpsPort>|g" "$network_xml"
+		fi
+		# PublicPort -> PublicHttpPort
+		if grep -q "<PublicPort>" "$network_xml"; then
+			sed -i "s|<PublicPort>[^<]*</PublicPort>|<PublicHttpPort>${app_port_http}</PublicHttpPort>|g" "$network_xml"
+		fi
+		# EnableIPV6 -> EnableIPv6 (case fix)
+		if grep -q "<EnableIPV6>" "$network_xml"; then
+			sed -i "s|<EnableIPV6>[^<]*</EnableIPV6>|<EnableIPv6>false</EnableIPv6>|g" "$network_xml"
+		fi
+		# EnableIPV4 -> EnableIPv4 (case fix)
+		if grep -q "<EnableIPV4>" "$network_xml"; then
+			sed -i "s|<EnableIPV4>[^<]*</EnableIPV4>|<EnableIPv4>true</EnableIPv4>|g" "$network_xml"
 		fi
 
-		# Update HTTPS port
+		# Update HTTP port (new element names)
+		if grep -q "<InternalHttpPort>" "$network_xml"; then
+			sed -i "s|<InternalHttpPort>[^<]*</InternalHttpPort>|<InternalHttpPort>${app_port_http}</InternalHttpPort>|g" "$network_xml"
+		fi
+		if grep -q "<PublicHttpPort>" "$network_xml"; then
+			sed -i "s|<PublicHttpPort>[^<]*</PublicHttpPort>|<PublicHttpPort>${app_port_http}</PublicHttpPort>|g" "$network_xml"
+		fi
+
+		# Update HTTPS port (new element names)
 		if grep -q "<InternalHttpsPort>" "$network_xml"; then
-			sed -i "s|<InternalHttpsPort>[0-9]*</InternalHttpsPort>|<InternalHttpsPort>${app_port_https}</InternalHttpsPort>|g" "$network_xml"
+			sed -i "s|<InternalHttpsPort>[^<]*</InternalHttpsPort>|<InternalHttpsPort>${app_port_https}</InternalHttpsPort>|g" "$network_xml"
 		fi
 		if grep -q "<PublicHttpsPort>" "$network_xml"; then
-			sed -i "s|<PublicHttpsPort>[0-9]*</PublicHttpsPort>|<PublicHttpsPort>${app_port_https}</PublicHttpsPort>|g" "$network_xml"
+			sed -i "s|<PublicHttpsPort>[^<]*</PublicHttpsPort>|<PublicHttpsPort>${app_port_https}</PublicHttpsPort>|g" "$network_xml"
 		fi
 
 		echo_progress_done "Jellyfin ports configured"
