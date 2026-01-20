@@ -37,7 +37,7 @@ bash panel.sh --remove --force      # Remove without prompts
 
 ### Modified
 
-- `/etc/nginx/sites-available/default` - Only the port 443 block (3 lines):
+- `/etc/nginx/sites-enabled/default` - Only the port 443 block (3 lines):
   - `server_name _;` → `server_name <domain>;`
   - `ssl_certificate` → `/etc/nginx/ssl/<domain>/fullchain.pem`
   - `ssl_certificate_key` → `/etc/nginx/ssl/<domain>/key.pem`
@@ -54,7 +54,7 @@ bash panel.sh --remove --force      # Remove without prompts
 
 ### On Revert
 
-- Restore `/etc/nginx/sites-available/default` from backup
+- Restore `/etc/nginx/sites-enabled/default` from backup
 - Remove swizdb `panel_domain` entry
 - SSL certs left in place (Let's Encrypt manages them)
 

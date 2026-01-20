@@ -196,7 +196,7 @@ bash panel.sh --subdomain --revert  # Revert to default snake-oil/catch-all mode
 bash panel.sh --remove [--force]    # Complete removal
 ```
 
-**What it modifies in `/etc/nginx/sites-available/default`:**
+**What it modifies in `/etc/nginx/sites-enabled/default`:**
 
 - `server_name _;` → `server_name panel.example.com;` (only in port 443 block)
 - `ssl_certificate` → Let's Encrypt certificate path
