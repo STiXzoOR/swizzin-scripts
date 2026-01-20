@@ -21,16 +21,15 @@ app_lockname="jellyfin"
 # ==============================================================================
 # Emby uses: HTTP 8096, HTTPS 8920
 # Jellyfin default: HTTP 8096, HTTPS 8920
-# Swizzin default: HTTPS 8922
-# If emby installed: HTTP 8097, HTTPS 8923
+# If emby installed: HTTP 8097, HTTPS 8921
 
 if [[ -f "/install/.emby.lock" ]]; then
 	app_port_http="8097"
-	app_port_https="8923"
+	app_port_https="8921"
 	echo_info "Emby detected - Jellyfin will use ports $app_port_http (HTTP) / $app_port_https (HTTPS)"
 else
 	app_port_http="8096"
-	app_port_https="8922"
+	app_port_https="8920"
 fi
 app_port="$app_port_https"
 
@@ -249,6 +248,58 @@ _configure_ports() {
 	systemctl restart jellyfin
 	sleep 3
 	echo_progress_done "Jellyfin restarted"
+}
+
+# ==============================================================================
+# BaseUrl Management (for subdomain vs subfolder mode)
+# ==============================================================================
+
+_clear_baseurl() {
+	local network_xml="/etc/jellyfin/network.xml"
+
+	if [[ ! -f "$network_xml" ]]; then
+		echo_warn "network.xml not found, skipping BaseUrl clear"
+		return 0
+	fi
+
+	echo_progress_start "Clearing Jellyfin BaseUrl for subdomain mode"
+
+	# Clear BaseUrl (change <BaseUrl>/jellyfin</BaseUrl> to <BaseUrl />)
+	if grep -q "<BaseUrl>" "$network_xml"; then
+		sed -i 's|<BaseUrl>[^<]*</BaseUrl>|<BaseUrl />|g' "$network_xml"
+	fi
+
+	echo_progress_done "BaseUrl cleared"
+
+	# Restart Jellyfin to apply changes
+	systemctl restart jellyfin
+	sleep 2
+}
+
+_restore_baseurl() {
+	local network_xml="/etc/jellyfin/network.xml"
+
+	if [[ ! -f "$network_xml" ]]; then
+		echo_warn "network.xml not found, skipping BaseUrl restore"
+		return 0
+	fi
+
+	echo_progress_start "Restoring Jellyfin BaseUrl for subfolder mode"
+
+	# Restore BaseUrl to /jellyfin
+	if grep -q "<BaseUrl />" "$network_xml"; then
+		sed -i 's|<BaseUrl />|<BaseUrl>/jellyfin</BaseUrl>|g' "$network_xml"
+	elif grep -q "<BaseUrl></BaseUrl>" "$network_xml"; then
+		sed -i 's|<BaseUrl></BaseUrl>|<BaseUrl>/jellyfin</BaseUrl>|g' "$network_xml"
+	elif grep -q "<BaseUrl>" "$network_xml"; then
+		sed -i 's|<BaseUrl>[^<]*</BaseUrl>|<BaseUrl>/jellyfin</BaseUrl>|g' "$network_xml"
+	fi
+
+	echo_progress_done "BaseUrl restored"
+
+	# Restart Jellyfin to apply changes
+	systemctl restart jellyfin
+	sleep 2
 }
 
 # ==============================================================================
@@ -495,6 +546,7 @@ _install_subdomain() {
 	"subfolder" | "unknown")
 		_request_certificate "$domain"
 		_create_subdomain_vhost "$domain" "$le_hostname"
+		_clear_baseurl
 		_add_panel_meta "$domain"
 		_exclude_from_organizr
 		systemctl reload nginx
@@ -521,6 +573,7 @@ _revert_subdomain() {
 		_create_subfolder_config
 	fi
 
+	_restore_baseurl
 	_remove_panel_meta
 	_include_in_organizr
 
