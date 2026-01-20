@@ -193,7 +193,8 @@ _configure_ports() {
 		return 0
 	fi
 
-	local network_xml="/var/lib/jellyfin/config/network.xml"
+	# Ubuntu package installs use /etc/jellyfin/ for config
+	local network_xml="/etc/jellyfin/network.xml"
 
 	# Wait for Jellyfin to create its config
 	local wait_count=0
@@ -219,7 +220,8 @@ _configure_ports() {
 			  <EnableIPv6>false</EnableIPv6>
 			</NetworkConfiguration>
 		XML
-		chown jellyfin:jellyfin "$network_xml"
+		chown root:jellyfin "$network_xml"
+		chmod 644 "$network_xml"
 	else
 		echo_progress_start "Configuring Jellyfin ports (HTTP: $app_port_http, HTTPS: $app_port_https)"
 
