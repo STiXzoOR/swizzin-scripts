@@ -455,28 +455,20 @@ _add_panel_meta() {
 	mkdir -p "$(dirname "$profiles_py")"
 	touch "$profiles_py"
 
-	sed -i "/^class ${app_name}_meta(${app_name}_meta):/,/^class \|^$/d" "$profiles_py" 2>/dev/null || true
+	# Remove existing class if present (standalone class, not inheritance)
+	sed -i "/^class ${app_name}_meta:/,/^class \|^$/d" "$profiles_py" 2>/dev/null || true
 
+	# Seerr is NOT a built-in Swizzin app, so create standalone class (no inheritance)
 	cat >>"$profiles_py" <<PYTHON
 
-class ${app_name}_meta(${app_name}_meta):
-    baseurl = None
+class ${app_name}_meta:
+    name = "${app_name}"
+    pretty_name = "Seerr"
     urloverride = "https://${domain}"
+    systemd = "${app_name}"
+    img = "${app_icon_name}"
+    check_theD = True
 PYTHON
-
-	# Also register via panel helper
-	_load_panel_helper
-	if command -v panel_register_app >/dev/null 2>&1; then
-		panel_register_app \
-			"$app_name" \
-			"Seerr" \
-			"" \
-			"https://${domain}" \
-			"$app_name" \
-			"$app_icon_name" \
-			"$app_icon_url" \
-			"true"
-	fi
 
 	echo_progress_done "Panel meta updated"
 }
@@ -484,14 +476,10 @@ PYTHON
 _remove_panel_meta() {
 	if [ -f "$profiles_py" ]; then
 		echo_progress_start "Removing panel meta urloverride"
-		sed -i "/^class ${app_name}_meta(${app_name}_meta):/,/^class \|^$/d" "$profiles_py" 2>/dev/null || true
+		# Remove standalone class (not inheritance)
+		sed -i "/^class ${app_name}_meta:/,/^class \|^$/d" "$profiles_py" 2>/dev/null || true
 		sed -i -e :a -e '/^\n*$/{$d;N;ba' -e '}' "$profiles_py" 2>/dev/null || true
 		echo_progress_done "Panel meta removed"
-	fi
-
-	_load_panel_helper
-	if command -v panel_unregister_app >/dev/null 2>&1; then
-		panel_unregister_app "$app_name"
 	fi
 }
 
