@@ -41,6 +41,7 @@ Each installer script follows a consistent pattern:
 - **plex.sh** - Extended Plex installer with subdomain support
 - **emby.sh** - Extended Emby installer with subdomain and Premiere bypass support
 - **jellyfin.sh** - Extended Jellyfin installer with subdomain support
+- **panel.sh** - Extended Panel installer with subdomain support (modifies default nginx site)
 - **sonarr.sh** - Multi-instance Sonarr manager (add/remove/list named instances)
 - **radarr.sh** - Multi-instance Radarr manager (add/remove/list named instances)
 - **panel_helpers.sh** - Shared utility for Swizzin panel app registration
@@ -66,7 +67,7 @@ Zurg creates two systemd services:
 
 ### Extended Installer Pattern
 
-Media server scripts (plex.sh, emby.sh, jellyfin.sh, organizr.sh, seerr.sh) follow a unified pattern:
+Media server scripts (plex.sh, emby.sh, jellyfin.sh, organizr.sh, seerr.sh, panel.sh) follow a unified pattern:
 
 **Usage:**
 
@@ -181,6 +182,37 @@ plex.sh, emby.sh, and jellyfin.sh follow a common pattern:
 - **Plex**: X-Plex-\* proxy headers, `/library/streams/` location
 - **Emby**: Range/If-Range headers for streaming
 - **Jellyfin**: WebSocket `/socket` location, WebOS CORS headers, Range/If-Range headers, `/metrics` with private network ACL
+
+### Panel Subdomain Script
+
+panel.sh adds domain/subdomain support to the Swizzin panel by modifying the default nginx site (not creating a new vhost).
+
+**Usage:**
+
+```bash
+bash panel.sh                       # Interactive - installs panel if needed, asks about subdomain
+bash panel.sh --subdomain           # Convert to subdomain mode (prompts for domain)
+bash panel.sh --subdomain --revert  # Revert to default snake-oil/catch-all mode
+bash panel.sh --remove [--force]    # Complete removal
+```
+
+**What it modifies in `/etc/nginx/sites-available/default`:**
+
+- `server_name _;` → `server_name panel.example.com;` (only in port 443 block)
+- `ssl_certificate` → Let's Encrypt certificate path
+- `ssl_certificate_key` → Let's Encrypt key path
+
+**What it does NOT modify:**
+
+- `/etc/nginx/apps/panel.conf` - Never touched
+- Port 80 block - Stays as catch-all for HTTP→HTTPS redirect
+
+**Key files:**
+
+- `/opt/swizzin/panel-backups/default.bak` - Original config backup
+- swizdb entry: `panel/domain` - Stores configured domain
+
+**Organizr integration:** Only prompts for Organizr exclusion if Organizr is in subdomain mode (`/etc/nginx/sites-enabled/organizr` exists).
 
 ### Multi-Instance Scripts (Sonarr/Radarr)
 
@@ -359,6 +391,9 @@ ask "question?" Y/N          # Interactive yes/no prompts
 | seerr.sh     | `SEERR_DOMAIN`            | Public FQDN (bypasses prompt)                    |
 | seerr.sh     | `SEERR_LE_HOSTNAME`       | Let's Encrypt hostname                           |
 | seerr.sh     | `SEERR_LE_INTERACTIVE`    | Set to `yes` for interactive LE                  |
+| panel.sh     | `PANEL_DOMAIN`            | Public FQDN (bypasses prompt)                    |
+| panel.sh     | `PANEL_LE_HOSTNAME`       | Let's Encrypt hostname                           |
+| panel.sh     | `PANEL_LE_INTERACTIVE`    | Set to `yes` for interactive LE                  |
 | notifiarr.sh | `DN_API_KEY`              | Notifiarr.com API key (prompted if not set)      |
 | zurg.sh      | Real-Debrid token         | Real-Debrid API token (prompted if not set)      |
 | All scripts  | `<APP>_OWNER`             | App owner username (defaults to master user)     |
@@ -459,12 +494,12 @@ _load_panel_helper() {
 
 The `templates/` directory contains starter templates for common script types:
 
-| Template                    | Use Case                                   | Examples                |
-| --------------------------- | ------------------------------------------ | ----------------------- |
-| `template-binary.sh`        | Single binary apps installed to `/usr/bin` | decypharr, notifiarr    |
-| `template-python.sh`        | Python apps using uv for dependencies      | byparr, huntarr, subgen |
-| `template-subdomain.sh`     | Extended installers with subdomain support | plex, emby, jellyfin    |
-| `template-multiinstance.sh` | Managing multiple instances of a base app  | sonarr, radarr          |
+| Template                    | Use Case                                   | Examples                    |
+| --------------------------- | ------------------------------------------ | --------------------------- |
+| `template-binary.sh`        | Single binary apps installed to `/usr/bin` | decypharr, notifiarr        |
+| `template-python.sh`        | Python apps using uv for dependencies      | byparr, huntarr, subgen     |
+| `template-subdomain.sh`     | Extended installers with subdomain support | plex, emby, jellyfin, panel |
+| `template-multiinstance.sh` | Managing multiple instances of a base app  | sonarr, radarr              |
 
 Each template includes:
 
