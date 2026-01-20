@@ -461,24 +461,29 @@ if [ "$1" = "--remove" ]; then
 	_remove_decypharr "$2"
 fi
 
-# Set owner for install
-if [ -n "$DECYPHARR_OWNER" ]; then
-	echo_info "Setting ${app_name^} owner = $DECYPHARR_OWNER"
-	swizdb set "$app_name/owner" "$DECYPHARR_OWNER"
+# Check if already installed
+if [ -f "/install/.$app_lockname.lock" ]; then
+	echo_info "${app_name^} is already installed"
+else
+	# Set owner for install
+	if [ -n "$DECYPHARR_OWNER" ]; then
+		echo_info "Setting ${app_name^} owner = $DECYPHARR_OWNER"
+		swizdb set "$app_name/owner" "$DECYPHARR_OWNER"
+	fi
+
+	# Get mount path (interactive or from env)
+	_get_mount_path
+
+	# Get zurg config if installed
+	_get_zurg_config
+
+	_install_decypharr
+	_systemd_decypharr
+	_nginx_decypharr
+
+	# Store configuration in swizdb
+	swizdb set "decypharr/mount_path" "$app_mount_path"
 fi
-
-# Get mount path (interactive or from env)
-_get_mount_path
-
-# Get zurg config if installed
-_get_zurg_config
-
-_install_decypharr
-_systemd_decypharr
-_nginx_decypharr
-
-# Store configuration in swizdb
-swizdb set "decypharr/mount_path" "$app_mount_path"
 
 _load_panel_helper
 if command -v panel_register_app >/dev/null 2>&1; then

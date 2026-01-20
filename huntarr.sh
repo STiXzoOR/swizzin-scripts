@@ -274,15 +274,20 @@ if [ "$1" = "--remove" ]; then
 	_remove_huntarr "$2"
 fi
 
-# Set owner for install
-if [ -n "$HUNTARR_OWNER" ]; then
-	echo_info "Setting ${app_name^} owner = $HUNTARR_OWNER"
-	swizdb set "$app_name/owner" "$HUNTARR_OWNER"
-fi
+# Check if already installed
+if [ -f "/install/.$app_lockname.lock" ]; then
+	echo_info "${app_name^} is already installed"
+else
+	# Set owner for install
+	if [ -n "$HUNTARR_OWNER" ]; then
+		echo_info "Setting ${app_name^} owner = $HUNTARR_OWNER"
+		swizdb set "$app_name/owner" "$HUNTARR_OWNER"
+	fi
 
-_install_huntarr
-_systemd_huntarr
-_nginx_huntarr
+	_install_huntarr
+	_systemd_huntarr
+	_nginx_huntarr
+fi
 
 _load_panel_helper
 if command -v panel_register_app >/dev/null 2>&1; then

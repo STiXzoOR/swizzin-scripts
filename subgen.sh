@@ -234,14 +234,19 @@ if [ "$1" = "--remove" ]; then
 	_remove_subgen "$2"
 fi
 
-# Set owner for install
-if [ -n "$SUBGEN_OWNER" ]; then
-	echo_info "Setting ${app_name^} owner = $SUBGEN_OWNER"
-	swizdb set "$app_name/owner" "$SUBGEN_OWNER"
-fi
+# Check if already installed
+if [ -f "/install/.$app_lockname.lock" ]; then
+	echo_info "${app_name^} is already installed"
+else
+	# Set owner for install
+	if [ -n "$SUBGEN_OWNER" ]; then
+		echo_info "Setting ${app_name^} owner = $SUBGEN_OWNER"
+		swizdb set "$app_name/owner" "$SUBGEN_OWNER"
+	fi
 
-_install_subgen
-_systemd_subgen
+	_install_subgen
+	_systemd_subgen
+fi
 
 _load_panel_helper
 if command -v panel_register_app >/dev/null 2>&1; then

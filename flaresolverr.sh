@@ -251,36 +251,41 @@ if [[ "$1" == "--remove" ]]; then
 	_remove_flaresolverr "$2"
 fi
 
-# Check for conflicting Byparr installation
-if [[ -f "/install/.byparr.lock" ]]; then
-	echo_warn "Byparr is installed and uses the same port (8191)"
-	echo_warn "Both services cannot run simultaneously"
-	if ! ask "Would you like to remove Byparr and continue with FlareSolverr installation?" N; then
-		echo_info "Installation cancelled"
-		exit 0
+# Check if already installed
+if [[ -f "/install/.${app_lockname}.lock" ]]; then
+	echo_info "${app_pretty} is already installed"
+else
+	# Check for conflicting Byparr installation
+	if [[ -f "/install/.byparr.lock" ]]; then
+		echo_warn "Byparr is installed and uses the same port (8191)"
+		echo_warn "Both services cannot run simultaneously"
+		if ! ask "Would you like to remove Byparr and continue with FlareSolverr installation?" N; then
+			echo_info "Installation cancelled"
+			exit 0
+		fi
+		# Remove Byparr
+		echo_info "Removing Byparr..."
+		systemctl stop byparr 2>/dev/null || true
+		systemctl disable byparr 2>/dev/null || true
+		rm -f /etc/systemd/system/byparr.service
+		systemctl daemon-reload
+		rm -rf /opt/byparr
+		rm -f /install/.byparr.lock
+		_load_panel_helper
+		if command -v panel_unregister_app >/dev/null 2>&1; then
+			panel_unregister_app "byparr"
+		fi
+		echo_info "Byparr removed"
 	fi
-	# Remove Byparr
-	echo_info "Removing Byparr..."
-	systemctl stop byparr 2>/dev/null || true
-	systemctl disable byparr 2>/dev/null || true
-	rm -f /etc/systemd/system/byparr.service
-	systemctl daemon-reload
-	rm -rf /opt/byparr
-	rm -f /install/.byparr.lock
-	_load_panel_helper
-	if command -v panel_unregister_app >/dev/null 2>&1; then
-		panel_unregister_app "byparr"
-	fi
-	echo_info "Byparr removed"
+
+	# Set owner in swizdb
+	echo_info "Setting ${app_pretty} owner = ${user}"
+	swizdb set "${app_name}/owner" "$user"
+
+	# Run installation
+	_install_flaresolverr
+	_systemd_flaresolverr
 fi
-
-# Set owner in swizdb
-echo_info "Setting ${app_pretty} owner = ${user}"
-swizdb set "${app_name}/owner" "$user"
-
-# Run installation
-_install_flaresolverr
-_systemd_flaresolverr
 
 # Register with panel (no nginx - API-only service)
 _load_panel_helper
