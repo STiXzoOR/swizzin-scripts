@@ -6,7 +6,8 @@ PLACEHOLDER_ICON_URL="https://raw.githubusercontent.com/swizzin/swizzin_dashboar
 
 # Ensure placeholder icon is available
 _ensure_placeholder_icon() {
-	local icons_dir="/opt/swizzin-extras/static/img/apps"
+	# Icons must be in Swizzin's static directory for panel to find them
+	local icons_dir="/opt/swizzin/static/img/apps"
 	mkdir -p "$icons_dir"
 	if [ ! -f "$icons_dir/placeholder.png" ]; then
 		curl -fsSL "$PLACEHOLDER_ICON_URL" -o "$icons_dir/placeholder.png" >/dev/null 2>&1 || true
@@ -27,7 +28,8 @@ panel_register_app() {
 	local check_systemd="${8:-true}"
 
 	local profiles="/opt/swizzin/core/custom/profiles.py"
-	local icons_dir="/opt/swizzin-extras/static/img/apps"
+	# Icons must be in Swizzin's static directory for panel to find them
+	local icons_dir="/opt/swizzin/static/img/apps"
 	local classname="${name}_meta"
 
 	# Panel not installed? bail quietly
