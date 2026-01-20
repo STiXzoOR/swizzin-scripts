@@ -260,7 +260,7 @@ _add_instance() {
 		echo_progress_start "Adding panel entry"
 		_load_panel_helper
 		if command -v panel_register_app >/dev/null 2>&1; then
-			panel_register_app "${instance_name//-/_}" "${app_pretty} ${name^}" "/${instance_name}" "" "${instance_name}" "${app_name}" "" "false"
+			panel_register_app "${instance_name//-/_}" "${app_pretty} ${name^}" "/${instance_name}" "" "${instance_name}" "${app_name}" "" "true"
 		fi
 		echo_progress_done
 	fi
@@ -498,7 +498,7 @@ case "$1" in
 	fi
 	for name in "${instances[@]}"; do
 		instance_name="${app_name}-${name}"
-		panel_register_app "${instance_name//-/_}" "${app_pretty} ${name^}" "/${instance_name}" "" "${instance_name}" "${app_name}" "" "false"
+		panel_register_app "${instance_name//-/_}" "${app_pretty} ${name^}" "/${instance_name}" "" "${instance_name}" "${app_name}" "" "true"
 		echo_info "Registered: ${instance_name}"
 	done
 	systemctl restart panel 2>/dev/null || true
