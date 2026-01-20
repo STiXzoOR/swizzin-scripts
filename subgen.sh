@@ -99,16 +99,23 @@ _install_subgen() {
 	if [ -f "$app_dir/requirements.txt" ] && [ ! -f "$app_dir/pyproject.toml" ]; then
 		# Build dependencies array from requirements.txt (strip comments)
 		deps_array=$(grep -vE '^\s*#|^\s*$' "$app_dir/requirements.txt" | sed 's/\s*#.*//' | sed 's/.*/"&",/' | tr '\n' ' ' | sed 's/, $//')
+		# Note: openai-whisper -> numba -> llvmlite requires Python <3.10
 		cat >"$app_dir/pyproject.toml" <<PYPROJ
 [project]
 name = "subgen"
 version = "0.0.0"
-requires-python = ">=3.9,<3.12"
+requires-python = ">=3.9,<3.10"
 dependencies = [$deps_array]
 PYPROJ
 	fi
 
-	su - "$user" -c "cd '$app_dir' && uv sync" >>"$log" 2>&1 || {
+	# Install Python 3.9 (required for llvmlite/numba compatibility)
+	su - "$user" -c "cd '$app_dir' && uv python install 3.9" >>"$log" 2>&1 || {
+		echo_error "Failed to install Python 3.9"
+		exit 1
+	}
+
+	su - "$user" -c "cd '$app_dir' && uv sync --python 3.9" >>"$log" 2>&1 || {
 		echo_error "Failed to install ${app_name^} dependencies"
 		exit 1
 	}
