@@ -1,7 +1,7 @@
 #!/bin/bash
 # seerr - Extended Seerr installer with subdomain support
 # STiXzoOR 2025
-# Usage: bash seerr.sh [--subdomain [--revert]|--remove [--force]]
+# Usage: bash seerr.sh [--subdomain [--revert]|--remove [--force]|--register-panel]
 
 . /etc/swizzin/sources/globals.sh
 
@@ -654,6 +654,7 @@ _usage() {
 	echo "  --subdomain           Convert to subdomain mode"
 	echo "  --subdomain --revert  Revert to direct port access"
 	echo "  --remove [--force]    Complete removal"
+	echo "  --register-panel      Re-register with panel"
 	exit 1
 }
 
@@ -684,6 +685,24 @@ case "$1" in
 	;;
 "--remove")
 	_remove "$2"
+	;;
+"--register-panel")
+	if [ ! -f "/install/.${app_lockname}.lock" ]; then
+		echo_error "${app_name^} is not installed"
+		exit 1
+	fi
+	state=$(_get_install_state)
+	if [ "$state" = "subdomain" ]; then
+		domain=$(_get_domain)
+		if [ -n "$domain" ]; then
+			_add_panel_meta "$domain"
+		else
+			echo_error "No domain configured"
+			exit 1
+		fi
+	fi
+	systemctl restart panel 2>/dev/null || true
+	echo_success "Panel registration updated for ${app_name^}"
 	;;
 "")
 	_interactive

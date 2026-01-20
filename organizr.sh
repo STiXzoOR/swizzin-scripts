@@ -1,7 +1,7 @@
 #!/bin/bash
 # organizr - Extended Organizr installer with subdomain and SSO support
 # STiXzoOR 2025
-# Usage: bash organizr.sh [--subdomain [--revert]|--configure|--migrate|--remove]
+# Usage: bash organizr.sh [--subdomain [--revert]|--configure|--migrate|--register-panel|--remove]
 
 . /etc/swizzin/sources/globals.sh
 
@@ -945,6 +945,24 @@ case "$1" in
 	echo_info "Checking for misconfigured auth placement..."
 	_migrate_all_apps
 	;;
+"--register-panel")
+	if [ ! -f /install/.organizr.lock ]; then
+		echo_error "Organizr is not installed"
+		exit 1
+	fi
+	state=$(_get_install_state)
+	if [ "$state" = "subdomain" ]; then
+		domain=$(_get_domain)
+		if [ -n "$domain" ]; then
+			_add_panel_meta "$domain"
+		else
+			echo_error "No domain configured"
+			exit 1
+		fi
+	fi
+	systemctl restart panel 2>/dev/null || true
+	echo_success "Panel registration updated for Organizr"
+	;;
 "--remove")
 	_remove
 	;;
@@ -959,6 +977,7 @@ case "$1" in
 	echo "  --subdomain --revert  Revert to subfolder mode"
 	echo "  --configure           Modify which apps are protected"
 	echo "  --migrate             Fix auth_request placement in redirect blocks"
+	echo "  --register-panel      Re-register with panel (restore urloverride)"
 	echo "  --remove              Completely remove Organizr"
 	exit 1
 	;;

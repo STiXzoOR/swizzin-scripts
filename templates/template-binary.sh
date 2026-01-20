@@ -5,7 +5,7 @@
 # Template for installing single-binary applications to /usr/bin
 # Examples: decypharr, notifiarr
 #
-# Usage: bash <appname>.sh [--remove [--force]]
+# Usage: bash <appname>.sh [--remove [--force]|--register-panel]
 #
 # CUSTOMIZATION POINTS (search for "# CUSTOMIZE:"):
 # 1. App variables (name, port, binary URL, icon, etc.)
@@ -309,6 +309,38 @@ _nginx_myapp() {
 # Handle --remove flag
 if [[ "$1" == "--remove" ]]; then
 	_remove_myapp "$2"
+fi
+
+# Handle --register-panel flag
+if [[ "$1" == "--register-panel" ]]; then
+	if [[ ! -f "/install/.${app_lockname}.lock" ]]; then
+		echo_error "${app_pretty} is not installed"
+		exit 1
+	fi
+	_load_panel_helper
+	if command -v panel_register_app >/dev/null 2>&1; then
+		panel_register_app \
+			"$app_name" \
+			"$app_pretty" \
+			"/${app_baseurl}" \
+			"" \
+			"$app_name" \
+			"$app_icon_name" \
+			"$app_icon_url" \
+			"true"
+		systemctl restart panel 2>/dev/null || true
+		echo_success "Panel registration updated for ${app_pretty}"
+	else
+		echo_error "Panel helper not available"
+		exit 1
+	fi
+	exit 0
+fi
+
+# Check if already installed
+if [[ -f "/install/.${app_lockname}.lock" ]]; then
+	echo_error "${app_pretty} is already installed"
+	exit 1
 fi
 
 # Set owner in swizdb

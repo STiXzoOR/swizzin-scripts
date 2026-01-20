@@ -5,7 +5,7 @@
 # Template for extended Swizzin app installers with subdomain support
 # Examples: plex.sh, emby.sh, jellyfin.sh
 #
-# Usage: bash <appname>.sh [--subdomain [--revert]|--remove [--force]]
+# Usage: bash <appname>.sh [--subdomain [--revert]|--register-panel|--remove [--force]]
 #
 # Interactive mode (no args):
 #   - Installs app via box if not installed
@@ -495,6 +495,7 @@ _usage() {
 	echo "  (no args)             Interactive setup"
 	echo "  --subdomain           Convert to subdomain mode"
 	echo "  --subdomain --revert  Revert to subfolder mode"
+	echo "  --register-panel      Re-register with panel (restore urloverride)"
 	echo "  --remove [--force]    Complete removal"
 	exit 1
 }
@@ -523,6 +524,24 @@ case "$1" in
 	"") _install_subdomain ;;
 	*) _usage ;;
 	esac
+	;;
+"--register-panel")
+	if [ ! -f "/install/.${app_lockname}.lock" ]; then
+		echo_error "${app_name^} is not installed"
+		exit 1
+	fi
+	state=$(_get_install_state)
+	if [ "$state" = "subdomain" ]; then
+		domain=$(_get_domain)
+		if [ -n "$domain" ]; then
+			_add_panel_meta "$domain"
+		else
+			echo_error "No domain configured"
+			exit 1
+		fi
+	fi
+	systemctl restart panel 2>/dev/null || true
+	echo_success "Panel registration updated for ${app_name^}"
 	;;
 "--remove")
 	_remove "$2"
