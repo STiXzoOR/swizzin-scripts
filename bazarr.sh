@@ -1,7 +1,7 @@
 #!/bin/bash
 # bazarr multi-instance installer
 # STiXzoOR 2025
-# Usage: bash bazarr.sh [--add|--remove [name] [--force]|--list]
+# Usage: bash bazarr.sh [--add|--remove [name] [--force]|--list|--register-panel]
 
 . /etc/swizzin/sources/globals.sh
 
@@ -429,18 +429,38 @@ case "$1" in
 "--list")
 	_list_instances
 	;;
+"--register-panel")
+	instances=($(_get_instances))
+	if [[ ${#instances[@]} -eq 0 ]]; then
+		echo_info "No ${app_pretty} instances installed"
+		exit 0
+	fi
+	_load_panel_helper
+	if ! command -v panel_register_app >/dev/null 2>&1; then
+		echo_error "Panel helper not available"
+		exit 1
+	fi
+	for name in "${instances[@]}"; do
+		instance_name="${app_name}-${name}"
+		panel_register_app "${instance_name//-/_}" "${app_pretty} ${name^}" "/${instance_name}" "" "${instance_name}" "${app_name}" "" "false"
+		echo_info "Registered: ${instance_name}"
+	done
+	systemctl restart panel 2>/dev/null || true
+	echo_success "Panel registration updated for all ${app_pretty} instances"
+	;;
 "")
 	_ensure_base_installed
 	_add_interactive
 	;;
 *)
-	echo "Usage: $0 [--add [name]|--remove [name] [--force]|--list]"
+	echo "Usage: $0 [--add [name]|--remove [name] [--force]|--list|--register-panel]"
 	echo ""
 	echo "  (no args)              Install base if needed, then add instances"
 	echo "  --add [name]           Add a new instance"
 	echo "  --remove [name]        Remove instance(s)"
 	echo "  --remove name --force  Remove instance without prompts"
 	echo "  --list                 List all instances"
+	echo "  --register-panel       Re-register all instances with panel"
 	exit 1
 	;;
 esac

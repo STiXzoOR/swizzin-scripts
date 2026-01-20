@@ -1,7 +1,7 @@
 #!/bin/bash
 # notifiarr installer
 # STiXzoOR 2025
-# Usage: bash notifiarr.sh [--remove [--force]]
+# Usage: bash notifiarr.sh [--remove [--force]] [--register-panel]
 
 . /etc/swizzin/sources/globals.sh
 
@@ -562,6 +562,32 @@ _nginx_notifiarr() {
 # Handle --remove flag
 if [ "$1" = "--remove" ]; then
 	_remove_notifiarr "$2"
+fi
+
+# Handle --register-panel flag
+if [ "$1" = "--register-panel" ]; then
+	if [ ! -f "/install/.$app_lockname.lock" ]; then
+		echo_error "${app_name^} is not installed"
+		exit 1
+	fi
+	_load_panel_helper
+	if command -v panel_register_app >/dev/null 2>&1; then
+		panel_register_app \
+			"$app_name" \
+			"Notifiarr" \
+			"/$app_baseurl" \
+			"" \
+			"$app_name" \
+			"$app_icon_name" \
+			"$app_icon_url" \
+			"true"
+		systemctl restart panel 2>/dev/null || true
+		echo_success "Panel registration updated for ${app_name^}"
+	else
+		echo_error "Panel helper not available"
+		exit 1
+	fi
+	exit 0
 fi
 
 # Check if already installed
