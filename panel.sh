@@ -248,17 +248,25 @@ _update_default_site() {
 
 	_backup_default_site
 
-	# Update server_name in the SSL block (port 443)
-	# Match the line containing "server_name" after "listen 443" block
-	sed -i "/listen 443/,/server_name/{s/server_name _;/server_name ${domain};/}" "$default_site"
-
-	# Update SSL certificate paths
-	sed -i "s|ssl_certificate /etc/ssl/certs/ssl-cert-snakeoil.pem;|ssl_certificate ${cert_dir}/fullchain.pem;|" "$default_site"
-	sed -i "s|ssl_certificate_key /etc/ssl/private/ssl-cert-snakeoil.key;|ssl_certificate_key ${cert_dir}/key.pem;|" "$default_site"
-
-	# Also handle case where LE certs were previously set (for domain change)
-	sed -i "s|ssl_certificate /etc/nginx/ssl/[^/]*/fullchain.pem;|ssl_certificate ${cert_dir}/fullchain.pem;|" "$default_site"
-	sed -i "s|ssl_certificate_key /etc/nginx/ssl/[^/]*/key.pem;|ssl_certificate_key ${cert_dir}/key.pem;|" "$default_site"
+	# Use awk to precisely update only the SSL (port 443) server block
+	# This handles the server_name change only in the correct block
+	awk -v domain="$domain" -v cert_dir="$cert_dir" '
+	BEGIN { in_ssl_block = 0 }
+	/listen 443/ { in_ssl_block = 1 }
+	/^}/ { if (in_ssl_block) in_ssl_block = 0 }
+	{
+		if (in_ssl_block && /server_name/) {
+			gsub(/server_name [^;]+;/, "server_name " domain ";")
+		}
+		if (in_ssl_block && /ssl_certificate[^_]/) {
+			gsub(/ssl_certificate [^;]+;/, "ssl_certificate " cert_dir "/fullchain.pem;")
+		}
+		if (in_ssl_block && /ssl_certificate_key/) {
+			gsub(/ssl_certificate_key [^;]+;/, "ssl_certificate_key " cert_dir "/key.pem;")
+		}
+		print
+	}
+	' "$default_site" > "${default_site}.tmp" && mv "${default_site}.tmp" "$default_site"
 
 	echo_progress_done "Default site updated"
 }
