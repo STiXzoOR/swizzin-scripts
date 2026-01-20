@@ -15,7 +15,7 @@
 set -euo pipefail
 
 # === CONFIGURATION ===
-BACKUP_DIR="/opt/swizzin/backup"
+BACKUP_DIR="/opt/swizzin-extras/backup"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOG_FILE="/var/log/swizzin-backup-install.log"
 

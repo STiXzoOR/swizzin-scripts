@@ -18,7 +18,7 @@
 set -euo pipefail
 
 # === CONFIGURATION ===
-BACKUP_DIR="/opt/swizzin/backup"
+BACKUP_DIR="/opt/swizzin-extras/backup"
 CONFIG_FILE="${BACKUP_DIR}/backup.conf"
 REGISTRY_FILE="${BACKUP_DIR}/app-registry.conf"
 
