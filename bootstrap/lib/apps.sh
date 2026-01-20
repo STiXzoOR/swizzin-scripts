@@ -152,7 +152,7 @@ APP_SOURCE[organizr]="repo"
 APP_SOURCE[seerr]="repo"
 APP_SOURCE[emby-watchdog]="repo"
 APP_SOURCE[nginx]="swizzin"
-APP_SOURCE[panel]="swizzin"
+APP_SOURCE[panel]="repo"
 
 # All other Swizzin apps default to swizzin source
 APP_SOURCE[airsonic]="swizzin"
@@ -217,6 +217,7 @@ APP_SCRIPT[subgen]="subgen.sh"
 APP_SCRIPT[organizr]="organizr.sh"
 APP_SCRIPT[seerr]="seerr.sh"
 APP_SCRIPT[emby-watchdog]="emby-watchdog.sh"
+APP_SCRIPT[panel]="panel.sh"
 
 # ==============================================================================
 # App Selection
@@ -306,7 +307,8 @@ _select_apps_fallback() {
 
 _select_subdomain_apps() {
     # Build list of subdomain-capable apps that are selected
-    local subdomain_capable=()
+    # Note: panel is always included since it's part of core
+    local subdomain_capable=("panel")
     for app in plex emby jellyfin organizr seerr; do
         if [[ " ${SELECTED_APPS[*]} " =~ " ${app} " ]]; then
             subdomain_capable+=("$app")
@@ -914,6 +916,10 @@ _export_app_env() {
             [[ -n "${APP_ENV[SEERR_DOMAIN]:-}" ]] && export SEERR_DOMAIN="${APP_ENV[SEERR_DOMAIN]}"
             [[ -n "${APP_ENV[SEERR_LE_INTERACTIVE]:-}" ]] && export SEERR_LE_INTERACTIVE="${APP_ENV[SEERR_LE_INTERACTIVE]}"
             ;;
+        panel)
+            [[ -n "${APP_ENV[PANEL_DOMAIN]:-}" ]] && export PANEL_DOMAIN="${APP_ENV[PANEL_DOMAIN]}"
+            [[ -n "${APP_ENV[PANEL_LE_INTERACTIVE]:-}" ]] && export PANEL_LE_INTERACTIVE="${APP_ENV[PANEL_LE_INTERACTIVE]}"
+            ;;
     esac
 }
 
@@ -988,6 +994,24 @@ run_app_installation() {
 
     # Install Swizzin base first
     install_swizzin_base
+
+    # Configure panel subdomain immediately after base install (before other apps)
+    if [[ " ${SUBDOMAIN_APPS[*]} " =~ " panel " ]]; then
+        echo_info "Configuring panel subdomain..."
+        echo ""
+
+        local script_path="$SCRIPTS_DIR/panel.sh"
+        if [[ -f "$script_path" ]]; then
+            _export_app_env "panel"
+            bash "$script_path" --subdomain 2>&1 | tee -a "$LOG_FILE"
+            if [[ ${PIPESTATUS[0]} -eq 0 ]]; then
+                echo_success "Panel subdomain configured"
+            else
+                echo_error "Panel subdomain configuration failed"
+            fi
+            echo ""
+        fi
+    fi
 
     # Install apps in order
     for app in "${INSTALL_ORDER[@]}"; do
