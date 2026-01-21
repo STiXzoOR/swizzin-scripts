@@ -1,7 +1,7 @@
 #!/bin/bash
 # bazarr multi-instance installer
 # STiXzoOR 2025
-# Usage: bash bazarr.sh [--add|--remove [name] [--force]|--list|--register-panel]
+# Usage: bash bazarr.sh [--add|--remove [name] [--force]|--list|--register-panel|--migrate]
 
 . /etc/swizzin/sources/globals.sh
 
@@ -112,12 +112,17 @@ _get_instances() {
 	echo "${instances[@]}"
 }
 
-# Get port from instance config
+# Get port from instance config (supports both YAML and legacy INI)
 _get_instance_port() {
 	local name="$1"
-	local config_file="/home/${user}/.config/${app_name}-${name}/config/config.ini"
-	if [[ -f "$config_file" ]]; then
-		grep -oP '(?<=^port = )\d+' "$config_file" 2>/dev/null || echo "unknown"
+	local config_dir="/home/${user}/.config/${app_name}-${name}/config"
+
+	# Try YAML first (new format)
+	if [[ -f "${config_dir}/config.yaml" ]]; then
+		grep -oP '^\s*port:\s*\K\d+' "${config_dir}/config.yaml" 2>/dev/null || echo "unknown"
+	# Fall back to INI (legacy format)
+	elif [[ -f "${config_dir}/config.ini" ]]; then
+		grep -oP '(?<=^port = )\d+' "${config_dir}/config.ini" 2>/dev/null || echo "unknown"
 	else
 		echo "unknown"
 	fi
@@ -146,19 +151,35 @@ _add_instance() {
 	chown -R "${user}:${user}" "$config_dir"
 	echo_progress_done
 
-	# Create config.ini
+	# Create config.yaml (Bazarr's current config format)
 	echo_progress_start "Generating configuration"
-	cat >"${config_dir}/config/config.ini" <<-EOSC
-		[general]
-		ip = 127.0.0.1
-		port = ${instance_port}
-		base_url = /${instance_name}
+	cat >"${config_dir}/config/config.yaml" <<-EOSC
+		general:
+		  ip: 127.0.0.1
+		  port: ${instance_port}
+		  base_url: /${instance_name}
+		  single_language: false
+		  use_embedded_subs: true
+		  debug: false
 
-		[sonarr]
+		sonarr:
+		  ip: 127.0.0.1
+		  port: 8989
+		  base_url: /sonarr
+		  apikey: ''
 
-		[radarr]
+		radarr:
+		  ip: 127.0.0.1
+		  port: 7878
+		  base_url: /radarr
+		  apikey: ''
+
+		auth:
+		  type: None
+		  username: ''
+		  password: ''
 	EOSC
-	chown "${user}:${user}" "${config_dir}/config/config.ini"
+	chown "${user}:${user}" "${config_dir}/config/config.yaml"
 	echo_progress_done
 
 	# Create systemd service
@@ -405,6 +426,126 @@ _add_interactive() {
 	done
 }
 
+# Migrate a single config from INI to YAML
+_migrate_single_config() {
+	local config_dir="$1"
+	local service_name="$2"
+	local ini_file="${config_dir}/config.ini"
+	local yaml_file="${config_dir}/config.yaml"
+
+	# Skip if already YAML or no INI exists
+	if [[ -f "$yaml_file" ]]; then
+		echo_info "Config already in YAML format: ${config_dir}"
+		return 0
+	fi
+
+	if [[ ! -f "$ini_file" ]]; then
+		echo_warn "No config found in: ${config_dir}"
+		return 1
+	fi
+
+	echo_progress_start "Migrating ${service_name} config to YAML"
+
+	# Parse INI values
+	local ip port base_url
+	ip=$(grep -oP '(?<=^ip = ).*' "$ini_file" 2>/dev/null || echo "127.0.0.1")
+	port=$(grep -oP '(?<=^port = )\d+' "$ini_file" 2>/dev/null || echo "6767")
+	base_url=$(grep -oP '(?<=^base_url = ).*' "$ini_file" 2>/dev/null || echo "/")
+
+	# Stop service before migration
+	if [[ -n "$service_name" ]] && systemctl is-active --quiet "${service_name}.service" 2>/dev/null; then
+		systemctl stop "${service_name}.service"
+	fi
+
+	# Backup old INI
+	mv "$ini_file" "${ini_file}.old"
+
+	# Create new YAML config
+	cat >"$yaml_file" <<-EOSC
+		general:
+		  ip: ${ip}
+		  port: ${port}
+		  base_url: ${base_url}
+		  single_language: false
+		  use_embedded_subs: true
+		  debug: false
+
+		sonarr:
+		  ip: 127.0.0.1
+		  port: 8989
+		  base_url: /sonarr
+		  apikey: ''
+
+		radarr:
+		  ip: 127.0.0.1
+		  port: 7878
+		  base_url: /radarr
+		  apikey: ''
+
+		auth:
+		  type: None
+		  username: ''
+		  password: ''
+	EOSC
+
+	chown "${user}:${user}" "$yaml_file"
+
+	# Restart service
+	if [[ -n "$service_name" ]]; then
+		systemctl start "${service_name}.service" 2>/dev/null || true
+	fi
+
+	echo_progress_done
+	echo_info "Old config backed up to: ${ini_file}.old"
+}
+
+# Migrate base bazarr installation
+_migrate_base() {
+	local base_config_dir="/opt/bazarr/data/config"
+
+	if [[ ! -d "$base_config_dir" ]]; then
+		echo_warn "Base ${app_pretty} config directory not found"
+		return 1
+	fi
+
+	_migrate_single_config "$base_config_dir" "$app_name"
+}
+
+# Migrate all instances
+_migrate_instances() {
+	local instances
+	read -ra instances <<<"$(_get_instances)"
+
+	if [[ ${#instances[@]} -eq 0 ]]; then
+		echo_info "No additional instances to migrate"
+		return 0
+	fi
+
+	for instance in "${instances[@]}"; do
+		local config_dir="/home/${user}/.config/${app_name}-${instance}/config"
+		_migrate_single_config "$config_dir" "${app_name}-${instance}"
+	done
+}
+
+# Migrate all configs (base + instances)
+_migrate_all() {
+	echo_info "Migrating ${app_pretty} configurations from INI to YAML format"
+	echo ""
+
+	# Migrate base if installed
+	if [[ -f "/install/.${app_lockname}.lock" ]]; then
+		echo_info "Migrating base ${app_pretty}..."
+		_migrate_base
+	fi
+
+	# Migrate instances
+	_migrate_instances
+
+	echo ""
+	echo_success "Migration complete!"
+	echo_info "Note: Bazarr will regenerate additional settings on first startup"
+}
+
 # Main
 _preflight
 
@@ -448,12 +589,15 @@ case "$1" in
 	systemctl restart panel 2>/dev/null || true
 	echo_success "Panel registration updated for all ${app_pretty} instances"
 	;;
+"--migrate")
+	_migrate_all
+	;;
 "")
 	_ensure_base_installed
 	_add_interactive
 	;;
 *)
-	echo "Usage: $0 [--add [name]|--remove [name] [--force]|--list|--register-panel]"
+	echo "Usage: $0 [--add [name]|--remove [name] [--force]|--list|--register-panel|--migrate]"
 	echo ""
 	echo "  (no args)              Install base if needed, then add instances"
 	echo "  --add [name]           Add a new instance"
@@ -461,6 +605,7 @@ case "$1" in
 	echo "  --remove name --force  Remove instance without prompts"
 	echo "  --list                 List all instances"
 	echo "  --register-panel       Re-register all instances with panel"
+	echo "  --migrate              Migrate all configs from INI to YAML format"
 	exit 1
 	;;
 esac
