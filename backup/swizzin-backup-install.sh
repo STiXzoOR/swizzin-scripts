@@ -375,6 +375,64 @@ configure_pushover() {
     fi
 }
 
+configure_discord() {
+    header "Discord Notifications"
+
+    if ! ask "Configure Discord webhook notifications?" N; then
+        CONFIG_DISCORD_ENABLED="no"
+        return 0
+    fi
+
+    CONFIG_DISCORD_ENABLED="yes"
+
+    echo "Create a webhook in your Discord server:"
+    echo "  Server Settings > Integrations > Webhooks > New Webhook"
+    echo ""
+
+    CONFIG_DISCORD_WEBHOOK_URL=$(prompt "Webhook URL")
+
+    if ask "Send test notification?" Y; then
+        log "Sending test notification..."
+        local json
+        json=$(jq -n '{embeds: [{title: "Swizzin Backup Test", description: "Discord notification test", color: 3066993}]}')
+        if curl -sf -H "Content-Type: application/json" -d "$json" \
+            "${CONFIG_DISCORD_WEBHOOK_URL}" >/dev/null; then
+            log "Test notification sent successfully"
+        else
+            warn "Failed to send notification"
+        fi
+    fi
+}
+
+configure_notifiarr() {
+    header "Notifiarr Notifications"
+
+    if ! ask "Configure Notifiarr notifications?" N; then
+        CONFIG_NOTIFIARR_ENABLED="no"
+        return 0
+    fi
+
+    CONFIG_NOTIFIARR_ENABLED="yes"
+
+    echo "Get your API key from https://notifiarr.com"
+    echo ""
+
+    CONFIG_NOTIFIARR_API_KEY=$(prompt "API Key")
+
+    if ask "Send test notification?" Y; then
+        log "Sending test notification..."
+        local json
+        json=$(jq -n '{notification: {name: "Swizzin Backup Test", event: "test"}, message: {title: "Swizzin Backup Test", body: "Notifiarr notification test"}}')
+        if curl -sf -H "x-api-key: ${CONFIG_NOTIFIARR_API_KEY}" \
+            -H "Content-Type: application/json" -d "$json" \
+            "https://notifiarr.com/api/v1/notification/passthrough" >/dev/null; then
+            log "Test notification sent successfully"
+        else
+            warn "Failed to send notification"
+        fi
+    fi
+}
+
 configure_schedule() {
     header "Backup Schedule"
 
@@ -433,17 +491,23 @@ PUSHOVER_USER_KEY="${CONFIG_PUSHOVER_USER_KEY:-}"
 PUSHOVER_API_TOKEN="${CONFIG_PUSHOVER_API_TOKEN:-}"
 PUSHOVER_PRIORITY="${CONFIG_PUSHOVER_PRIORITY:-0}"
 
+# Discord
+DISCORD_ENABLED="${CONFIG_DISCORD_ENABLED:-no}"
+DISCORD_WEBHOOK_URL="${CONFIG_DISCORD_WEBHOOK_URL:-}"
+
+# Notifiarr
+NOTIFIARR_ENABLED="${CONFIG_NOTIFIARR_ENABLED:-no}"
+NOTIFIARR_API_KEY="${CONFIG_NOTIFIARR_API_KEY:-}"
+
 # Schedule
 BACKUP_HOUR="${CONFIG_BACKUP_HOUR:-03}"
 BACKUP_MINUTE="${CONFIG_BACKUP_MINUTE:-00}"
 
 # App handling
 EXCLUDE_APPS=""
-MEDIASERVER_MODE="config_only"
 EXTRA_PATHS=""
 
 # Advanced
-PARALLEL_UPLOADS=4
 LOG_FILE="/var/log/swizzin-backup.log"
 MANIFEST_DIR="${BACKUP_DIR}/manifests"
 EOF
@@ -477,12 +541,13 @@ init_repositories() {
 
     if [[ "$SFTP_ENABLED" == "yes" ]]; then
         log "Initializing SFTP repository..."
-        local sftp_repo="sftp:${SFTP_USER}@${SFTP_HOST}:${SFTP_PORT}${SFTP_PATH}"
+        local sftp_repo="sftp:${SFTP_USER}@${SFTP_HOST}:${SFTP_PATH}"
+        local sftp_args=(-o "sftp.command=ssh -i ${SFTP_KEY} -p ${SFTP_PORT} ${SFTP_USER}@${SFTP_HOST} -s sftp")
 
-        if restic -r "$sftp_repo" -o sftp.command="ssh -i ${SFTP_KEY} -p ${SFTP_PORT} ${SFTP_USER}@${SFTP_HOST} -s sftp" snapshots &>/dev/null; then
+        if restic -r "$sftp_repo" "${sftp_args[@]}" snapshots &>/dev/null; then
             info "SFTP repository already initialized"
         else
-            if restic -r "$sftp_repo" -o sftp.command="ssh -i ${SFTP_KEY} -p ${SFTP_PORT} ${SFTP_USER}@${SFTP_HOST} -s sftp" init; then
+            if restic -r "$sftp_repo" "${sftp_args[@]}" init; then
                 log "SFTP repository initialized"
             else
                 warn "Failed to initialize SFTP repository"
@@ -655,6 +720,8 @@ main() {
     configure_gdrive
     configure_sftp
     configure_pushover
+    configure_discord
+    configure_notifiarr
     configure_schedule
     configure_retention
 

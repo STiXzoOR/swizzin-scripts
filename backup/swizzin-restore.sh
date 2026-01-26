@@ -117,15 +117,13 @@ get_repo() {
     esac
 }
 
-get_restic_opts() {
+build_restic_args() {
     local source="$1"
+    RESTIC_EXTRA_ARGS=()
 
     case "$source" in
         sftp)
-            echo "-o sftp.command=ssh -i ${SFTP_KEY} -p ${SFTP_PORT} ${SFTP_USER}@${SFTP_HOST} -s sftp"
-            ;;
-        *)
-            echo ""
+            RESTIC_EXTRA_ARGS=(-o "sftp.command=ssh -i ${SFTP_KEY} -p ${SFTP_PORT} ${SFTP_USER}@${SFTP_HOST} -s sftp")
             ;;
     esac
 }
@@ -135,20 +133,18 @@ list_snapshots() {
     local source="$1"
     local repo
     repo=$(get_repo "$source")
-    local opts
-    opts=$(get_restic_opts "$source")
+    build_restic_args "$source"
 
-    restic -r "$repo" $opts snapshots --json 2>/dev/null
+    restic -r "$repo" "${RESTIC_EXTRA_ARGS[@]}" snapshots --json 2>/dev/null
 }
 
 get_latest_snapshot() {
     local source="$1"
     local repo
     repo=$(get_repo "$source")
-    local opts
-    opts=$(get_restic_opts "$source")
+    build_restic_args "$source"
 
-    restic -r "$repo" $opts snapshots --latest 1 --json 2>/dev/null | jq -r '.[0].id // empty'
+    restic -r "$repo" "${RESTIC_EXTRA_ARGS[@]}" snapshots --latest 1 --json 2>/dev/null | jq -r '.[0].id // empty'
 }
 
 # === APP PATH FUNCTIONS ===
@@ -343,8 +339,7 @@ restore_full() {
 
     local repo
     repo=$(get_repo "$source")
-    local opts
-    opts=$(get_restic_opts "$source")
+    build_restic_args "$source"
 
     info "Source: $source"
     info "Snapshot: $snapshot"
@@ -353,7 +348,7 @@ restore_full() {
 
     if [[ "$dry_run" == "true" ]]; then
         log "Dry run - showing what would be restored:"
-        restic -r "$repo" $opts ls "$snapshot" 2>/dev/null | head -100
+        restic -r "$repo" "${RESTIC_EXTRA_ARGS[@]}" ls "$snapshot" 2>/dev/null | head -100
         echo "... (truncated)"
         return 0
     fi
@@ -370,7 +365,7 @@ restore_full() {
 
     # Restore
     log "Restoring files..."
-    if restic -r "$repo" $opts restore "$snapshot" --target "$target" --verbose; then
+    if restic -r "$repo" "${RESTIC_EXTRA_ARGS[@]}" restore "$snapshot" --target "$target" --verbose; then
         log "Restore completed"
     else
         error "Restore failed"
@@ -380,6 +375,10 @@ restore_full() {
     # Fix permissions
     if [[ "$target" == "/" ]]; then
         fix_permissions
+
+        # Reconstruct symlinks from manifest
+        reconstruct_symlinks "$target"
+
         start_services
     fi
 
@@ -397,8 +396,7 @@ restore_app() {
 
     local repo
     repo=$(get_repo "$source")
-    local opts
-    opts=$(get_restic_opts "$source")
+    build_restic_args "$source"
 
     # Get app paths
     local paths
@@ -444,7 +442,7 @@ restore_app() {
 
     # Restore
     log "Restoring $app..."
-    if restic -r "$repo" $opts restore "$snapshot" --target "$target" "${include_args[@]}" --verbose; then
+    if restic -r "$repo" "${RESTIC_EXTRA_ARGS[@]}" restore "$snapshot" --target "$target" "${include_args[@]}" --verbose; then
         log "Restore completed"
     else
         error "Restore failed"
@@ -476,8 +474,7 @@ restore_configs_only() {
 
     local repo
     repo=$(get_repo "$source")
-    local opts
-    opts=$(get_restic_opts "$source")
+    build_restic_args "$source"
 
     # Config patterns (exclude databases)
     local include_patterns=(
@@ -527,7 +524,7 @@ restore_configs_only() {
 
     # Restore
     log "Restoring config files..."
-    if restic -r "$repo" $opts restore "$snapshot" --target "$target" "${include_args[@]}" "${exclude_args[@]}" --verbose; then
+    if restic -r "$repo" "${RESTIC_EXTRA_ARGS[@]}" restore "$snapshot" --target "$target" "${include_args[@]}" "${exclude_args[@]}" --verbose; then
         log "Restore completed"
     else
         error "Restore failed"
@@ -551,15 +548,62 @@ browse_files() {
 
     local repo
     repo=$(get_repo "$source")
-    local opts
-    opts=$(get_restic_opts "$source")
+    build_restic_args "$source"
 
     log "Listing files in snapshot $snapshot..."
     echo ""
     echo "Use arrow keys to scroll, 'q' to quit"
     echo ""
 
-    restic -r "$repo" $opts ls "$snapshot" 2>/dev/null | less
+    restic -r "$repo" "${RESTIC_EXTRA_ARGS[@]}" ls "$snapshot" 2>/dev/null | less
+}
+
+# === SYMLINK RECONSTRUCTION ===
+reconstruct_symlinks() {
+    local target="${1:-/}"
+    local manifest_dir="${target%/}/opt/swizzin-extras/backup/manifests"
+
+    # Find the latest symlinks manifest
+    local latest_manifest
+    latest_manifest=$(find "$manifest_dir" -name "symlinks-*.json" -type f 2>/dev/null | sort -r | head -1)
+
+    if [[ -z "$latest_manifest" || ! -f "$latest_manifest" ]]; then
+        info "No symlink manifest found, skipping symlink reconstruction"
+        return 0
+    fi
+
+    # Validate JSON
+    if ! jq empty "$latest_manifest" 2>/dev/null; then
+        warn "Symlink manifest is not valid JSON, skipping reconstruction"
+        return 0
+    fi
+
+    local link_count
+    link_count=$(jq '[.root_folders | to_entries[].value.symlinks[]] | length' "$latest_manifest" 2>/dev/null || echo "0")
+
+    if [[ "$link_count" -eq 0 ]]; then
+        info "No symlinks to reconstruct"
+        return 0
+    fi
+
+    if ! ask "Reconstruct $link_count symlinks from manifest?" Y; then
+        return 0
+    fi
+
+    log "Reconstructing symlinks from $latest_manifest..."
+    local restored=0 failed=0
+
+    while IFS=$'\t' read -r link_path link_target; do
+        [[ -z "$link_path" || -z "$link_target" ]] && continue
+        if ln -sfn "$link_target" "$link_path" 2>/dev/null; then
+            ((restored++))
+        else
+            warn "Failed to create symlink: $link_path -> $link_target"
+            ((failed++))
+        fi
+    done < <(jq -r '.root_folders | to_entries[].value.symlinks[] | [.path, .target] | @tsv' "$latest_manifest" 2>/dev/null)
+
+    log "Symlink reconstruction complete: $restored restored, $failed failed"
 }
 
 # === INTERACTIVE MODE ===
@@ -605,11 +649,10 @@ interactive_mode() {
 
     local repo
     repo=$(get_repo "$source")
-    local opts
-    opts=$(get_restic_opts "$source")
+    build_restic_args "$source"
 
     log "Fetching snapshots from $source..."
-    restic -r "$repo" $opts snapshots 2>/dev/null || {
+    restic -r "$repo" "${RESTIC_EXTRA_ARGS[@]}" snapshots 2>/dev/null || {
         error "Failed to list snapshots"
         exit 1
     }

@@ -5,7 +5,7 @@
 # Runs after backup completes (success or failure).
 # Use this to restart services or cleanup.
 #
-# Copy to /opt/swizzin/backup/hooks/post-backup.sh
+# Copy to /opt/swizzin-extras/backup/hooks/post-backup.sh
 
 set -euo pipefail
 

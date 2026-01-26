@@ -5,7 +5,7 @@
 # Runs before backup starts.
 # Use this to stop services that need consistent state.
 #
-# Copy to /opt/swizzin/backup/hooks/pre-backup.sh
+# Copy to /opt/swizzin-extras/backup/hooks/pre-backup.sh
 
 set -euo pipefail
 

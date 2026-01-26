@@ -1,7 +1,7 @@
 # ============================================
 # SWIZZIN BACKUP CONFIGURATION
 # ============================================
-# Copy this file to /opt/swizzin/backup/backup.conf
+# Copy this file to /opt/swizzin-extras/backup/backup.conf
 
 # --- Restic Encryption ---
 RESTIC_PASSWORD_FILE="/root/.swizzin-backup-password"
@@ -33,14 +33,20 @@ PUSHOVER_PRIORITY="0"
 BACKUP_HOUR="03"
 BACKUP_MINUTE="00"
 
+# --- Notifications (Discord) ---
+DISCORD_ENABLED="no"
+DISCORD_WEBHOOK_URL=""
+
+# --- Notifications (Notifiarr) ---
+NOTIFIARR_ENABLED="no"
+NOTIFIARR_API_KEY=""
+
 # --- App Handling ---
 EXCLUDE_APPS=""
-MEDIASERVER_MODE="config_only"
 
 # --- Extra Paths ---
 EXTRA_PATHS=""
 
 # --- Advanced ---
-PARALLEL_UPLOADS=4
 LOG_FILE="/var/log/swizzin-backup.log"
-MANIFEST_DIR="/opt/swizzin/backup/manifests"
+MANIFEST_DIR="/opt/swizzin-extras/backup/manifests"

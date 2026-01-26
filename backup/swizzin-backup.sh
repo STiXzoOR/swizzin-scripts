@@ -67,16 +67,38 @@ send_notification() {
     local message="$2"
     local priority="${3:-0}"
 
-    if [[ "${PUSHOVER_ENABLED:-no}" != "yes" ]]; then
-        return 0
+    # Pushover
+    if [[ "${PUSHOVER_ENABLED:-no}" == "yes" ]]; then
+        curl -s --form-string "token=${PUSHOVER_API_TOKEN}" \
+            --form-string "user=${PUSHOVER_USER_KEY}" \
+            --form-string "message=${message}" \
+            --form-string "title=${title}" \
+            --form-string "priority=${priority}" \
+            https://api.pushover.net/1/messages.json >/dev/null || true
     fi
 
-    curl -s --form-string "token=${PUSHOVER_API_TOKEN}" \
-        --form-string "user=${PUSHOVER_USER_KEY}" \
-        --form-string "message=${message}" \
-        --form-string "title=${title}" \
-        --form-string "priority=${priority}" \
-        https://api.pushover.net/1/messages.json >/dev/null || true
+    # Discord
+    if [[ "${DISCORD_ENABLED:-no}" == "yes" && -n "${DISCORD_WEBHOOK_URL:-}" ]]; then
+        local color=3066993  # green
+        [[ "$priority" -ge 1 ]] && color=15158332  # red
+        local json
+        json=$(jq -n --arg title "$title" --arg desc "$message" --argjson color "$color" \
+            '{embeds: [{title: $title, description: $desc, color: $color}]}')
+        curl -s -H "Content-Type: application/json" -d "$json" \
+            "${DISCORD_WEBHOOK_URL}" >/dev/null || true
+    fi
+
+    # Notifiarr
+    if [[ "${NOTIFIARR_ENABLED:-no}" == "yes" && -n "${NOTIFIARR_API_KEY:-}" ]]; then
+        local event_type="success"
+        [[ "$priority" -ge 1 ]] && event_type="failure"
+        local json
+        json=$(jq -n --arg title "$title" --arg msg "$message" --arg evt "$event_type" \
+            '{notification: {name: $title, event: $evt}, message: {title: $title, body: $msg}}')
+        curl -s -H "x-api-key: ${NOTIFIARR_API_KEY}" \
+            -H "Content-Type: application/json" -d "$json" \
+            "https://notifiarr.com/api/v1/notification/passthrough" >/dev/null || true
+    fi
 }
 
 # === UTILITY FUNCTIONS ===
@@ -100,6 +122,24 @@ get_users() {
 get_master_user() {
     # Get the first/primary Swizzin user
     get_users | head -1
+}
+
+# === SFTP HELPERS ===
+build_sftp_args() {
+    SFTP_REPO="sftp:${SFTP_USER}@${SFTP_HOST}:${SFTP_PATH}"
+    SFTP_ARGS=(-o "sftp.command=ssh -i ${SFTP_KEY} -p ${SFTP_PORT} ${SFTP_USER}@${SFTP_HOST} -s sftp")
+}
+
+# === RETRY HELPER ===
+retry() {
+    local attempts="${1:-3}" delay="${2:-30}"
+    shift 2
+    local i
+    for ((i=1; i<=attempts; i++)); do
+        if "$@"; then return 0; fi
+        [[ $i -lt $attempts ]] && { log_warn "Attempt $i/$attempts failed, retrying in ${delay}s..."; sleep "$delay"; }
+    done
+    return 1
 }
 
 # === APP DISCOVERY ===
@@ -319,12 +359,6 @@ build_exclude_file() {
         fi
     done <<< "$discovered_apps"
 
-    # Media server handling
-    if [[ "${MEDIASERVER_MODE:-config_only}" == "config_only" ]]; then
-        # Already handled in global excludes
-        :
-    fi
-
     sort -u -o "$exclude_file" "$exclude_file"
 }
 
@@ -339,102 +373,96 @@ generate_manifests() {
     # Symlink manifest
     log_info "Generating symlink manifest..."
     local symlink_manifest="${manifest_dir}/symlinks-${date_stamp}.json"
-    {
-        echo "{"
-        echo "  \"generated\": \"$(date -Iseconds)\","
-        echo "  \"root_folders\": {"
+    local tmp_roots
+    tmp_roots=$(mktemp)
 
-        local first_root=true
-        resolve_dynamic_path "DYNAMIC:arr_root_folders" | sort -u | while read -r root; do
-            [[ -z "$root" || ! -d "$root" ]] && continue
+    resolve_dynamic_path "DYNAMIC:arr_root_folders" | sort -u | while read -r root; do
+        [[ -z "$root" || ! -d "$root" ]] && continue
 
-            if [[ "$first_root" != "true" ]]; then
-                echo ","
-            fi
-            first_root=false
+        local tmp_links
+        tmp_links=$(mktemp)
+        find "$root" -type l 2>/dev/null | head -1000 | while read -r link; do
+            local target
+            target=$(readlink -f "$link" 2>/dev/null || echo "")
+            jq -n --arg path "$link" --arg target "$target" '{path: $path, target: $target}'
+        done | jq -s '.' > "$tmp_links"
 
-            echo "    \"$root\": {"
-            echo "      \"symlinks\": ["
+        jq -n --arg root "$root" --slurpfile links "$tmp_links" \
+            '{($root): {symlinks: $links[0]}}' >> "$tmp_roots"
+        rm -f "$tmp_links"
+    done
 
-            local first_link=true
-            find "$root" -type l 2>/dev/null | head -1000 | while read -r link; do
-                local target
-                target=$(readlink -f "$link" 2>/dev/null || echo "")
-
-                if [[ "$first_link" != "true" ]]; then
-                    echo ","
-                fi
-                first_link=false
-
-                echo "        {\"path\": \"$link\", \"target\": \"$target\"}"
-            done
-
-            echo ""
-            echo "      ]"
-            echo -n "    }"
-        done
-
-        echo ""
-        echo "  }"
-        echo "}"
-    } > "$symlink_manifest"
+    # Merge all root folder objects into one JSON document
+    if [[ -s "$tmp_roots" ]]; then
+        jq -n --arg generated "$(date -Iseconds)" --slurpfile roots "$tmp_roots" \
+            '{generated: $generated, root_folders: ($roots | add // {})}' \
+            > "$symlink_manifest"
+    else
+        jq -n --arg generated "$(date -Iseconds)" \
+            '{generated: $generated, root_folders: {}}' > "$symlink_manifest"
+    fi
+    rm -f "$tmp_roots"
 
     # Swizdb export
     log_info "Exporting swizdb..."
     local swizdb_manifest="${manifest_dir}/swizdb-${date_stamp}.json"
-    {
-        echo "{"
-        local first=true
-        for key_file in /opt/swizzin/db/*; do
-            [[ -f "$key_file" ]] || continue
-            local key value
-            key=$(basename "$key_file")
-            value=$(cat "$key_file" | jq -Rs '.' 2>/dev/null || cat "$key_file")
+    local tmp_swizdb
+    tmp_swizdb=$(mktemp)
 
-            if [[ "$first" != "true" ]]; then
-                echo ","
-            fi
-            first=false
-            echo "  \"$key\": $value"
-        done
-        echo ""
-        echo "}"
-    } > "$swizdb_manifest"
+    for key_file in /opt/swizzin/db/*; do
+        [[ -f "$key_file" ]] || continue
+        local key
+        key=$(basename "$key_file")
+        jq -n --arg key "$key" --rawfile val "$key_file" '{($key): $val}' >> "$tmp_swizdb"
+    done
+
+    if [[ -s "$tmp_swizdb" ]]; then
+        jq -s 'add // {}' "$tmp_swizdb" > "$swizdb_manifest"
+    else
+        echo '{}' > "$swizdb_manifest"
+    fi
+    rm -f "$tmp_swizdb"
 
     # Paths manifest
     log_info "Generating paths manifest..."
     local paths_manifest="${manifest_dir}/paths-${date_stamp}.json"
-    {
-        echo "{"
-        echo "  \"generated\": \"$(date -Iseconds)\","
-        echo "  \"custom_paths\": {"
 
-        # Zurg
-        local zurg_mount
-        zurg_mount=$(get_swizdb "zurg_mount_point" || echo "/mnt/zurg")
-        echo "    \"zurg\": {"
-        echo "      \"mount_point\": \"$zurg_mount\","
-        echo "      \"version\": \"$(get_swizdb 'zurg_version' || echo 'unknown')\""
-        echo "    },"
+    local zurg_mount zurg_version decypharr_mount decypharr_downloads
+    zurg_mount=$(get_swizdb "zurg_mount_point" || echo "/mnt/zurg")
+    zurg_version=$(get_swizdb "zurg_version" || echo "unknown")
+    decypharr_mount=$(get_swizdb "decypharr_mount_path" || echo "/mnt")
+    decypharr_downloads=$(resolve_dynamic_path "DYNAMIC:decypharr_downloads" | head -1)
 
-        # Decypharr
-        local decypharr_mount
-        decypharr_mount=$(get_swizdb "decypharr_mount_path" || echo "/mnt")
-        local decypharr_downloads
-        decypharr_downloads=$(resolve_dynamic_path "DYNAMIC:decypharr_downloads" | head -1)
-        echo "    \"decypharr\": {"
-        echo "      \"mount_path\": \"$decypharr_mount\","
-        echo "      \"downloads_path\": \"$decypharr_downloads\""
-        echo "    }"
+    jq -n \
+        --arg generated "$(date -Iseconds)" \
+        --arg zurg_mount "$zurg_mount" \
+        --arg zurg_version "$zurg_version" \
+        --arg decypharr_mount "$decypharr_mount" \
+        --arg decypharr_downloads "${decypharr_downloads:-}" \
+        '{
+            generated: $generated,
+            custom_paths: {
+                zurg: {mount_point: $zurg_mount, version: $zurg_version},
+                decypharr: {mount_path: $decypharr_mount, downloads_path: $decypharr_downloads}
+            }
+        }' > "$paths_manifest"
 
-        echo "  }"
-        echo "}"
-    } > "$paths_manifest"
+    # Cleanup old manifests (older than 7 days)
+    find "$manifest_dir" -name "*.json" -mtime +7 -delete 2>/dev/null || true
 }
 
 # === BACKUP EXECUTION ===
 run_backup() {
     local target="${1:-all}"
+
+    # Concurrent backup protection
+    local LOCKFILE="/var/run/swizzin-backup.lock"
+    exec 200>"$LOCKFILE"
+    if ! flock -n 200; then
+        log_error "Another backup is already running"
+        exit 1
+    fi
+
     local start_time
     start_time=$(date +%s)
 
@@ -476,7 +504,7 @@ run_backup() {
         log_info "Backing up to Google Drive..."
         local gdrive_repo="rclone:${GDRIVE_REMOTE}"
 
-        if restic -r "$gdrive_repo" backup \
+        if retry 3 30 restic -r "$gdrive_repo" backup \
             --files-from "$include_file" \
             --exclude-file "$exclude_file" \
             --tag "swizzin" \
@@ -487,7 +515,7 @@ run_backup() {
 
             # Prune old snapshots
             log_info "Pruning Google Drive snapshots..."
-            restic -r "$gdrive_repo" forget \
+            retry 3 30 restic -r "$gdrive_repo" forget \
                 --keep-daily "${KEEP_DAILY:-7}" \
                 --keep-weekly "${KEEP_WEEKLY:-4}" \
                 --keep-monthly "${KEEP_MONTHLY:-3}" \
@@ -502,10 +530,9 @@ run_backup() {
     # Backup to SFTP
     if [[ "$target" == "all" || "$target" == "sftp" ]] && [[ "${SFTP_ENABLED:-no}" == "yes" ]]; then
         log_info "Backing up to SFTP..."
-        local sftp_repo="sftp:${SFTP_USER}@${SFTP_HOST}:${SFTP_PATH}"
-        local sftp_opts="-o sftp.command=ssh -i ${SFTP_KEY} -p ${SFTP_PORT} ${SFTP_USER}@${SFTP_HOST} -s sftp"
+        build_sftp_args
 
-        if restic -r "$sftp_repo" $sftp_opts backup \
+        if retry 3 30 restic -r "$SFTP_REPO" "${SFTP_ARGS[@]}" backup \
             --files-from "$include_file" \
             --exclude-file "$exclude_file" \
             --tag "swizzin" \
@@ -516,7 +543,7 @@ run_backup() {
 
             # Prune old snapshots
             log_info "Pruning SFTP snapshots..."
-            restic -r "$sftp_repo" $sftp_opts forget \
+            retry 3 30 restic -r "$SFTP_REPO" "${SFTP_ARGS[@]}" forget \
                 --keep-daily "${KEEP_DAILY:-7}" \
                 --keep-weekly "${KEEP_WEEKLY:-4}" \
                 --keep-monthly "${KEEP_MONTHLY:-3}" \
@@ -614,8 +641,8 @@ cmd_status() {
 
     if [[ "${SFTP_ENABLED:-no}" == "yes" ]]; then
         echo "SFTP latest snapshot:"
-        local sftp_repo="sftp:${SFTP_USER}@${SFTP_HOST}:${SFTP_PATH}"
-        restic -r "$sftp_repo" -o "sftp.command=ssh -i ${SFTP_KEY} -p ${SFTP_PORT} ${SFTP_USER}@${SFTP_HOST} -s sftp" snapshots --latest 1 2>/dev/null || echo "  (none or error)"
+        build_sftp_args
+        restic -r "$SFTP_REPO" "${SFTP_ARGS[@]}" snapshots --latest 1 2>/dev/null || echo "  (none or error)"
     fi
 }
 
@@ -630,8 +657,8 @@ cmd_list() {
 
     if [[ "$target" == "all" || "$target" == "sftp" ]] && [[ "${SFTP_ENABLED:-no}" == "yes" ]]; then
         echo "=== SFTP Snapshots ==="
-        local sftp_repo="sftp:${SFTP_USER}@${SFTP_HOST}:${SFTP_PATH}"
-        restic -r "$sftp_repo" -o "sftp.command=ssh -i ${SFTP_KEY} -p ${SFTP_PORT} ${SFTP_USER}@${SFTP_HOST} -s sftp" snapshots 2>/dev/null || echo "Error listing snapshots"
+        build_sftp_args
+        restic -r "$SFTP_REPO" "${SFTP_ARGS[@]}" snapshots 2>/dev/null || echo "Error listing snapshots"
     fi
 }
 
@@ -646,8 +673,8 @@ cmd_verify() {
 
     if [[ "${SFTP_ENABLED:-no}" == "yes" ]]; then
         echo "Checking SFTP repository..."
-        local sftp_repo="sftp:${SFTP_USER}@${SFTP_HOST}:${SFTP_PATH}"
-        restic -r "$sftp_repo" -o "sftp.command=ssh -i ${SFTP_KEY} -p ${SFTP_PORT} ${SFTP_USER}@${SFTP_HOST} -s sftp" check 2>&1 || echo "Verification failed"
+        build_sftp_args
+        restic -r "$SFTP_REPO" "${SFTP_ARGS[@]}" check 2>&1 || echo "Verification failed"
     fi
 }
 
@@ -662,8 +689,8 @@ cmd_stats() {
 
     if [[ "${SFTP_ENABLED:-no}" == "yes" ]]; then
         echo "SFTP:"
-        local sftp_repo="sftp:${SFTP_USER}@${SFTP_HOST}:${SFTP_PATH}"
-        restic -r "$sftp_repo" -o "sftp.command=ssh -i ${SFTP_KEY} -p ${SFTP_PORT} ${SFTP_USER}@${SFTP_HOST} -s sftp" stats 2>/dev/null || echo "Error getting stats"
+        build_sftp_args
+        restic -r "$SFTP_REPO" "${SFTP_ARGS[@]}" stats 2>/dev/null || echo "Error getting stats"
     fi
 }
 
@@ -678,8 +705,8 @@ cmd_init() {
 
     if [[ "${SFTP_ENABLED:-no}" == "yes" ]]; then
         echo "Initializing SFTP repository..."
-        local sftp_repo="sftp:${SFTP_USER}@${SFTP_HOST}:${SFTP_PATH}"
-        restic -r "$sftp_repo" -o "sftp.command=ssh -i ${SFTP_KEY} -p ${SFTP_PORT} ${SFTP_USER}@${SFTP_HOST} -s sftp" init 2>&1 || echo "Already initialized or error"
+        build_sftp_args
+        restic -r "$SFTP_REPO" "${SFTP_ARGS[@]}" init 2>&1 || echo "Already initialized or error"
     fi
 }
 
@@ -697,7 +724,7 @@ cmd_test() {
 
     if [[ "${SFTP_ENABLED:-no}" == "yes" ]]; then
         echo -n "SFTP: "
-        if ssh -o BatchMode=yes -o ConnectTimeout=5 -p "${SFTP_PORT}" "${SFTP_USER}@${SFTP_HOST}" "echo ok" &>/dev/null; then
+        if ssh -i "${SFTP_KEY}" -o BatchMode=yes -o ConnectTimeout=5 -p "${SFTP_PORT}" "${SFTP_USER}@${SFTP_HOST}" "echo ok" &>/dev/null; then
             echo "OK"
         else
             echo "FAILED"
@@ -713,6 +740,31 @@ cmd_test() {
             --form-string "title=Swizzin Backup Test" \
             https://api.pushover.net/1/messages.json)
         if echo "$response" | grep -q '"status":1'; then
+            echo "OK"
+        else
+            echo "FAILED"
+        fi
+    fi
+
+    if [[ "${DISCORD_ENABLED:-no}" == "yes" ]]; then
+        echo -n "Discord: "
+        local json
+        json=$(jq -n '{embeds: [{title: "Swizzin Backup Test", description: "Connectivity test", color: 3066993}]}')
+        if curl -sf -H "Content-Type: application/json" -d "$json" \
+            "${DISCORD_WEBHOOK_URL}" >/dev/null; then
+            echo "OK"
+        else
+            echo "FAILED"
+        fi
+    fi
+
+    if [[ "${NOTIFIARR_ENABLED:-no}" == "yes" ]]; then
+        echo -n "Notifiarr: "
+        local json
+        json=$(jq -n '{notification: {name: "Swizzin Backup Test", event: "test"}, message: {title: "Swizzin Backup Test", body: "Connectivity test"}}')
+        if curl -sf -H "x-api-key: ${NOTIFIARR_API_KEY}" \
+            -H "Content-Type: application/json" -d "$json" \
+            "https://notifiarr.com/api/v1/notification/passthrough" >/dev/null; then
             echo "OK"
         else
             echo "FAILED"
