@@ -526,3 +526,12 @@ fi
 
 touch "/install/.$app_lockname.lock"
 echo_success "${app_name^} installed"
+
+# Hint about symlink import script if Sonarr/Radarr are installed
+if compgen -G "/install/.sonarr*.lock" >/dev/null 2>&1 || compgen -G "/install/.radarr*.lock" >/dev/null 2>&1; then
+	echo ""
+	echo_info "Sonarr/Radarr detected. To prevent 'Permission denied' errors"
+	echo_info "when importing through symlinks to the zurg mount, consider using"
+	echo_info "the symlink import script:"
+	echo_info "  bash arr-symlink-import-setup.sh --install"
+fi
