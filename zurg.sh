@@ -1,7 +1,7 @@
 #!/bin/bash
 # zurg installer
 # STiXzoOR 2025
-# Usage: bash zurg.sh [--remove [--force]] [--switch-version [free|paid]] [--register-panel]
+# Usage: bash zurg.sh [--remove [--force]] [--switch-version [free|paid]] [--upgrade [--binary-only] [--latest]] [--register-panel]
 
 . /etc/swizzin/sources/globals.sh
 
@@ -261,18 +261,25 @@ _update_decypharr_config() {
 
 	echo_progress_start "Updating Decypharr configuration"
 
-	# Update realdebrid folder path using jq if available, else sed
+	# Update realdebrid folder path and download_folder using jq if available, else warn
+	local mount_parent
+	mount_parent=$(dirname "$mount_point")
+
 	if command -v jq >/dev/null 2>&1; then
 		local tmp_config
 		tmp_config=$(mktemp)
-		jq --arg folder "${mount_point}/__all__/" --arg key "$api_key" '
+		jq --arg folder "${mount_point}/__all__/" \
+		   --arg key "$api_key" \
+		   --arg dl_folder "${mount_parent}/symlinks/downloads" '
 			.debrids = [.debrids[] | if .name == "realdebrid" then .folder = $folder | .api_key = $key else . end]
+			| .qbittorrent.download_folder = $dl_folder
 		' "$decypharr_config" >"$tmp_config" 2>/dev/null && mv "$tmp_config" "$decypharr_config"
 		chown "$user":"$user" "$decypharr_config"
 	else
 		# Fallback: just log a warning
 		echo_warn "jq not installed - please manually update Decypharr config"
 		echo_warn "Set realdebrid folder to: ${mount_point}/__all__/"
+		echo_warn "Set qbittorrent download_folder to: ${mount_parent}/symlinks/downloads"
 		echo_progress_done "Decypharr config needs manual update"
 		return
 	fi
@@ -1040,6 +1047,209 @@ _nginx_zurg() {
 	fi
 }
 
+_upgrade_binary_zurg() {
+	echo_info "Upgrading zurg binary only..."
+
+	# Read version from swizdb
+	local zurg_version
+	zurg_version=$(swizdb get "zurg/version" 2>/dev/null) || true
+	if [ -z "$zurg_version" ]; then
+		echo_error "Cannot determine zurg version from swizdb. Reinstall to fix."
+		exit 1
+	fi
+
+	# For paid version, get GitHub authentication
+	local github_token=""
+	if [ "$zurg_version" = "paid" ]; then
+		if ! _get_github_token; then
+			echo_error "GitHub authentication failed for paid version."
+			exit 1
+		fi
+	fi
+
+	# Detect architecture
+	local arch
+	case "$(_os_arch)" in
+	"amd64") arch='linux-amd64' ;;
+	"arm64") arch="linux-arm64" ;;
+	"armhf") arch="linux-arm-6" ;;
+	*)
+		echo_error "Arch not supported"
+		exit 1
+		;;
+	esac
+
+	# Set repo based on version
+	local zurg_repo
+	if [ "$zurg_version" = "paid" ]; then
+		zurg_repo="debridmediamanager/zurg"
+	else
+		zurg_repo="debridmediamanager/zurg-testing"
+	fi
+
+	# Determine which release to download
+	local release_endpoint
+	local use_latest_tag="${ZURG_USE_LATEST_TAG:-}"
+	use_latest_tag="${use_latest_tag,,}"
+
+	if [ -n "${ZURG_VERSION_TAG:-}" ]; then
+		release_endpoint="repos/$zurg_repo/releases/tags/$ZURG_VERSION_TAG"
+		echo_info "Using specific version tag: $ZURG_VERSION_TAG"
+	elif [[ "$use_latest_tag" == "true" || "$use_latest_tag" == "1" || "$use_latest_tag" == "yes" ]]; then
+		release_endpoint="repos/$zurg_repo/releases?per_page=1"
+	else
+		release_endpoint="repos/$zurg_repo/releases/latest"
+	fi
+
+	local is_array_response="false"
+	if [[ "$release_endpoint" == *"per_page="* ]]; then
+		is_array_response="true"
+	fi
+
+	echo_progress_start "Downloading $zurg_version release"
+
+	# Download release
+	if [ "$zurg_version" = "paid" ]; then
+		if [ "$github_token" = "gh_cli" ]; then
+			local release_info
+			release_info=$(gh api "$release_endpoint" 2>>"$log") || {
+				echo_error "Failed to query GitHub for release"
+				exit 1
+			}
+			if [ "$is_array_response" = "true" ]; then
+				release_info=$(echo "$release_info" | jq '.[0]')
+			fi
+
+			local tag_name
+			tag_name=$(echo "$release_info" | jq -r '.tag_name')
+			echo_info "Found release: $tag_name"
+
+			latest=$(echo "$release_info" | jq -r "[.assets[] | select(.name | contains(\"$arch\"))] | first | .url")
+			latest=$(echo "$latest" | tr -d '[:space:]')
+
+			if [ -z "$latest" ] || [ "$latest" = "null" ]; then
+				echo_error "Could not find release asset for $arch"
+				exit 1
+			fi
+
+			if ! gh api "$latest" -H "Accept: application/octet-stream" >/tmp/$app_name.zip 2>>"$log"; then
+				echo_error "Download failed, exiting"
+				exit 1
+			fi
+		else
+			local release_json
+			release_json=$(curl -sL -H "Authorization: token $github_token" \
+				"https://api.github.com/$release_endpoint") || {
+				echo_error "Failed to query GitHub for release"
+				exit 1
+			}
+			if [ "$is_array_response" = "true" ]; then
+				if command -v jq &>/dev/null; then
+					release_json=$(echo "$release_json" | jq '.[0]')
+				elif command -v python3 &>/dev/null; then
+					release_json=$(echo "$release_json" | python3 -c "import sys,json; print(json.dumps(json.load(sys.stdin)[0]))")
+				else
+					echo_error "jq or python3 required to parse array response"
+					exit 1
+				fi
+			fi
+
+			local tag_name
+			if command -v jq &>/dev/null; then
+				tag_name=$(echo "$release_json" | jq -r '.tag_name')
+			else
+				tag_name=$(echo "$release_json" | grep -o '"tag_name"[^,]*' | cut -d'"' -f4)
+			fi
+			echo_info "Found release: $tag_name"
+
+			if command -v jq &>/dev/null; then
+				latest=$(echo "$release_json" | jq -r "[.assets[] | select(.name | contains(\"$arch\"))] | first | .url")
+			elif command -v python3 &>/dev/null; then
+				latest=$(echo "$release_json" | python3 -c "import sys,json; d=json.load(sys.stdin); print(next((a['url'] for a in d['assets'] if '$arch' in a['name']), ''))")
+			else
+				echo_error "jq or python3 required to parse GitHub API response"
+				exit 1
+			fi
+
+			latest=$(echo "$latest" | tr -d '[:space:]')
+
+			if [ -z "$latest" ] || [ "$latest" = "null" ]; then
+				echo_error "Could not find release asset for $arch"
+				exit 1
+			fi
+
+			if ! curl -H "Authorization: token $github_token" \
+				-H "Accept: application/octet-stream" \
+				"$latest" -L -o "/tmp/$app_name.zip" >>"$log" 2>&1; then
+				echo_error "Download failed, exiting"
+				exit 1
+			fi
+		fi
+	else
+		# Free version - no auth needed
+		local release_json
+		release_json=$(curl -sL "https://api.github.com/$release_endpoint") || {
+			echo_error "Failed to query GitHub for release"
+			exit 1
+		}
+		if [ "$is_array_response" = "true" ]; then
+			if command -v jq &>/dev/null; then
+				release_json=$(echo "$release_json" | jq '.[0]')
+			elif command -v python3 &>/dev/null; then
+				release_json=$(echo "$release_json" | python3 -c "import sys,json; print(json.dumps(json.load(sys.stdin)[0]))")
+			else
+				:
+			fi
+		fi
+
+		local tag_name
+		if command -v jq &>/dev/null; then
+			tag_name=$(echo "$release_json" | jq -r '.tag_name')
+		else
+			tag_name=$(echo "$release_json" | grep -o '"tag_name"[^,]*' | head -1 | cut -d'"' -f4)
+		fi
+		echo_info "Found release: $tag_name"
+
+		if command -v jq &>/dev/null; then
+			latest=$(echo "$release_json" | jq -r ".assets[] | select(.name | contains(\"$arch\")) | .browser_download_url")
+		else
+			latest=$(echo "$release_json" | grep "browser_download_url" | grep "$arch" | head -1 | cut -d \" -f4)
+		fi
+
+		if [ -z "$latest" ]; then
+			echo_error "Could not find release asset for $arch"
+			exit 1
+		fi
+
+		if ! curl "$latest" -L -o "/tmp/$app_name.zip" >>"$log" 2>&1; then
+			echo_error "Download failed, exiting"
+			exit 1
+		fi
+	fi
+	echo_progress_done "Archive downloaded"
+
+	echo_progress_start "Extracting and replacing binary"
+	unzip -o "/tmp/$app_name.zip" -d "/tmp/$app_name" >>"$log" 2>&1 || {
+		echo_error "Failed to extract"
+		exit 1
+	}
+	mv "/tmp/$app_name/$app_binary" "$app_dir/$app_binary"
+	rm -rf "/tmp/$app_name.zip" "/tmp/$app_name"
+	chmod +x "$app_dir/$app_binary"
+	echo_progress_done "Binary replaced"
+
+	# Restart services
+	echo_progress_start "Restarting zurg services"
+	systemctl restart "$app_servicefile" 2>/dev/null || true
+	if [ "$zurg_version" = "free" ] && [ -f "/etc/systemd/system/$app_mount_servicefile" ]; then
+		sleep 2
+		systemctl restart "$app_mount_servicefile" 2>/dev/null || true
+	fi
+	echo_progress_done "Services restarted"
+
+	echo_success "Zurg binary upgraded ($zurg_version version)"
+}
+
 # Handle --remove flag
 if [ "$1" = "--remove" ]; then
 	_remove_zurg "$2"
@@ -1070,6 +1280,15 @@ if [ "$1" = "--register-panel" ]; then
 	fi
 	exit 0
 fi
+
+# Parse modifier flags from all arguments
+binary_only="false"
+for arg in "$@"; do
+	case "$arg" in
+	--binary-only) binary_only="true" ;;
+	--latest) ZURG_USE_LATEST_TAG="true" ;;
+	esac
+done
 
 # Handle --switch-version flag
 switch_mode="false"
@@ -1127,12 +1346,17 @@ if [ "$switch_mode" != "true" ] && [ -f "/install/.$app_lockname.lock" ]; then
 
 	# Check if user wants to upgrade/reinstall
 	if [ "$1" = "--upgrade" ] || [ "${ZURG_UPGRADE:-}" = "true" ]; then
+		if [ "$binary_only" = "true" ]; then
+			_upgrade_binary_zurg
+			exit 0
+		fi
 		echo_info "Upgrading zurg..."
 	elif [[ "$_use_latest" == "true" || "$_use_latest" == "1" || "$_use_latest" == "yes" ]] || [ -n "${ZURG_VERSION_TAG:-}" ]; then
 		echo_info "Version change requested (tag mode), proceeding with install..."
 	else
 		echo_info "Use --upgrade to reinstall/upgrade, or --switch-version to change versions"
-		echo_info "Use ZURG_USE_LATEST_TAG=true or ZURG_VERSION_TAG=vX.X.X to install specific version"
+		echo_info "Use --upgrade --binary-only to update only the binary"
+		echo_info "Use --latest or ZURG_VERSION_TAG=vX.X.X to install specific version"
 		exit 0
 	fi
 fi
@@ -1174,3 +1398,12 @@ fi
 touch "/install/.$app_lockname.lock"
 echo_success "${app_name^} installed"
 echo_info "Your Real-Debrid library is available at: $app_mount_point"
+
+# Hint about symlink import script if Sonarr/Radarr are installed
+if compgen -G "/install/.sonarr*.lock" >/dev/null 2>&1 || compgen -G "/install/.radarr*.lock" >/dev/null 2>&1; then
+	echo ""
+	echo_info "Sonarr/Radarr detected. To prevent 'Permission denied' errors"
+	echo_info "when importing through symlinks to the zurg mount, consider using"
+	echo_info "the symlink import script:"
+	echo_info "  bash arr-symlink-import-setup.sh --install"
+fi
