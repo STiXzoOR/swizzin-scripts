@@ -19,7 +19,7 @@
 #
 # Sonarr/Radarr call this script with:
 #   Positional args: $1 = source path, $2 = destination path
-#   Environment vars: Sonarr_SourcePath / Radarr_SourcePath (PascalCase)
+#   Environment vars: sonarr_sourcepath / radarr_sourcepath (lowercase on Linux)
 #
 # The script communicates back via stdout:
 #   [MoveStatus]MoveComplete  - signals that the file transfer is handled
@@ -41,8 +41,15 @@ MOUNT_CHECK_RETRIES="${MOUNT_CHECK_RETRIES:-5}"
 MOUNT_CHECK_DELAY="${MOUNT_CHECK_DELAY:-3}"
 MOUNT_CHECK_TIMEOUT="${MOUNT_CHECK_TIMEOUT:-5}"
 
-# Log settings
-LOG_FILE="${ARR_IMPORT_LOG:-/var/log/arr-symlink-import.log}"
+# Log settings - fall back to user-writable location if /var/log isn't accessible
+# (Sonarr/Radarr run the script as the service user, not root)
+if [[ -n "${ARR_IMPORT_LOG:-}" ]]; then
+	LOG_FILE="$ARR_IMPORT_LOG"
+elif [[ -w "/var/log/arr-symlink-import.log" ]] || [[ -w "/var/log" ]]; then
+	LOG_FILE="/var/log/arr-symlink-import.log"
+else
+	LOG_FILE="${HOME:=/tmp}/.arr-symlink-import.log"
+fi
 LOG_MAX_SIZE="${ARR_IMPORT_LOG_MAX_SIZE:-10485760}" # 10MB default
 
 # ==============================================================================
@@ -176,7 +183,7 @@ _check_mount() {
 #
 # Sonarr/Radarr pass paths two ways:
 #   1. Positional args: $1 = source, $2 = destination
-#   2. Environment vars: Sonarr_SourcePath / Radarr_SourcePath (PascalCase)
+#   2. Environment vars: sonarr_sourcepath / radarr_sourcepath (lowercase on Linux)
 #
 # We prefer positional args (most reliable), fall back to env vars.
 # ==============================================================================
@@ -190,25 +197,25 @@ if [[ -n "${1:-}" ]] && [[ -n "${2:-}" ]]; then
 	SOURCE_PATH="$1"
 	DEST_PATH="$2"
 	# Determine which app from env vars (for logging only)
-	if [[ -n "${Sonarr_SourcePath:-}" ]]; then
+	if [[ -n "${sonarr_sourcepath:-}" ]]; then
 		APP="Sonarr"
-	elif [[ -n "${Radarr_SourcePath:-}" ]]; then
+	elif [[ -n "${radarr_sourcepath:-}" ]]; then
 		APP="Radarr"
 	else
 		APP="Unknown"
 	fi
-# Method 2: Environment variables (PascalCase - actual Sonarr/Radarr casing)
-elif [[ -n "${Sonarr_SourcePath:-}" ]]; then
-	SOURCE_PATH="$Sonarr_SourcePath"
-	DEST_PATH="$Sonarr_DestinationPath"
+# Method 2: Environment variables (lowercase - .NET lowercases on Linux)
+elif [[ -n "${sonarr_sourcepath:-}" ]]; then
+	SOURCE_PATH="$sonarr_sourcepath"
+	DEST_PATH="$sonarr_destinationpath"
 	APP="Sonarr"
-elif [[ -n "${Radarr_SourcePath:-}" ]]; then
-	SOURCE_PATH="$Radarr_SourcePath"
-	DEST_PATH="$Radarr_DestinationPath"
+elif [[ -n "${radarr_sourcepath:-}" ]]; then
+	SOURCE_PATH="$radarr_sourcepath"
+	DEST_PATH="$radarr_destinationpath"
 	APP="Radarr"
 else
 	log "ERROR: No source path provided. Not called by Sonarr/Radarr?"
-	log "ERROR: Expected positional args (\$1/\$2) or Sonarr_SourcePath/Radarr_SourcePath env vars"
+	log "ERROR: Expected positional args (\$1/\$2) or sonarr_sourcepath/radarr_sourcepath env vars"
 	exit 1
 fi
 

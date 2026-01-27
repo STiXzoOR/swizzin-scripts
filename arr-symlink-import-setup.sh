@@ -211,12 +211,17 @@ _install_config() {
 }
 
 _create_log_dir() {
+	# Pre-create the log file with correct ownership so the service user can write to it
+	# (Sonarr/Radarr run the script as the service user, not root)
 	local log_dir
 	log_dir=$(dirname "$LOG_FILE")
 	if [[ ! -d "$log_dir" ]]; then
 		mkdir -p "$log_dir"
 		chmod 755 "$log_dir"
 	fi
+	touch "$LOG_FILE"
+	chmod 666 "$LOG_FILE"
+	echo_success "Log file created with write permissions: $LOG_FILE"
 }
 
 _print_setup_instructions() {
