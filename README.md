@@ -21,6 +21,7 @@ A collection of installer scripts for integrating additional applications into [
 | [huntarr.sh](#huntarr)                | [Huntarr](https://github.com/plexguide/Huntarr.io)           | Automated media discovery for Sonarr, Radarr, Lidarr, etc.      |
 | [subgen.sh](#subgen)                  | [Subgen](https://github.com/McCloudS/subgen)                 | Automatic subtitle generation using Whisper AI                  |
 | [zurg.sh](#zurg)                      | [Zurg](https://github.com/debridmediamanager/zurg-testing)   | Real-Debrid WebDAV server with rclone mount                     |
+| [lingarr.sh](#lingarr)                | [Lingarr](https://github.com/lingarr-translate/lingarr)      | Automatic subtitle translation (Docker-based)                   |
 | [dns-fix.sh](#dns-fix)                | -                                                            | Fix DNS issues for FlareSolverr/Byparr cookie validation        |
 | [emby-watchdog.sh](#service-watchdog) | -                                                            | Service watchdog with health checks and auto-restart            |
 | [backup/](#backup-system)             | -                                                            | Automated backup system with dual destinations and GFS rotation |
@@ -491,6 +492,49 @@ bash zurg.sh
 
 ---
 
+### Lingarr
+
+Automatic subtitle translation using multiple translation services (LibreTranslate, DeepL, OpenAI, Anthropic, Google, and more). Docker-based application managed via Docker Compose.
+
+```bash
+# Optional: Set custom owner
+export LINGARR_OWNER="username"
+
+# Install (auto-installs Docker if needed)
+bash lingarr.sh
+
+# Update to latest version
+bash lingarr.sh --update
+
+# Remove (will ask about purging config)
+bash lingarr.sh --remove
+
+# Remove without prompts
+bash lingarr.sh --remove --force
+```
+
+**Access:** `https://your-server/lingarr/`
+
+**Config:** `/opt/lingarr/config/`
+
+**Features:**
+
+- Auto-installs Docker Engine + Compose if not present
+- Auto-discovers media paths from Sonarr/Radarr (base + multi-instance)
+- Auto-discovers Sonarr/Radarr API credentials for integration
+- SQLite database (zero configuration)
+- `--update` flag pulls latest Docker image and recreates container
+- Supports 10+ translation backends configurable via web UI
+
+**Docker files:**
+
+- Compose: `/opt/lingarr/docker-compose.yml`
+- Service: `lingarr.service` (systemd wrapper for Docker Compose)
+
+**Post-Install:** Configure your preferred translation service via the Lingarr web UI.
+
+---
+
 ## Utility Scripts
 
 ### DNS Fix
@@ -743,6 +787,7 @@ Byparr, Huntarr, and Subgen use [uv](https://github.com/astral-sh/uv) for Python
 3. **Use a template** from `templates/` as your starting point:
    - `template-binary.sh` - For single-binary applications
    - `template-python.sh` - For Python apps using uv
+   - `template-docker.sh` - For Docker Compose applications
    - `template-subdomain.sh` - For extended installers with subdomain support
    - `template-multiinstance.sh` - For multi-instance managers
 4. Follow the coding standards in `CLAUDE.md`

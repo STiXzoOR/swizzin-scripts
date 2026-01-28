@@ -26,6 +26,7 @@ Each installer script follows a consistent pattern:
 
 - **Single-file binaries** → `/usr/bin/<appname>` (e.g., decypharr, notifiarr, zurg)
 - **Multi-file apps** → `/opt/<appname>/` (e.g., cleanuparr, seerr, byparr, huntarr, subgen)
+- **Docker apps** → `/opt/<appname>/` with `docker-compose.yml` (e.g., lingarr)
 
 ### Files
 
@@ -37,6 +38,7 @@ Each installer script follows a consistent pattern:
 - **huntarr.sh** - Installs Huntarr (automated media discovery for \*arr apps, uses uv)
 - **subgen.sh** - Installs Subgen (Whisper-based subtitle generation, uses uv + ffmpeg)
 - **zurg.sh** - Installs Zurg (Real-Debrid WebDAV server + rclone mount)
+- **lingarr.sh** - Installs Lingarr (subtitle translation, Docker-based, auto-discovers Sonarr/Radarr)
 - **organizr.sh** - Extended Organizr installer with subdomain and SSO support
 - **plex.sh** - Extended Plex installer with subdomain support
 - **emby.sh** - Extended Emby installer with subdomain and Premiere bypass support
@@ -57,6 +59,20 @@ Byparr, Huntarr, and Subgen use `uv` for Python version and dependency managemen
 - Apps are cloned to `/opt/<appname>`
 - Dependencies installed via `uv sync` or `uv add`
 - Systemd runs apps via `uv run python main.py`
+
+### Docker Apps
+
+Lingarr uses Docker Compose, wrapped by systemd for lifecycle management:
+
+- Docker Engine + Compose plugin auto-installed if missing
+- App config at `/opt/lingarr/config/` (SQLite database)
+- `docker-compose.yml` at `/opt/lingarr/`
+- Systemd service (`Type=oneshot`, `RemainAfterExit=yes`) wraps `docker compose up/down`
+- Media paths auto-discovered from Sonarr/Radarr SQLite databases (base + multi-instance)
+- Sonarr/Radarr API credentials auto-discovered from `config.xml`
+- Port bound to `127.0.0.1` only (nginx handles external access)
+- Container runs as master user UID:GID
+- `--update` flag pulls latest image and recreates container
 
 ### Zurg (Real-Debrid)
 
@@ -417,7 +433,7 @@ Most installers use `port 10000 12000` to find an available port in the 10000-12
 
 ### Nginx Configuration
 
-- **Cleanuparr/Decypharr/Notifiarr/Huntarr**: Location-based routing at `/<appname>/`
+- **Cleanuparr/Decypharr/Notifiarr/Huntarr/Lingarr**: Location-based routing at `/<appname>/`
 - **Seerr**: Dedicated vhost for subdomain-based access with frame-ancestors CSP
 - **Organizr**: Dedicated vhost at `/etc/nginx/sites-available/organizr` with internal auth rewrite
 - **Plex/Emby/Jellyfin**: Dedicated vhosts with panel meta urloverride and frame-ancestors CSP
@@ -498,6 +514,7 @@ The `templates/` directory contains starter templates for common script types:
 | --------------------------- | ------------------------------------------ | --------------------------- |
 | `template-binary.sh`        | Single binary apps installed to `/usr/bin` | decypharr, notifiarr        |
 | `template-python.sh`        | Python apps using uv for dependencies      | byparr, huntarr, subgen     |
+| `template-docker.sh`        | Docker Compose apps with systemd wrapper   | lingarr                     |
 | `template-subdomain.sh`     | Extended installers with subdomain support | plex, emby, jellyfin, panel |
 | `template-multiinstance.sh` | Managing multiple instances of a base app  | sonarr, radarr              |
 
