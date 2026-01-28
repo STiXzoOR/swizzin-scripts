@@ -354,6 +354,14 @@ _nginx_myapp() {
 		# WebSocket headers (Upgrade/Connection) are included by default
 		# for apps using real-time UI frameworks (e.g., SignalR, Socket.IO).
 		# Remove them if your app doesn't use WebSockets.
+		#
+		# If the app has no base_url support, add sub_filter directives to
+		# rewrite asset paths (see lingarr.sh or zurg.sh for examples):
+		#   sub_filter_once off;
+		#   sub_filter_types text/html text/css text/javascript application/javascript application/json;
+		#   sub_filter 'href="/' 'href="/${app_baseurl}/';
+		#   sub_filter 'src="/' 'src="/${app_baseurl}/';
+		#   etc.
 		cat >"/etc/nginx/apps/${app_name}.conf" <<-NGX
 			location /${app_baseurl} {
 			    return 301 /${app_baseurl}/;

@@ -415,6 +415,20 @@ _nginx_lingarr() {
 			    proxy_set_header Upgrade \$http_upgrade;
 			    proxy_set_header Connection \$http_connection;
 
+			    # Rewrite URLs in responses (Lingarr has no base_url support)
+			    sub_filter_once off;
+			    sub_filter_types text/html text/css text/javascript application/javascript application/json;
+			    sub_filter 'href="/' 'href="/$app_baseurl/';
+			    sub_filter 'src="/' 'src="/$app_baseurl/';
+			    sub_filter 'action="/' 'action="/$app_baseurl/';
+			    sub_filter 'url(/' 'url(/$app_baseurl/';
+			    sub_filter '"/api/' '"/$app_baseurl/api/';
+			    sub_filter "'/api/" "'/$app_baseurl/api/";
+			    sub_filter 'fetch("/' 'fetch("/$app_baseurl/';
+			    sub_filter "fetch('/" "fetch('/$app_baseurl/";
+			    sub_filter '"/hub' '"/$app_baseurl/hub';
+			    sub_filter "'/hub" "'/$app_baseurl/hub";
+
 			    auth_basic "What's the password?";
 			    auth_basic_user_file /etc/htpasswd.d/htpasswd.${user};
 			}
