@@ -452,7 +452,7 @@ bash subgen.sh
 **Default Settings:**
 
 - Model: `medium` (balance of speed and accuracy)
-- Device: `cpu` (GPU can be enabled by editing env.conf)
+- Device: auto-detected (`gpu` if NVIDIA GPU with drivers found, otherwise `cpu`)
 - Format: `srt`
 
 **Media Server Setup:**

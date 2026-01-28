@@ -36,7 +36,7 @@ Each installer script follows a consistent pattern:
 - **seerr.sh** - Extended Seerr installer with subdomain support (media request platform)
 - **byparr.sh** - Installs Byparr (FlareSolverr alternative, uses uv + Python 3.13)
 - **huntarr.sh** - Installs Huntarr (automated media discovery for \*arr apps, uses uv)
-- **subgen.sh** - Installs Subgen (Whisper-based subtitle generation, uses uv + ffmpeg)
+- **subgen.sh** - Installs Subgen (Whisper-based subtitle generation, uses uv + Python 3.11 + ffmpeg)
 - **zurg.sh** - Installs Zurg (Real-Debrid WebDAV server + rclone mount)
 - **lingarr.sh** - Installs Lingarr (subtitle translation, Docker-based, auto-discovers Sonarr/Radarr)
 - **organizr.sh** - Extended Organizr installer with subdomain and SSO support
@@ -58,7 +58,8 @@ Byparr, Huntarr, and Subgen use `uv` for Python version and dependency managemen
 - uv is installed per-user at `~/.local/bin/uv`
 - Apps are cloned to `/opt/<appname>`
 - Dependencies installed via `uv sync` or `uv add`
-- Systemd runs apps via `uv run python main.py`
+- Systemd runs apps via `uv run python <entry>.py`
+- Subgen runs `subgen.py` directly (not `launcher.py`), auto-detects NVIDIA GPU
 
 ### Docker Apps
 
