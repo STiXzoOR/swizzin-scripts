@@ -415,6 +415,9 @@ _nginx_lingarr() {
 			    proxy_set_header Upgrade \$http_upgrade;
 			    proxy_set_header Connection \$http_connection;
 
+			    # Disable upstream compression so sub_filter can rewrite
+			    proxy_set_header Accept-Encoding "";
+
 			    # Rewrite URLs in responses (Lingarr has no base_url support)
 			    sub_filter_once off;
 			    sub_filter_types text/html text/css text/javascript application/javascript application/json;
