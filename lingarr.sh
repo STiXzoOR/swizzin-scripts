@@ -431,8 +431,9 @@ _nginx_lingarr() {
 			    sub_filter "fetch('/" "fetch('/$app_baseurl/";
 			    sub_filter '"/signalr' '"/$app_baseurl/signalr';
 			    sub_filter "'/signalr" "'/$app_baseurl/signalr";
-			    # Fix Vue Router base path (client-side routing)
-			    sub_filter 'createWebHistory()' 'createWebHistory("/$app_baseurl/")';
+			    # Inject <base> tag so Vue Router picks up the subpath
+			    # (vue-router's normalizeBase reads <base href> as fallback)
+			    sub_filter '</head>' '<base href="/$app_baseurl/"></head>';
 
 			    auth_basic "What's the password?";
 			    auth_basic_user_file /etc/htpasswd.d/htpasswd.${user};
