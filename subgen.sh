@@ -99,28 +99,35 @@ _install_subgen() {
 	if [ -f "$app_dir/requirements.txt" ] && [ ! -f "$app_dir/pyproject.toml" ]; then
 		# Build dependencies array from requirements.txt (strip comments)
 		deps_array=$(grep -vE '^\s*#|^\s*$' "$app_dir/requirements.txt" | sed 's/\s*#.*//' | sed 's/.*/"&",/' | tr '\n' ' ' | sed 's/, $//')
-		# Note: openai-whisper -> numba -> llvmlite requires Python <3.10
 		cat >"$app_dir/pyproject.toml" <<PYPROJ
 [project]
 name = "subgen"
 version = "0.0.0"
-requires-python = ">=3.9,<3.10"
+requires-python = ">=3.11"
 dependencies = [$deps_array]
 PYPROJ
 	fi
 
-	# Install Python 3.9 (required for llvmlite/numba compatibility)
-	su - "$user" -c "cd '$app_dir' && uv python install 3.9" >>"$log" 2>&1 || {
-		echo_error "Failed to install Python 3.9"
+	su - "$user" -c "cd '$app_dir' && uv python install 3.11" >>"$log" 2>&1 || {
+		echo_error "Failed to install Python 3.11"
 		exit 1
 	}
 
-	su - "$user" -c "cd '$app_dir' && uv sync --python 3.9" >>"$log" 2>&1 || {
+	su - "$user" -c "cd '$app_dir' && uv sync --python 3.11" >>"$log" 2>&1 || {
 		echo_error "Failed to install ${app_name^} dependencies"
 		exit 1
 	}
 
 	echo_progress_done "Dependencies installed"
+
+	# Detect GPU (nvidia-smi confirms both hardware and working drivers)
+	if nvidia-smi &>/dev/null; then
+		transcribe_device="gpu"
+		echo_info "NVIDIA GPU detected — using GPU for transcription"
+	else
+		transcribe_device="cpu"
+		echo_info "No NVIDIA GPU detected — using CPU for transcription"
+	fi
 
 	# Detect CPU thread count for Whisper
 	cpu_threads=$(nproc 2>/dev/null || echo 4)
@@ -129,6 +136,7 @@ PYPROJ
 	fi
 
 	# Create env file with sensible defaults
+	# Both systemd (EnvironmentFile) and launcher.py (load_env_variables) read this
 	cat >"$app_configdir/env.conf" <<EOF
 # Subgen environment
 # Webhook port for Plex/Jellyfin/Emby notifications
@@ -136,7 +144,7 @@ WEBHOOK_PORT=$app_port
 
 # Whisper settings
 WHISPER_MODEL=medium
-TRANSCRIBE_DEVICE=cpu
+TRANSCRIBE_DEVICE=$transcribe_device
 WHISPER_THREADS=$cpu_threads
 
 # Subtitle settings
@@ -145,9 +153,14 @@ SUBTITLE_FORMAT=srt
 
 # Debug
 DEBUG=False
+CLEAR_VRAM_ON_COMPLETE=False
+APPEND=False
 EOF
 
 	chown -R "$user":"$user" "$app_configdir"
+
+	# Symlink subgen.env to env.conf so launcher.py finds it in the working directory
+	ln -sf "$app_configdir/env.conf" "$app_dir/subgen.env"
 	echo_info "Configure Plex/Jellyfin/Emby webhook to: http://<server>:$app_port/webhook"
 }
 
@@ -220,7 +233,7 @@ User=${user}
 Group=${app_group}
 WorkingDirectory=$app_dir
 EnvironmentFile=$app_configdir/env.conf
-ExecStart=/home/${user}/.local/bin/uv run python launcher.py -u -i -s
+ExecStart=/home/${user}/.local/bin/uv run python -u subgen.py
 Restart=on-failure
 RestartSec=10
 TimeoutStopSec=60
