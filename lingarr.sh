@@ -82,7 +82,14 @@ _install_docker() {
 		tee /etc/apt/sources.list.d/docker.list > /dev/null
 
 	apt-get update >>"$log" 2>&1
-	apt_install docker-ce docker-ce-cli containerd.io docker-compose-plugin
+
+	# Use apt-get directly instead of apt_install — Docker's post-install
+	# triggers service restarts that Swizzin's apt_install treats as errors
+	DEBIAN_FRONTEND=noninteractive apt-get install -y \
+		docker-ce docker-ce-cli containerd.io docker-compose-plugin >>"$log" 2>&1 || {
+		echo_error "Failed to install Docker packages"
+		exit 1
+	}
 
 	systemctl enable --now docker >>"$log" 2>&1
 
