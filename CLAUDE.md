@@ -38,7 +38,7 @@ Each installer script follows a consistent pattern:
 - **huntarr.sh** - Installs Huntarr (automated media discovery for \*arr apps, uses uv)
 - **subgen.sh** - Installs Subgen (Whisper-based subtitle generation, uses uv + Python 3.11 + ffmpeg)
 - **zurg.sh** - Installs Zurg (Real-Debrid WebDAV server + rclone mount)
-- **lingarr.sh** - Installs Lingarr (subtitle translation, Docker-based, auto-discovers Sonarr/Radarr)
+- **lingarr.sh** - Extended Lingarr installer with subdomain support (subtitle translation, Docker-based, auto-discovers Sonarr/Radarr)
 - **organizr.sh** - Extended Organizr installer with subdomain and SSO support
 - **plex.sh** - Extended Plex installer with subdomain support
 - **emby.sh** - Extended Emby installer with subdomain and Premiere bypass support
@@ -74,6 +74,8 @@ Lingarr uses Docker Compose, wrapped by systemd for lifecycle management:
 - Port bound to `127.0.0.1` only (nginx handles external access)
 - Container runs as master user UID:GID
 - `--update` flag pulls latest image and recreates container
+- Supports subfolder mode (`/lingarr/` with sub_filter) and subdomain mode (clean URLs, no rewriting)
+- Subdomain mode follows the same pattern as seerr.sh (standalone panel meta class, LE cert, Organizr integration)
 
 ### Zurg (Real-Debrid)
 
@@ -84,7 +86,7 @@ Zurg creates two systemd services:
 
 ### Extended Installer Pattern
 
-Media server scripts (plex.sh, emby.sh, jellyfin.sh, organizr.sh, seerr.sh, panel.sh) follow a unified pattern:
+Media server scripts (plex.sh, emby.sh, jellyfin.sh, organizr.sh, seerr.sh, lingarr.sh, panel.sh) follow a unified pattern:
 
 **Usage:**
 
@@ -408,6 +410,9 @@ ask "question?" Y/N          # Interactive yes/no prompts
 | seerr.sh     | `SEERR_DOMAIN`            | Public FQDN (bypasses prompt)                    |
 | seerr.sh     | `SEERR_LE_HOSTNAME`       | Let's Encrypt hostname                           |
 | seerr.sh     | `SEERR_LE_INTERACTIVE`    | Set to `yes` for interactive LE                  |
+| lingarr.sh   | `LINGARR_DOMAIN`          | Public FQDN (bypasses prompt)                    |
+| lingarr.sh   | `LINGARR_LE_HOSTNAME`     | Let's Encrypt hostname                           |
+| lingarr.sh   | `LINGARR_LE_INTERACTIVE`  | Set to `yes` for interactive LE                  |
 | panel.sh     | `PANEL_DOMAIN`            | Public FQDN (bypasses prompt)                    |
 | panel.sh     | `PANEL_LE_HOSTNAME`       | Let's Encrypt hostname                           |
 | panel.sh     | `PANEL_LE_INTERACTIVE`    | Set to `yes` for interactive LE                  |
@@ -434,7 +439,8 @@ Most installers use `port 10000 12000` to find an available port in the 10000-12
 
 ### Nginx Configuration
 
-- **Cleanuparr/Decypharr/Notifiarr/Huntarr/Lingarr**: Location-based routing at `/<appname>/`
+- **Cleanuparr/Decypharr/Notifiarr/Huntarr**: Location-based routing at `/<appname>/`
+- **Lingarr**: Subfolder mode (`/lingarr/` with sub_filter) or dedicated subdomain vhost (no sub_filter needed)
 - **Seerr**: Dedicated vhost for subdomain-based access with frame-ancestors CSP
 - **Organizr**: Dedicated vhost at `/etc/nginx/sites-available/organizr` with internal auth rewrite
 - **Plex/Emby/Jellyfin**: Dedicated vhosts with panel meta urloverride and frame-ancestors CSP
@@ -511,13 +517,13 @@ _load_panel_helper() {
 
 The `templates/` directory contains starter templates for common script types:
 
-| Template                    | Use Case                                   | Examples                    |
-| --------------------------- | ------------------------------------------ | --------------------------- |
-| `template-binary.sh`        | Single binary apps installed to `/usr/bin` | decypharr, notifiarr        |
-| `template-python.sh`        | Python apps using uv for dependencies      | byparr, huntarr, subgen     |
-| `template-docker.sh`        | Docker Compose apps with systemd wrapper   | lingarr                     |
-| `template-subdomain.sh`     | Extended installers with subdomain support | plex, emby, jellyfin, panel |
-| `template-multiinstance.sh` | Managing multiple instances of a base app  | sonarr, radarr              |
+| Template                    | Use Case                                   | Examples                             |
+| --------------------------- | ------------------------------------------ | ------------------------------------ |
+| `template-binary.sh`        | Single binary apps installed to `/usr/bin` | decypharr, notifiarr                 |
+| `template-python.sh`        | Python apps using uv for dependencies      | byparr, huntarr, subgen              |
+| `template-docker.sh`        | Docker Compose apps with systemd wrapper   | lingarr                              |
+| `template-subdomain.sh`     | Extended installers with subdomain support | plex, emby, jellyfin, lingarr, panel |
+| `template-multiinstance.sh` | Managing multiple instances of a base app  | sonarr, radarr                       |
 
 Each template includes:
 

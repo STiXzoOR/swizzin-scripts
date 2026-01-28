@@ -4,27 +4,27 @@ A collection of installer scripts for integrating additional applications into [
 
 ## Available Scripts
 
-| Script                                | Application                                                  | Description                                                     |
-| ------------------------------------- | ------------------------------------------------------------ | --------------------------------------------------------------- |
-| [sonarr.sh](#sonarr)                  | [Sonarr](https://sonarr.tv/)                                 | Multi-instance Sonarr manager (4k, anime, etc.)                 |
-| [radarr.sh](#radarr)                  | [Radarr](https://radarr.video/)                              | Multi-instance Radarr manager (4k, anime, etc.)                 |
-| [cleanuparr.sh](#cleanuparr)          | [Cleanuparr](https://github.com/Cleanuparr/Cleanuparr)       | Download queue cleanup for \*arr apps                           |
-| [decypharr.sh](#decypharr)            | [Decypharr](https://github.com/sirrobot01/decypharr)         | Encrypted file/torrent management via rclone and qBittorrent    |
-| [notifiarr.sh](#notifiarr)            | [Notifiarr](https://github.com/Notifiarr/notifiarr)          | Notification relay client for \*arr apps and Plex               |
-| [plex.sh](#plex)                      | [Plex](https://plex.tv/)                                     | Extended Plex installer with subdomain support                  |
-| [emby.sh](#emby)                      | [Emby](https://emby.media/)                                  | Extended Emby installer with subdomain and Premiere bypass      |
-| [jellyfin.sh](#jellyfin)              | [Jellyfin](https://jellyfin.org/)                            | Extended Jellyfin installer with subdomain support              |
-| [organizr.sh](#organizr)              | [Organizr](https://github.com/causefx/Organizr)              | Extended Organizr installer with subdomain and SSO support      |
-| [seerr.sh](#seerr)                    | [Seerr](https://github.com/seerr-team/seerr)                 | Media request platform (Overseerr fork)                         |
-| [byparr.sh](#byparr)                  | [Byparr](https://github.com/ThePhaseless/Byparr)             | FlareSolverr alternative for bypassing anti-bot protections     |
-| [flaresolverr.sh](#flaresolverr)      | [FlareSolverr](https://github.com/FlareSolverr/FlareSolverr) | Proxy server to bypass Cloudflare protection                    |
-| [huntarr.sh](#huntarr)                | [Huntarr](https://github.com/plexguide/Huntarr.io)           | Automated media discovery for Sonarr, Radarr, Lidarr, etc.      |
-| [subgen.sh](#subgen)                  | [Subgen](https://github.com/McCloudS/subgen)                 | Automatic subtitle generation using Whisper AI                  |
-| [zurg.sh](#zurg)                      | [Zurg](https://github.com/debridmediamanager/zurg-testing)   | Real-Debrid WebDAV server with rclone mount                     |
-| [lingarr.sh](#lingarr)                | [Lingarr](https://github.com/lingarr-translate/lingarr)      | Automatic subtitle translation (Docker-based)                   |
-| [dns-fix.sh](#dns-fix)                | -                                                            | Fix DNS issues for FlareSolverr/Byparr cookie validation        |
-| [emby-watchdog.sh](#service-watchdog) | -                                                            | Service watchdog with health checks and auto-restart            |
-| [backup/](#backup-system)             | -                                                            | Automated backup system with dual destinations and GFS rotation |
+| Script                                | Application                                                  | Description                                                      |
+| ------------------------------------- | ------------------------------------------------------------ | ---------------------------------------------------------------- |
+| [sonarr.sh](#sonarr)                  | [Sonarr](https://sonarr.tv/)                                 | Multi-instance Sonarr manager (4k, anime, etc.)                  |
+| [radarr.sh](#radarr)                  | [Radarr](https://radarr.video/)                              | Multi-instance Radarr manager (4k, anime, etc.)                  |
+| [cleanuparr.sh](#cleanuparr)          | [Cleanuparr](https://github.com/Cleanuparr/Cleanuparr)       | Download queue cleanup for \*arr apps                            |
+| [decypharr.sh](#decypharr)            | [Decypharr](https://github.com/sirrobot01/decypharr)         | Encrypted file/torrent management via rclone and qBittorrent     |
+| [notifiarr.sh](#notifiarr)            | [Notifiarr](https://github.com/Notifiarr/notifiarr)          | Notification relay client for \*arr apps and Plex                |
+| [plex.sh](#plex)                      | [Plex](https://plex.tv/)                                     | Extended Plex installer with subdomain support                   |
+| [emby.sh](#emby)                      | [Emby](https://emby.media/)                                  | Extended Emby installer with subdomain and Premiere bypass       |
+| [jellyfin.sh](#jellyfin)              | [Jellyfin](https://jellyfin.org/)                            | Extended Jellyfin installer with subdomain support               |
+| [organizr.sh](#organizr)              | [Organizr](https://github.com/causefx/Organizr)              | Extended Organizr installer with subdomain and SSO support       |
+| [seerr.sh](#seerr)                    | [Seerr](https://github.com/seerr-team/seerr)                 | Media request platform (Overseerr fork)                          |
+| [byparr.sh](#byparr)                  | [Byparr](https://github.com/ThePhaseless/Byparr)             | FlareSolverr alternative for bypassing anti-bot protections      |
+| [flaresolverr.sh](#flaresolverr)      | [FlareSolverr](https://github.com/FlareSolverr/FlareSolverr) | Proxy server to bypass Cloudflare protection                     |
+| [huntarr.sh](#huntarr)                | [Huntarr](https://github.com/plexguide/Huntarr.io)           | Automated media discovery for Sonarr, Radarr, Lidarr, etc.       |
+| [subgen.sh](#subgen)                  | [Subgen](https://github.com/McCloudS/subgen)                 | Automatic subtitle generation using Whisper AI                   |
+| [zurg.sh](#zurg)                      | [Zurg](https://github.com/debridmediamanager/zurg-testing)   | Real-Debrid WebDAV server with rclone mount                      |
+| [lingarr.sh](#lingarr)                | [Lingarr](https://github.com/lingarr-translate/lingarr)      | Extended Lingarr installer with subdomain support (Docker-based) |
+| [dns-fix.sh](#dns-fix)                | -                                                            | Fix DNS issues for FlareSolverr/Byparr cookie validation         |
+| [emby-watchdog.sh](#service-watchdog) | -                                                            | Service watchdog with health checks and auto-restart             |
+| [backup/](#backup-system)             | -                                                            | Automated backup system with dual destinations and GFS rotation  |
 
 ## Requirements
 
@@ -494,14 +494,20 @@ bash zurg.sh
 
 ### Lingarr
 
-Automatic subtitle translation using multiple translation services (LibreTranslate, DeepL, OpenAI, Anthropic, Google, and more). Docker-based application managed via Docker Compose.
+Extended Lingarr installer with subdomain support. Automatic subtitle translation using multiple translation services (LibreTranslate, DeepL, OpenAI, Anthropic, Google, and more). Docker-based application managed via Docker Compose.
 
 ```bash
 # Optional: Set custom owner
 export LINGARR_OWNER="username"
 
-# Install (auto-installs Docker if needed)
+# Interactive setup (installs Lingarr, asks about subdomain)
 bash lingarr.sh
+
+# Convert to subdomain mode (prompts for domain)
+bash lingarr.sh --subdomain
+
+# Revert to subfolder mode
+bash lingarr.sh --subdomain --revert
 
 # Update to latest version
 bash lingarr.sh --update
@@ -513,7 +519,9 @@ bash lingarr.sh --remove
 bash lingarr.sh --remove --force
 ```
 
-**Access:** `https://your-server/lingarr/`
+**Subdomain Access:** `https://lingarr.example.com/`
+
+**Subfolder Access:** `https://your-server/lingarr/`
 
 **Config:** `/opt/lingarr/config/`
 
@@ -523,6 +531,10 @@ bash lingarr.sh --remove --force
 - Auto-discovers media paths from Sonarr/Radarr (base + multi-instance)
 - Auto-discovers Sonarr/Radarr API credentials for integration
 - SQLite database (zero configuration)
+- Subdomain mode with clean URLs (recommended) or subfolder mode with sub_filter rewriting
+- Interactive domain prompt (or set `LINGARR_DOMAIN` env var to bypass)
+- Automatic Let's Encrypt certificate (subdomain mode)
+- Frame-ancestors CSP header for Organizr embedding (if configured)
 - `--update` flag pulls latest Docker image and recreates container
 - Supports 10+ translation backends configurable via web UI
 
@@ -708,6 +720,9 @@ All scripts now use **interactive prompts** for required values. Environment var
 | `SEERR_DOMAIN`            | seerr.sh     | Public FQDN for Seerr (bypasses prompt)              |
 | `SEERR_LE_HOSTNAME`       | seerr.sh     | Let's Encrypt hostname                               |
 | `SEERR_LE_INTERACTIVE`    | seerr.sh     | Set to `yes` for interactive LE                      |
+| `LINGARR_DOMAIN`          | lingarr.sh   | Public FQDN for Lingarr (bypasses prompt)            |
+| `LINGARR_LE_HOSTNAME`     | lingarr.sh   | Let's Encrypt hostname                               |
+| `LINGARR_LE_INTERACTIVE`  | lingarr.sh   | Set to `yes` for interactive LE                      |
 | `DN_API_KEY`              | notifiarr.sh | Notifiarr.com API key (prompted if not set)          |
 | `RD_TOKEN`                | zurg.sh      | Real-Debrid API token (prompted if not set)          |
 | `<APP>_OWNER`             | All          | Application owner username (defaults to master user) |
@@ -756,7 +771,7 @@ Scripts follow a consistent pattern:
 
 ### Extended Installer Pattern
 
-Media server scripts (plex.sh, emby.sh, jellyfin.sh, organizr.sh, seerr.sh) follow a unified pattern:
+Media server scripts (plex.sh, emby.sh, jellyfin.sh, organizr.sh, seerr.sh, lingarr.sh) follow a unified pattern:
 
 ```bash
 # Interactive setup - installs app, asks about features
