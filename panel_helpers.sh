@@ -21,7 +21,7 @@ panel_register_app() {
 	local name="$1"         # e.g. "seerr"
 	local pretty_name="$2"  # e.g. "Seerr"
 	local baseurl="$3"      # e.g. "/seerr" (or "" if using urloverride)
-	local urloverride="$4"  # e.g. "https://seerr.raflix.app" or ""
+	local urloverride="$4"  # e.g. "https://seerr.example.com" or ""
 	local systemd_name="$5" # e.g. "seerr"
 	local img_name="$6"     # icon name (without .png)
 	local icon_url="$7"     # optional: URL to PNG icon

@@ -1,765 +1,1127 @@
 #!/bin/bash
-# ============================================
-# SWIZZIN BACKUP INSTALLER
-# ============================================
-# Installs and configures the Swizzin backup system.
+#===============================================================================
+# Swizzin Backup Setup Wizard (BorgBackup)
+# Automates setup for any SSH-accessible borg repository
 #
 # Usage:
-#   bash swizzin-backup-install.sh [options]
-#
-# Options:
-#   --uninstall     Remove backup system completely
-#   --upgrade       Upgrade to latest version
-#   --reconfigure   Re-run configuration wizard
+#   bash swizzin-backup-install.sh              Interactive setup wizard
+#   bash swizzin-backup-install.sh --status     Show current setup status
+#   bash swizzin-backup-install.sh --remove     Remove deployed files (not remote repo)
+#   bash swizzin-backup-install.sh --help       Show help
+#===============================================================================
 
 set -euo pipefail
 
-# === CONFIGURATION ===
-BACKUP_DIR="/opt/swizzin-extras/backup"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-LOG_FILE="/var/log/swizzin-backup-install.log"
+readonly TOTAL_STEPS=10
 
-# Colors
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-CYAN='\033[0;36m'
-NC='\033[0m' # No Color
-BOLD='\033[1m'
+# Paths
+readonly SSH_KEY="/root/.ssh/id_backup"
+readonly PASSPHRASE_FILE="/root/.swizzin-backup-passphrase"
+readonly KEY_EXPORT="/root/swizzin-backup-key-export.txt"
+readonly CONF_FILE="/etc/swizzin-backup.conf"
+readonly EXCLUDES_TARGET="/etc/swizzin-excludes.txt"
+readonly BACKUP_SCRIPT="/usr/local/bin/swizzin-backup.sh"
+readonly RESTORE_SCRIPT="/usr/local/bin/swizzin-restore.sh"
+readonly SERVICE_FILE="/etc/systemd/system/swizzin-backup.service"
+readonly TIMER_FILE="/etc/systemd/system/swizzin-backup.timer"
+readonly LOGROTATE_FILE="/etc/logrotate.d/swizzin-backup"
 
-# === LOGGING ===
-log() {
-    echo -e "${GREEN}[+]${NC} $*"
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >> "$LOG_FILE"
-}
+# State shared across setup steps
+REMOTE_USER=""
+REMOTE_HOST=""
+REMOTE_PORT="22"
+BORG_REPO_URL=""
 
-warn() {
-    echo -e "${YELLOW}[!]${NC} $*"
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] WARNING: $*" >> "$LOG_FILE"
-}
+# ==============================================================================
+# Colors and Formatting
+# ==============================================================================
 
-error() {
-    echo -e "${RED}[x]${NC} $*" >&2
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: $*" >> "$LOG_FILE"
-}
+if [[ -t 1 ]]; then
+    RED='\033[0;31m'
+    GREEN='\033[0;32m'
+    YELLOW='\033[0;33m'
+    BLUE='\033[0;34m'
+    CYAN='\033[0;36m'
+    BOLD='\033[1m'
+    NC='\033[0m'
+else
+    RED=''
+    GREEN=''
+    YELLOW=''
+    BLUE=''
+    CYAN=''
+    BOLD=''
+    NC=''
+fi
 
-info() {
-    echo -e "${BLUE}[i]${NC} $*"
-}
+# ==============================================================================
+# Logging Functions
+# ==============================================================================
 
-header() {
+echo_info()    { echo -e "${BLUE}[INFO]${NC} $1"; }
+echo_success() { echo -e "${GREEN}[OK]${NC} $1"; }
+echo_warn()    { echo -e "${YELLOW}[WARN]${NC} $1"; }
+echo_error()   { echo -e "${RED}[ERROR]${NC} $1"; }
+
+echo_header() {
+    local title="$1"
     echo ""
-    echo -e "${CYAN}${BOLD}=== $* ===${NC}"
+    echo -e "${BOLD}${CYAN}══════════════════════════════════════════════════════════════${NC}"
+    echo -e "${BOLD}${CYAN}  $title${NC}"
+    echo -e "${BOLD}${CYAN}══════════════════════════════════════════════════════════════${NC}"
     echo ""
 }
 
-# === UTILITIES ===
-check_root() {
-    if [[ $EUID -ne 0 ]]; then
-        error "This script must be run as root"
-        exit 1
+echo_step() {
+    local step="$1"
+    local total="$2"
+    local message="$3"
+    echo ""
+    echo -e "${BOLD}[${step}/${total}]${NC} ${BOLD}$message${NC}"
+    echo ""
+}
+
+# ==============================================================================
+# Progress Indicators
+# ==============================================================================
+
+_spinner_pid=""
+
+_start_spinner() {
+    local message="$1"
+    echo -ne "${BLUE}[...]${NC} $message "
+
+    (
+        local chars="⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+        while true; do
+            for (( i=0; i<${#chars}; i++ )); do
+                echo -ne "\r${BLUE}[${chars:$i:1}]${NC} $message "
+                sleep 0.1
+            done
+        done
+    ) &
+    _spinner_pid=$!
+    disown
+}
+
+_stop_spinner() {
+    local status="$1"
+    local message="$2"
+
+    if [[ -n "$_spinner_pid" ]]; then
+        kill "$_spinner_pid" 2>/dev/null
+        wait "$_spinner_pid" 2>/dev/null
+        _spinner_pid=""
+    fi
+
+    echo -ne "\r\033[K"
+    if [[ "$status" == "success" ]]; then
+        echo -e "${GREEN}[OK]${NC} $message"
+    else
+        echo -e "${RED}[FAIL]${NC} $message"
     fi
 }
+
+echo_progress_start() {
+    local message="$1"
+    if [[ -t 1 ]]; then
+        _start_spinner "$message"
+    else
+        echo_info "$message..."
+    fi
+}
+
+echo_progress_done() {
+    local message="${1:-Done}"
+    if [[ -t 1 ]]; then
+        _stop_spinner "success" "$message"
+    else
+        echo_success "$message"
+    fi
+}
+
+echo_progress_fail() {
+    local message="${1:-Failed}"
+    if [[ -t 1 ]]; then
+        _stop_spinner "fail" "$message"
+    else
+        echo_error "$message"
+    fi
+}
+
+# ==============================================================================
+# User Prompts
+# ==============================================================================
+
+ask() {
+    local prompt="$1"
+    local default="${2:-N}"
+    local answer
+
+    if [[ "$default" == "Y" ]]; then
+        read -rp "$prompt [Y/n]: " answer </dev/tty
+        [[ -z "$answer" || "$answer" =~ ^[Yy] ]]
+    else
+        read -rp "$prompt [y/N]: " answer </dev/tty
+        [[ "$answer" =~ ^[Yy] ]]
+    fi
+}
+
+prompt_value() {
+    local prompt="$1"
+    local default="${2:-}"
+    local value
+
+    if [[ -n "$default" ]]; then
+        read -rp "$prompt [$default]: " value </dev/tty
+        echo "${value:-$default}"
+    else
+        read -rp "$prompt: " value </dev/tty
+        echo "$value"
+    fi
+}
+
+# ==============================================================================
+# Utility Functions
+# ==============================================================================
 
 command_exists() {
     command -v "$1" &>/dev/null
 }
 
-get_latest_github_release() {
-    local repo="$1"
-    curl -fsSL "https://api.github.com/repos/${repo}/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/'
+require_root() {
+    if [[ $EUID -ne 0 ]]; then
+        echo_error "This script must be run as root"
+        exit 1
+    fi
 }
 
-get_arch() {
-    local arch
-    arch=$(uname -m)
-    case "$arch" in
-        x86_64) echo "amd64" ;;
-        aarch64|arm64) echo "arm64" ;;
-        armv7l|armhf) echo "arm" ;;
-        *) echo "$arch" ;;
-    esac
+_detect_script_dir() {
+    local source="${BASH_SOURCE[0]}"
+    while [[ -L "$source" ]]; do
+        local dir
+        dir=$(cd -P "$(dirname "$source")" &>/dev/null && pwd)
+        source=$(readlink "$source")
+        [[ "$source" != /* ]] && source="$dir/$source"
+    done
+    cd -P "$(dirname "$source")" &>/dev/null && pwd
 }
 
-# === DEPENDENCY INSTALLATION ===
-install_restic() {
-    header "Installing Restic"
+_detect_swizzin_user() {
+    local user=""
 
-    if command_exists restic; then
-        local current_version
-        current_version=$(restic version | head -1 | awk '{print $2}')
-        info "Restic already installed: $current_version"
-
-        if ask "Update to latest version?" N; then
-            log "Updating restic..."
-        else
-            return 0
+    # Method 1: Swizzin utils
+    if [[ -f /etc/swizzin/sources/globals.sh ]]; then
+        # shellcheck source=/dev/null
+        . /etc/swizzin/sources/globals.sh 2>/dev/null || true
+        if type _get_master_username &>/dev/null 2>&1; then
+            user=$(_get_master_username 2>/dev/null) || true
         fi
     fi
 
-    local arch
-    arch=$(get_arch)
-    local version
-    version=$(get_latest_github_release "restic/restic")
-    version="${version#v}"  # Remove 'v' prefix
-
-    log "Installing restic ${version} for ${arch}..."
-
-    local url="https://github.com/restic/restic/releases/download/v${version}/restic_${version}_linux_${arch}.bz2"
-    local tmp_file="/tmp/restic.bz2"
-
-    if curl -fsSL "$url" -o "$tmp_file"; then
-        bunzip2 -f "$tmp_file"
-        mv /tmp/restic /usr/local/bin/restic
-        chmod +x /usr/local/bin/restic
-        log "Restic ${version} installed successfully"
-    else
-        error "Failed to download restic"
-        return 1
-    fi
-}
-
-install_rclone() {
-    header "Installing Rclone"
-
-    if command_exists rclone; then
-        local current_version
-        current_version=$(rclone version | head -1 | awk '{print $2}')
-        info "Rclone already installed: $current_version"
-
-        if ask "Update to latest version?" N; then
-            log "Updating rclone..."
-        else
-            return 0
-        fi
+    # Method 2: htpasswd
+    if [[ -z "$user" && -f /etc/htpasswd ]]; then
+        user=$(head -1 /etc/htpasswd | cut -d: -f1)
     fi
 
-    log "Installing latest rclone..."
-
-    # Use official rclone install script
-    if curl -fsSL https://rclone.org/install.sh | bash; then
-        log "Rclone installed successfully"
-    else
-        error "Failed to install rclone"
-        return 1
-    fi
-}
-
-install_dependencies() {
-    header "Installing Dependencies"
-
-    local packages=()
-
-    # Check for required packages
-    command_exists jq || packages+=("jq")
-    command_exists sqlite3 || packages+=("sqlite3")
-    command_exists bzip2 || packages+=("bzip2")
-    command_exists curl || packages+=("curl")
-
-    if [[ ${#packages[@]} -gt 0 ]]; then
-        log "Installing: ${packages[*]}"
-        apt-get update -qq
-        apt-get install -y -qq "${packages[@]}"
-    else
-        info "All apt dependencies already installed"
-    fi
-
-    install_restic
-    install_rclone
-}
-
-# === INTERACTIVE HELPERS ===
-ask() {
-    local prompt="$1"
-    local default="${2:-Y}"
-    local answer
-
-    if [[ "$default" == "Y" ]]; then
-        read -rp "$(echo -e "${CYAN}$prompt [Y/n]:${NC} ")" answer
-        [[ -z "$answer" || "$answer" =~ ^[Yy] ]]
-    else
-        read -rp "$(echo -e "${CYAN}$prompt [y/N]:${NC} ")" answer
-        [[ "$answer" =~ ^[Yy] ]]
-    fi
-}
-
-prompt() {
-    local prompt="$1"
-    local default="${2:-}"
-    local answer
-
-    if [[ -n "$default" ]]; then
-        read -rp "$(echo -e "${CYAN}$prompt [$default]:${NC} ")" answer
-        echo "${answer:-$default}"
-    else
-        read -rp "$(echo -e "${CYAN}$prompt:${NC} ")" answer
-        echo "$answer"
-    fi
-}
-
-prompt_password() {
-    local prompt="$1"
-    local password
-
-    read -rsp "$(echo -e "${CYAN}$prompt:${NC} ")" password
-    echo ""
-    echo "$password"
-}
-
-generate_password() {
-    openssl rand -base64 24 | tr -d '/+=' | head -c 32
-}
-
-# === CONFIGURATION WIZARD ===
-configure_encryption() {
-    header "Encryption Setup"
-
-    echo "Restic encrypts all backups with a password."
-    echo -e "${RED}${BOLD}WARNING: If you lose this password, your backups are UNRECOVERABLE!${NC}"
-    echo ""
-
-    local password
-    local password_file="/root/.swizzin-backup-password"
-
-    echo "Choose password method:"
-    echo "  1) Generate secure password (recommended)"
-    echo "  2) Enter your own password"
-    echo ""
-
-    local choice
-    choice=$(prompt "Selection" "1")
-
-    case "$choice" in
-        1)
-            password=$(generate_password)
-            echo ""
-            echo -e "${GREEN}Generated password:${NC} ${BOLD}${password}${NC}"
-            echo ""
-            echo -e "${YELLOW}SAVE THIS PASSWORD SECURELY! You will need it to restore backups.${NC}"
-            ;;
-        2)
-            password=$(prompt_password "Enter backup password")
-            local confirm
-            confirm=$(prompt_password "Confirm password")
-            if [[ "$password" != "$confirm" ]]; then
-                error "Passwords do not match"
-                return 1
+    # Method 3: First non-root home directory
+    if [[ -z "$user" ]]; then
+        for home_dir in /home/*/; do
+            local candidate
+            candidate=$(basename "$home_dir")
+            if [[ "$candidate" != "lost+found" ]]; then
+                user="$candidate"
+                break
             fi
-            ;;
-        *)
-            error "Invalid choice"
-            return 1
-            ;;
-    esac
+        done
+    fi
 
-    echo "$password" > "$password_file"
-    chmod 600 "$password_file"
-    log "Password saved to $password_file"
-
-    CONFIG_RESTIC_PASSWORD_FILE="$password_file"
+    echo "$user"
 }
 
-configure_gdrive() {
-    header "Google Drive Setup"
+# ==============================================================================
+# Setup State Detection
+# ==============================================================================
 
-    if ! ask "Configure Google Drive backup?" Y; then
-        CONFIG_GDRIVE_ENABLED="no"
+_check_existing_setup() {
+    local score=0
+    local total=8
+
+    command_exists borg && (( score++ ))
+    [[ -f "$SSH_KEY" ]] && (( score++ ))
+    [[ -f "$PASSPHRASE_FILE" ]] && (( score++ ))
+    [[ -f "$KEY_EXPORT" ]] && (( score++ ))
+    [[ -f "$CONF_FILE" ]] && (( score++ ))
+    [[ -f "$BACKUP_SCRIPT" ]] && (( score++ ))
+    [[ -f "$SERVICE_FILE" ]] && (( score++ ))
+    systemctl is-active --quiet swizzin-backup.timer 2>/dev/null && (( score++ ))
+
+    if (( score == 0 )); then
+        echo "none"
+    elif (( score == total )); then
+        echo "complete"
+    else
+        echo "partial"
+    fi
+}
+
+# ==============================================================================
+# Step 1: Install borgbackup
+# ==============================================================================
+
+_install_borgbackup() {
+    echo_step 1 "$TOTAL_STEPS" "Install borgbackup"
+
+    if command_exists borg; then
+        local version
+        version=$(borg --version 2>/dev/null | head -1)
+        echo_success "borgbackup already installed ($version)"
         return 0
     fi
 
-    CONFIG_GDRIVE_ENABLED="yes"
+    echo_progress_start "Installing borgbackup"
+    if apt-get update -qq >/dev/null 2>&1 && apt-get install -y -qq borgbackup >/dev/null 2>&1; then
+        local version
+        version=$(borg --version 2>/dev/null | head -1)
+        echo_progress_done "borgbackup installed ($version)"
+    else
+        echo_progress_fail "Failed to install borgbackup"
+        echo_error "Try manually: apt-get update && apt-get install -y borgbackup"
+        exit 1
+    fi
+}
 
-    # Check for existing rclone remote
-    if rclone listremotes 2>/dev/null | grep -q "^gdrive:"; then
-        info "Found existing 'gdrive' rclone remote"
-        if ! ask "Use existing 'gdrive' remote?" Y; then
-            log "Running rclone config..."
-            rclone config
+# ==============================================================================
+# Step 2: SSH key setup
+# ==============================================================================
+
+_setup_ssh_key() {
+    echo_step 2 "$TOTAL_STEPS" "SSH key setup"
+
+    # Handle existing key
+    if [[ -f "$SSH_KEY" ]]; then
+        local fingerprint
+        fingerprint=$(ssh-keygen -lf "$SSH_KEY" 2>/dev/null | awk '{print $2}')
+        echo_info "Existing SSH key found: $SSH_KEY"
+        echo_info "Fingerprint: $fingerprint"
+
+        if ! ask "Reuse this key?" Y; then
+            echo_progress_start "Generating new SSH key"
+            rm -f "$SSH_KEY" "${SSH_KEY}.pub"
+            ssh-keygen -t ed25519 -f "$SSH_KEY" -C "backup@$(hostname)" -N "" >/dev/null 2>&1
+            echo_progress_done "New SSH key generated"
+        else
+            echo_success "Reusing existing SSH key"
         fi
     else
-        log "No 'gdrive' remote found. Running rclone config..."
-        echo ""
-        echo "Follow the prompts to configure Google Drive access."
-        echo "When asked for remote name, use: gdrive"
-        echo ""
-        rclone config
+        mkdir -p /root/.ssh
+        chmod 700 /root/.ssh
+        echo_progress_start "Generating SSH key"
+        ssh-keygen -t ed25519 -f "$SSH_KEY" -C "backup@$(hostname)" -N "" >/dev/null 2>&1
+        echo_progress_done "SSH key generated at $SSH_KEY"
     fi
 
-    CONFIG_GDRIVE_REMOTE=$(prompt "Remote path for backups" "gdrive:swizzin-backups")
+    # Prompt for remote server credentials
+    echo ""
+    echo_info "Enter your backup server details"
+    echo_info "Examples: Hetzner Storage Box, Rsync.net, BorgBase, self-hosted NAS/VPS"
+    echo ""
+    REMOTE_USER=$(prompt_value "SSH username")
+    REMOTE_HOST=$(prompt_value "SSH hostname")
+    REMOTE_PORT=$(prompt_value "SSH port" "22")
+
+    if [[ -z "$REMOTE_USER" || -z "$REMOTE_HOST" ]]; then
+        echo_error "Username and hostname are required"
+        exit 1
+    fi
+
+    echo_info "Target: ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_PORT}"
+
+    # Show public key for manual installation
+    echo ""
+    echo_info "Add this public key to your backup server's authorized_keys:"
+    echo ""
+    cat "${SSH_KEY}.pub"
+    echo ""
+
+    # Try automatic key installation (works for Hetzner Storage Box)
+    if ask "Attempt automatic key installation? (works for Hetzner Storage Box)" N; then
+        echo_info "You will be prompted for your server password"
+        if cat "${SSH_KEY}.pub" | ssh -p"${REMOTE_PORT}" -o StrictHostKeyChecking=accept-new "${REMOTE_USER}@${REMOTE_HOST}" install-ssh-key 2>/dev/null; then
+            echo_success "SSH key installed automatically"
+        else
+            echo_warn "Automatic install failed. Please add the key manually."
+        fi
+    fi
 
     # Test connection
-    log "Testing Google Drive connection..."
-    if rclone mkdir "${CONFIG_GDRIVE_REMOTE}" 2>/dev/null; then
-        log "Google Drive connection successful"
-    else
-        warn "Could not connect to Google Drive. Check rclone config."
-    fi
-}
-
-configure_sftp() {
-    header "Windows Server (SFTP) Setup"
-
-    if ! ask "Configure Windows Server backup?" Y; then
-        CONFIG_SFTP_ENABLED="no"
-        return 0
-    fi
-
-    CONFIG_SFTP_ENABLED="yes"
-
-    CONFIG_SFTP_HOST=$(prompt "Windows Server hostname/IP")
-    CONFIG_SFTP_PORT=$(prompt "SSH port" "22")
-    CONFIG_SFTP_USER=$(prompt "SSH username" "backup")
-    CONFIG_SFTP_PATH=$(prompt "Remote path (e.g., /C:/Backups/swizzin)")
-
-    # Check for SSH key
-    local ssh_key="/root/.ssh/id_rsa"
-    if [[ ! -f "$ssh_key" ]]; then
-        if ask "No SSH key found. Generate one?" Y; then
-            ssh-keygen -t rsa -b 4096 -f "$ssh_key" -N ""
-            log "SSH key generated at $ssh_key"
-        fi
-    fi
-    CONFIG_SFTP_KEY="$ssh_key"
-
-    # Offer to copy key
-    if [[ -f "${ssh_key}.pub" ]]; then
-        echo ""
-        echo "Public key to add to Windows Server authorized_keys:"
-        echo -e "${CYAN}$(cat "${ssh_key}.pub")${NC}"
-        echo ""
-        info "Add this to: C:\\Users\\${CONFIG_SFTP_USER}\\.ssh\\authorized_keys"
-    fi
-
-    if ask "Test SFTP connection now?" Y; then
-        log "Testing SFTP connection..."
-        if ssh -o BatchMode=yes -o ConnectTimeout=5 -p "${CONFIG_SFTP_PORT}" "${CONFIG_SFTP_USER}@${CONFIG_SFTP_HOST}" "echo ok" &>/dev/null; then
-            log "SFTP connection successful"
-        else
-            warn "SFTP connection failed. Ensure OpenSSH is enabled on Windows and key is authorized."
-        fi
-    fi
-}
-
-configure_pushover() {
-    header "Pushover Notifications"
-
-    if ! ask "Configure Pushover notifications?" Y; then
-        CONFIG_PUSHOVER_ENABLED="no"
-        return 0
-    fi
-
-    CONFIG_PUSHOVER_ENABLED="yes"
-
-    echo "Get your keys from https://pushover.net"
     echo ""
-
-    CONFIG_PUSHOVER_USER_KEY=$(prompt "User Key")
-    CONFIG_PUSHOVER_API_TOKEN=$(prompt "API Token")
-    CONFIG_PUSHOVER_PRIORITY=$(prompt "Priority (-2 to 2)" "0")
-
-    if ask "Send test notification?" Y; then
-        log "Sending test notification..."
-        local response
-        response=$(curl -s --form-string "token=${CONFIG_PUSHOVER_API_TOKEN}" \
-            --form-string "user=${CONFIG_PUSHOVER_USER_KEY}" \
-            --form-string "message=Swizzin Backup test notification" \
-            --form-string "title=Swizzin Backup" \
-            https://api.pushover.net/1/messages.json)
-
-        if echo "$response" | grep -q '"status":1'; then
-            log "Test notification sent successfully"
+    if ask "Test SSH connection now?" Y; then
+        echo_progress_start "Testing SSH connection"
+        if ssh -p"${REMOTE_PORT}" -i "$SSH_KEY" -o BatchMode=yes -o ConnectTimeout=10 "${REMOTE_USER}@${REMOTE_HOST}" ls >/dev/null 2>&1; then
+            echo_progress_done "SSH connection successful"
         else
-            warn "Failed to send notification: $response"
-        fi
-    fi
-}
-
-configure_discord() {
-    header "Discord Notifications"
-
-    if ! ask "Configure Discord webhook notifications?" N; then
-        CONFIG_DISCORD_ENABLED="no"
-        return 0
-    fi
-
-    CONFIG_DISCORD_ENABLED="yes"
-
-    echo "Create a webhook in your Discord server:"
-    echo "  Server Settings > Integrations > Webhooks > New Webhook"
-    echo ""
-
-    CONFIG_DISCORD_WEBHOOK_URL=$(prompt "Webhook URL")
-
-    if ask "Send test notification?" Y; then
-        log "Sending test notification..."
-        local json
-        json=$(jq -n '{embeds: [{title: "Swizzin Backup Test", description: "Discord notification test", color: 3066993}]}')
-        if curl -sf -H "Content-Type: application/json" -d "$json" \
-            "${CONFIG_DISCORD_WEBHOOK_URL}" >/dev/null; then
-            log "Test notification sent successfully"
-        else
-            warn "Failed to send notification"
-        fi
-    fi
-}
-
-configure_notifiarr() {
-    header "Notifiarr Notifications"
-
-    if ! ask "Configure Notifiarr notifications?" N; then
-        CONFIG_NOTIFIARR_ENABLED="no"
-        return 0
-    fi
-
-    CONFIG_NOTIFIARR_ENABLED="yes"
-
-    echo "Get your API key from https://notifiarr.com"
-    echo ""
-
-    CONFIG_NOTIFIARR_API_KEY=$(prompt "API Key")
-
-    if ask "Send test notification?" Y; then
-        log "Sending test notification..."
-        local json
-        json=$(jq -n '{notification: {name: "Swizzin Backup Test", event: "test"}, message: {title: "Swizzin Backup Test", body: "Notifiarr notification test"}}')
-        if curl -sf -H "x-api-key: ${CONFIG_NOTIFIARR_API_KEY}" \
-            -H "Content-Type: application/json" -d "$json" \
-            "https://notifiarr.com/api/v1/notification/passthrough" >/dev/null; then
-            log "Test notification sent successfully"
-        else
-            warn "Failed to send notification"
-        fi
-    fi
-}
-
-configure_schedule() {
-    header "Backup Schedule"
-
-    CONFIG_BACKUP_HOUR=$(prompt "Backup hour (0-23)" "03")
-    CONFIG_BACKUP_MINUTE=$(prompt "Backup minute (0-59)" "00")
-
-    log "Backups will run daily at ${CONFIG_BACKUP_HOUR}:${CONFIG_BACKUP_MINUTE}"
-}
-
-configure_retention() {
-    header "Retention Policy"
-
-    echo "GFS (Grandfather-Father-Son) retention:"
-    echo ""
-
-    CONFIG_KEEP_DAILY=$(prompt "Keep daily backups" "7")
-    CONFIG_KEEP_WEEKLY=$(prompt "Keep weekly backups" "4")
-    CONFIG_KEEP_MONTHLY=$(prompt "Keep monthly backups" "3")
-
-    local total=$((CONFIG_KEEP_DAILY + CONFIG_KEEP_WEEKLY + CONFIG_KEEP_MONTHLY))
-    info "Will keep approximately ${total} snapshots"
-}
-
-write_config() {
-    header "Writing Configuration"
-
-    local config_file="${BACKUP_DIR}/backup.conf"
-
-    cat > "$config_file" << EOF
-# Swizzin Backup Configuration
-# Generated: $(date)
-
-# Encryption
-RESTIC_PASSWORD_FILE="${CONFIG_RESTIC_PASSWORD_FILE:-/root/.swizzin-backup-password}"
-
-# Google Drive
-GDRIVE_ENABLED="${CONFIG_GDRIVE_ENABLED:-no}"
-GDRIVE_REMOTE="${CONFIG_GDRIVE_REMOTE:-gdrive:swizzin-backups}"
-
-# SFTP (Windows Server)
-SFTP_ENABLED="${CONFIG_SFTP_ENABLED:-no}"
-SFTP_HOST="${CONFIG_SFTP_HOST:-}"
-SFTP_USER="${CONFIG_SFTP_USER:-backup}"
-SFTP_PORT="${CONFIG_SFTP_PORT:-22}"
-SFTP_PATH="${CONFIG_SFTP_PATH:-/C:/Backups/swizzin}"
-SFTP_KEY="${CONFIG_SFTP_KEY:-/root/.ssh/id_rsa}"
-
-# Retention (GFS)
-KEEP_DAILY=${CONFIG_KEEP_DAILY:-7}
-KEEP_WEEKLY=${CONFIG_KEEP_WEEKLY:-4}
-KEEP_MONTHLY=${CONFIG_KEEP_MONTHLY:-3}
-
-# Pushover
-PUSHOVER_ENABLED="${CONFIG_PUSHOVER_ENABLED:-no}"
-PUSHOVER_USER_KEY="${CONFIG_PUSHOVER_USER_KEY:-}"
-PUSHOVER_API_TOKEN="${CONFIG_PUSHOVER_API_TOKEN:-}"
-PUSHOVER_PRIORITY="${CONFIG_PUSHOVER_PRIORITY:-0}"
-
-# Discord
-DISCORD_ENABLED="${CONFIG_DISCORD_ENABLED:-no}"
-DISCORD_WEBHOOK_URL="${CONFIG_DISCORD_WEBHOOK_URL:-}"
-
-# Notifiarr
-NOTIFIARR_ENABLED="${CONFIG_NOTIFIARR_ENABLED:-no}"
-NOTIFIARR_API_KEY="${CONFIG_NOTIFIARR_API_KEY:-}"
-
-# Schedule
-BACKUP_HOUR="${CONFIG_BACKUP_HOUR:-03}"
-BACKUP_MINUTE="${CONFIG_BACKUP_MINUTE:-00}"
-
-# App handling
-EXCLUDE_APPS=""
-EXTRA_PATHS=""
-
-# Advanced
-LOG_FILE="/var/log/swizzin-backup.log"
-MANIFEST_DIR="${BACKUP_DIR}/manifests"
-EOF
-
-    chmod 600 "$config_file"
-    log "Configuration written to $config_file"
-}
-
-# === REPOSITORY INITIALIZATION ===
-init_repositories() {
-    header "Initializing Restic Repositories"
-
-    source "${BACKUP_DIR}/backup.conf"
-
-    export RESTIC_PASSWORD_FILE
-
-    if [[ "$GDRIVE_ENABLED" == "yes" ]]; then
-        log "Initializing Google Drive repository..."
-        local gdrive_repo="rclone:${GDRIVE_REMOTE}"
-
-        if restic -r "$gdrive_repo" snapshots &>/dev/null; then
-            info "Google Drive repository already initialized"
-        else
-            if restic -r "$gdrive_repo" init; then
-                log "Google Drive repository initialized"
-            else
-                warn "Failed to initialize Google Drive repository"
-            fi
-        fi
-    fi
-
-    if [[ "$SFTP_ENABLED" == "yes" ]]; then
-        log "Initializing SFTP repository..."
-        local sftp_repo="sftp:${SFTP_USER}@${SFTP_HOST}:${SFTP_PATH}"
-        local sftp_args=(-o "sftp.command=ssh -i ${SFTP_KEY} -p ${SFTP_PORT} ${SFTP_USER}@${SFTP_HOST} -s sftp")
-
-        if restic -r "$sftp_repo" "${sftp_args[@]}" snapshots &>/dev/null; then
-            info "SFTP repository already initialized"
-        else
-            if restic -r "$sftp_repo" "${sftp_args[@]}" init; then
-                log "SFTP repository initialized"
-            else
-                warn "Failed to initialize SFTP repository"
+            echo_progress_fail "SSH connection test failed"
+            echo_warn "Ensure the public key is added to the server's authorized_keys"
+            if ! ask "Continue anyway?" N; then
+                exit 1
             fi
         fi
     fi
 }
 
-# === CRON SETUP ===
-setup_cron() {
-    header "Setting Up Cron Job"
+# ==============================================================================
+# Step 3: Generate passphrase
+# ==============================================================================
 
-    source "${BACKUP_DIR}/backup.conf"
+_generate_passphrase() {
+    echo_step 3 "$TOTAL_STEPS" "Generate encryption passphrase"
 
-    local cron_file="/etc/cron.d/swizzin-backup"
+    if [[ -f "$PASSPHRASE_FILE" ]]; then
+        echo_info "Existing passphrase found: $PASSPHRASE_FILE"
 
-    cat > "$cron_file" << EOF
-# Swizzin Backup - runs daily at ${BACKUP_HOUR}:${BACKUP_MINUTE}
-SHELL=/bin/bash
-PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+        if ask "Keep existing passphrase?" Y; then
+            echo_success "Keeping existing passphrase"
+        else
+            echo_progress_start "Generating new passphrase"
+            openssl rand -base64 32 > "$PASSPHRASE_FILE"
+            chmod 600 "$PASSPHRASE_FILE"
+            echo_progress_done "New passphrase generated"
+        fi
+    else
+        echo_progress_start "Generating passphrase"
+        openssl rand -base64 32 > "$PASSPHRASE_FILE"
+        chmod 600 "$PASSPHRASE_FILE"
+        echo_progress_done "Passphrase generated at $PASSPHRASE_FILE"
+    fi
 
-${BACKUP_MINUTE} ${BACKUP_HOUR} * * * root ${BACKUP_DIR}/swizzin-backup.sh run >> /var/log/swizzin-backup.log 2>&1
-EOF
+    echo ""
+    echo -e "${BOLD}${RED}╔══════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${BOLD}${RED}║  CRITICAL: Save this passphrase in a password manager NOW!  ║${NC}"
+    echo -e "${BOLD}${RED}║  Without it, your backups are UNRECOVERABLE.                ║${NC}"
+    echo -e "${BOLD}${RED}╚══════════════════════════════════════════════════════════════╝${NC}"
+    echo ""
+    echo -e "  Passphrase: ${BOLD}$(cat "$PASSPHRASE_FILE")${NC}"
+    echo ""
 
-    chmod 644 "$cron_file"
-    log "Cron job created at $cron_file"
+    while true; do
+        if ask "I have saved the passphrase externally" N; then
+            break
+        fi
+        echo_warn "Please save the passphrase before continuing!"
+    done
 }
 
-# === INSTALLATION ===
-install_files() {
-    header "Installing Backup Scripts"
+# ==============================================================================
+# Step 4: Initialize borg repository
+# ==============================================================================
 
-    # Create directory structure
-    mkdir -p "${BACKUP_DIR}"/{hooks,manifests,logs}
+_init_repository() {
+    echo_step 4 "$TOTAL_STEPS" "Initialize borg repository"
 
-    # Copy scripts
-    if [[ -f "${SCRIPT_DIR}/swizzin-backup.sh" ]]; then
-        cp "${SCRIPT_DIR}/swizzin-backup.sh" "${BACKUP_DIR}/"
-        chmod +x "${BACKUP_DIR}/swizzin-backup.sh"
-        log "Installed swizzin-backup.sh"
+    local default_path="./backups/mediaserver"
+    echo_info "Repository path on remote server (relative to home, or absolute)"
+    local repo_path
+    repo_path=$(prompt_value "Repo path" "$default_path")
+
+    BORG_REPO_URL="ssh://${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_PORT}/${repo_path}"
+    echo_info "Repository URL: $BORG_REPO_URL"
+
+    # Prompt for remote borg path
+    echo ""
+    echo_info "Remote borg binary (adjust for your server)"
+    echo_info "  Hetzner Storage Box: borg-1.4"
+    echo_info "  Rsync.net: borg1"
+    echo_info "  Self-hosted: borg (or full path)"
+    local borg_remote
+    borg_remote=$(prompt_value "Remote borg path" "borg")
+
+    export BORG_RSH="ssh -p${REMOTE_PORT} -i $SSH_KEY -o BatchMode=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3"
+    export BORG_PASSCOMMAND="cat $PASSPHRASE_FILE"
+    export BORG_REMOTE_PATH="$borg_remote"
+
+    # Create parent directory on remote (borg init won't create it)
+    local parent_path
+    parent_path=$(dirname "$repo_path")
+    if [[ "$parent_path" != "." && "$parent_path" != "/" ]]; then
+        echo_progress_start "Creating remote directory: $parent_path"
+        if ssh -p"${REMOTE_PORT}" -i "$SSH_KEY" -o BatchMode=yes "${REMOTE_USER}@${REMOTE_HOST}" "mkdir -p ${parent_path}" 2>/dev/null; then
+            echo_progress_done "Remote directory created"
+        else
+            echo_progress_fail "Failed to create remote directory"
+            echo_warn "You may need to create it manually: ssh -p${REMOTE_PORT} ${REMOTE_USER}@${REMOTE_HOST} mkdir -p ${parent_path}"
+        fi
+    fi
+
+    echo_progress_start "Initializing borg repository"
+
+    local init_output
+    local init_rc=0
+    init_output=$(borg init \
+        --encryption=repokey-blake2 \
+        --remote-path="$borg_remote" \
+        "$BORG_REPO_URL" 2>&1) || init_rc=$?
+
+    if (( init_rc == 0 )); then
+        echo_progress_done "Repository initialized"
+    elif (( init_rc == 2 )); then
+        if echo "$init_output" | grep -qi "repository already exists\|already been initialized"; then
+            echo_progress_done "Repository already initialized (reusing)"
+        else
+            echo_progress_fail "Failed to initialize repository (exit code: 2)"
+            echo "$init_output" | tail -10
+            exit 1
+        fi
     else
-        warn "swizzin-backup.sh not found in ${SCRIPT_DIR}"
+        echo_progress_fail "Failed to initialize repository (exit code: $init_rc)"
+        echo "$init_output" | tail -10
+        exit 1
     fi
-
-    if [[ -f "${SCRIPT_DIR}/swizzin-restore.sh" ]]; then
-        cp "${SCRIPT_DIR}/swizzin-restore.sh" "${BACKUP_DIR}/"
-        chmod +x "${BACKUP_DIR}/swizzin-restore.sh"
-        log "Installed swizzin-restore.sh"
-    else
-        warn "swizzin-restore.sh not found in ${SCRIPT_DIR}"
-    fi
-
-    # Copy config files
-    if [[ -f "${SCRIPT_DIR}/configs/app-registry.conf" ]]; then
-        cp "${SCRIPT_DIR}/configs/app-registry.conf" "${BACKUP_DIR}/"
-        log "Installed app-registry.conf"
-    fi
-
-    if [[ -f "${SCRIPT_DIR}/configs/excludes.conf" ]]; then
-        cp "${SCRIPT_DIR}/configs/excludes.conf" "${BACKUP_DIR}/"
-        log "Installed excludes.conf"
-    fi
-
-    # Copy hook examples
-    if [[ -f "${SCRIPT_DIR}/hooks/pre-backup.sh.example" ]]; then
-        cp "${SCRIPT_DIR}/hooks/pre-backup.sh.example" "${BACKUP_DIR}/hooks/"
-    fi
-
-    if [[ -f "${SCRIPT_DIR}/hooks/post-backup.sh.example" ]]; then
-        cp "${SCRIPT_DIR}/hooks/post-backup.sh.example" "${BACKUP_DIR}/hooks/"
-    fi
-
-    # Create symlinks for easy access
-    ln -sf "${BACKUP_DIR}/swizzin-backup.sh" /usr/local/bin/swizzin-backup
-    ln -sf "${BACKUP_DIR}/swizzin-restore.sh" /usr/local/bin/swizzin-restore
-
-    log "Created symlinks: swizzin-backup, swizzin-restore"
 }
 
-# === UNINSTALL ===
-uninstall() {
-    header "Uninstalling Swizzin Backup"
+# ==============================================================================
+# Step 5: Export encryption key
+# ==============================================================================
 
-    if ! ask "Are you sure you want to remove Swizzin Backup?" N; then
-        echo "Cancelled"
+_export_key() {
+    echo_step 5 "$TOTAL_STEPS" "Export encryption key"
+
+    export BORG_RSH="ssh -i $SSH_KEY -o BatchMode=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3"
+    export BORG_PASSCOMMAND="cat $PASSPHRASE_FILE"
+
+    echo_progress_start "Exporting encryption key"
+
+    if borg key export "$BORG_REPO_URL" "$KEY_EXPORT" 2>/dev/null; then
+        chmod 600 "$KEY_EXPORT"
+        echo_progress_done "Key exported to $KEY_EXPORT"
+    else
+        echo_progress_fail "Failed to export key"
+        echo_warn "You can export manually later: borg key export <repo> $KEY_EXPORT"
+    fi
+
+    echo ""
+    echo -e "${BOLD}${RED}╔══════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${BOLD}${RED}║  CRITICAL: Save this key in a password manager too!         ║${NC}"
+    echo -e "${BOLD}${RED}║  Without BOTH key + passphrase, backups are unrecoverable.  ║${NC}"
+    echo -e "${BOLD}${RED}╚══════════════════════════════════════════════════════════════╝${NC}"
+    echo ""
+
+    if [[ -f "$KEY_EXPORT" ]]; then
+        cat "$KEY_EXPORT"
+        echo ""
+    fi
+}
+
+# ==============================================================================
+# Step 6: Generate configuration
+# ==============================================================================
+
+_generate_config() {
+    echo_step 6 "$TOTAL_STEPS" "Generate configuration"
+
+    # Handle existing config
+    if [[ -f "$CONF_FILE" ]]; then
+        echo_warn "Configuration already exists: $CONF_FILE"
+        if ask "Keep existing configuration?" Y; then
+            echo_success "Keeping existing configuration"
+            return 0
+        fi
+        echo_info "Overwriting configuration"
+    fi
+
+    # Auto-detect Swizzin user
+    local detected_user
+    detected_user=$(_detect_swizzin_user)
+    echo_info "Detected Swizzin user: ${detected_user:-<none>}"
+    local swizzin_user
+    swizzin_user=$(prompt_value "Swizzin username" "$detected_user")
+
+    if [[ -z "$swizzin_user" ]]; then
+        echo_error "Swizzin username is required"
+        exit 1
+    fi
+
+    # Auto-detect Zurg
+    local has_zurg=false
+    if [[ -d "/home/${swizzin_user}/.config/zurg" ]]; then
+        has_zurg=true
+        echo_success "Zurg detected: /home/${swizzin_user}/.config/zurg"
+    else
+        echo_info "Zurg not detected (skipping ZURG_DIR)"
+    fi
+
+    # Prompt for notifications
+    echo ""
+    echo_info "Configure notifications (all optional, all fire simultaneously)"
+    echo ""
+
+    local hc_uuid="" discord_webhook="" pushover_user="" pushover_token=""
+    local notifiarr_key="" email_to=""
+
+    if ask "Configure Healthchecks.io?" N; then
+        hc_uuid=$(prompt_value "  Healthchecks.io UUID")
+    fi
+
+    if ask "Configure Discord webhook?" N; then
+        discord_webhook=$(prompt_value "  Discord webhook URL")
+    fi
+
+    if ask "Configure Pushover?" N; then
+        pushover_user=$(prompt_value "  Pushover user key")
+        pushover_token=$(prompt_value "  Pushover app token")
+    fi
+
+    if ask "Configure Notifiarr?" N; then
+        notifiarr_key=$(prompt_value "  Notifiarr API key")
+    fi
+
+    if ask "Configure email notifications?" N; then
+        email_to=$(prompt_value "  Email address")
+    fi
+
+    # Precompute ZURG_DIR value (single quotes preserve literal ${SWIZZIN_USER})
+    # When written to the heredoc, ${zurg_dir_value} expands once and the inner
+    # ${SWIZZIN_USER} remains literal in the output file.
+    local zurg_dir_value=""
+    if [[ "$has_zurg" == true ]]; then
+        zurg_dir_value='/home/${SWIZZIN_USER}/.config/zurg'
+    fi
+
+    # Write config
+    cat > "$CONF_FILE" <<CONF
+#===============================================================================
+# Swizzin Backup Configuration (BorgBackup)
+# Location: /etc/swizzin-backup.conf
+#
+# This file is sourced by swizzin-backup.sh and swizzin-restore.sh
+# All BORG_* variables are exported automatically by the scripts
+#===============================================================================
+
+#===============================================================================
+# BORG REPOSITORY (REQUIRED)
+#===============================================================================
+
+# Remote borg repository (any SSH-accessible borg server)
+BORG_REPO="${BORG_REPO_URL}"
+
+# Passphrase handling
+BORG_PASSCOMMAND="cat /root/.swizzin-backup-passphrase"
+
+# SSH configuration
+BORG_RSH="ssh -p${REMOTE_PORT} -i /root/.ssh/id_backup -o BatchMode=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3"
+
+# Remote borg version (adjust for your server)
+BORG_REMOTE_PATH="${BORG_REMOTE_PATH:-borg}"
+
+#===============================================================================
+# SWIZZIN (REQUIRED)
+#===============================================================================
+
+# Primary Swizzin user
+SWIZZIN_USER="${swizzin_user}"
+
+# Zurg installation directory (paid zurg)
+ZURG_DIR="${zurg_dir_value}"
+
+#===============================================================================
+# HEALTHCHECKS (OPTIONAL)
+# Ping healthchecks.io on start/success/failure
+#===============================================================================
+
+HC_UUID="${hc_uuid}"
+
+#===============================================================================
+# NOTIFICATIONS (OPTIONAL)
+# All configured providers fire simultaneously
+#===============================================================================
+
+# Discord webhook URL
+DISCORD_WEBHOOK="${discord_webhook}"
+
+# Pushover (both required)
+PUSHOVER_USER="${pushover_user}"
+PUSHOVER_TOKEN="${pushover_token}"
+
+# Notifiarr passthrough API key
+NOTIFIARR_API_KEY="${notifiarr_key}"
+
+# Email (requires sendmail or mail command)
+EMAIL_TO="${email_to}"
+
+#===============================================================================
+# RETENTION (OPTIONAL — defaults shown)
+#===============================================================================
+
+KEEP_DAILY=7
+KEEP_WEEKLY=4
+KEEP_MONTHLY=6
+KEEP_YEARLY=2
+
+#===============================================================================
+# PATHS (OPTIONAL — defaults shown)
+#===============================================================================
+
+# LOCKFILE="/var/run/swizzin-backup.lock"
+# LOGFILE="/var/log/swizzin-backup.log"
+# EXCLUDES_FILE="/etc/swizzin-excludes.txt"
+# STOPPED_SERVICES_FILE="/var/run/swizzin-stopped-services.txt"
+CONF
+
+    chmod 600 "$CONF_FILE"
+    echo_success "Configuration written to $CONF_FILE"
+}
+
+# ==============================================================================
+# Step 7: Deploy files
+# ==============================================================================
+
+_deploy_files() {
+    echo_step 7 "$TOTAL_STEPS" "Deploy files"
+
+    local script_dir
+    script_dir=$(_detect_script_dir)
+
+    # Define source → target mappings
+    local -A file_map=(
+        ["swizzin-backup.sh"]="$BACKUP_SCRIPT"
+        ["swizzin-restore.sh"]="$RESTORE_SCRIPT"
+        ["swizzin-excludes.txt"]="$EXCLUDES_TARGET"
+        ["swizzin-backup.service"]="$SERVICE_FILE"
+        ["swizzin-backup.timer"]="$TIMER_FILE"
+        ["swizzin-backup-logrotate"]="$LOGROTATE_FILE"
+    )
+
+    local -A mode_map=(
+        ["swizzin-backup.sh"]="755"
+        ["swizzin-restore.sh"]="755"
+        ["swizzin-excludes.txt"]="644"
+        ["swizzin-backup.service"]="644"
+        ["swizzin-backup.timer"]="644"
+        ["swizzin-backup-logrotate"]="644"
+    )
+
+    local failed=0
+
+    for source_name in "${!file_map[@]}"; do
+        local source_path="${script_dir}/${source_name}"
+        local target_path="${file_map[$source_name]}"
+        local mode="${mode_map[$source_name]}"
+
+        if [[ ! -f "$source_path" ]]; then
+            echo_error "Source file not found: $source_path"
+            (( failed++ ))
+            continue
+        fi
+
+        mkdir -p "$(dirname "$target_path")"
+        cp "$source_path" "$target_path"
+        chmod "$mode" "$target_path"
+        echo_success "Deployed: $target_path"
+    done
+
+    if (( failed > 0 )); then
+        echo_error "$failed file(s) failed to deploy"
+        exit 1
+    fi
+
+    echo_progress_start "Reloading systemd"
+    systemctl daemon-reload
+    echo_progress_done "systemd reloaded"
+}
+
+# ==============================================================================
+# Step 8: Verify
+# ==============================================================================
+
+_verify_setup() {
+    echo_step 8 "$TOTAL_STEPS" "Verify setup"
+
+    echo_progress_start "Checking service discovery"
+    if "$BACKUP_SCRIPT" --services >/dev/null 2>&1; then
+        echo_progress_done "Service discovery works"
+        echo ""
+        "$BACKUP_SCRIPT" --services
+    else
+        echo_progress_fail "Service discovery check failed"
+        echo_warn "Check $CONF_FILE and try: borg-backup.sh --services"
+    fi
+
+    echo ""
+    if ask "Run a dry-run backup to verify paths?" N; then
+        echo_info "Running dry-run..."
+        echo ""
+        "$BACKUP_SCRIPT" --dry-run || true
+    fi
+}
+
+# ==============================================================================
+# Step 9: Enable timer
+# ==============================================================================
+
+_enable_timer() {
+    echo_step 9 "$TOTAL_STEPS" "Enable daily timer"
+
+    echo_progress_start "Enabling swizzin-backup.timer"
+    systemctl enable --now swizzin-backup.timer >/dev/null 2>&1
+    echo_progress_done "Timer enabled"
+
+    echo ""
+    echo_info "Scheduled backup times:"
+    systemctl list-timers swizzin-backup.timer --no-pager 2>/dev/null || true
+}
+
+# ==============================================================================
+# Step 10: Optional first backup
+# ==============================================================================
+
+_offer_first_backup() {
+    echo_step 10 "$TOTAL_STEPS" "First backup"
+
+    if ask "Run a full backup now?" N; then
+        echo_info "Starting backup... (this may take a while for the first run)"
+        echo ""
+        "$BACKUP_SCRIPT" || true
+    else
+        echo_info "Skipping first backup. The timer will run it at 4 AM."
+    fi
+}
+
+# ==============================================================================
+# Summary
+# ==============================================================================
+
+_show_summary() {
+    echo_header "Setup Complete"
+
+    echo -e "${BOLD}Deployed files:${NC}"
+    echo "  Scripts:    $BACKUP_SCRIPT"
+    echo "              $RESTORE_SCRIPT"
+    echo "  Config:     $CONF_FILE"
+    echo "  Excludes:   $EXCLUDES_TARGET"
+    echo "  Service:    $SERVICE_FILE"
+    echo "  Timer:      $TIMER_FILE"
+    echo "  Logrotate:  $LOGROTATE_FILE"
+    echo ""
+    echo -e "${BOLD}Credentials:${NC}"
+    echo "  SSH key:        $SSH_KEY"
+    echo "  Passphrase:     $PASSPHRASE_FILE"
+    echo "  Key export:     $KEY_EXPORT"
+    echo ""
+    echo -e "${BOLD}Repository:${NC}"
+    echo "  URL: ${BORG_REPO_URL:-<not set>}"
+    echo ""
+    echo -e "${BOLD}Schedule:${NC}"
+    echo "  Daily at 4:00 AM (±30 min jitter)"
+    echo ""
+    echo -e "${BOLD}Quick commands:${NC}"
+    echo "  swizzin-backup.sh              # Run backup"
+    echo "  swizzin-backup.sh --services   # List discovered services"
+    echo "  swizzin-backup.sh --list       # List archives"
+    echo "  swizzin-restore.sh             # Interactive restore"
+    echo "  journalctl -u swizzin-backup   # View logs"
+    echo ""
+    echo -e "${BOLD}${RED}Reminders:${NC}"
+    echo "  1. Save passphrase + key export in a password manager"
+    echo "  2. Test restore periodically: swizzin-restore.sh --mount"
+    echo "  3. Consider append-only mode for ransomware protection"
+    echo "     (see README.md > Security > Append-only mode)"
+}
+
+# ==============================================================================
+# --status
+# ==============================================================================
+
+_show_status() {
+    echo_header "Swizzin Backup Setup Status"
+
+    # borgbackup
+    if command_exists borg; then
+        local version
+        version=$(borg --version 2>/dev/null | head -1)
+        echo -e "${GREEN}[OK]${NC}      borgbackup installed ($version)"
+    else
+        echo -e "${RED}[MISSING]${NC} borgbackup not installed"
+    fi
+
+    # SSH key
+    if [[ -f "$SSH_KEY" ]]; then
+        local fp
+        fp=$(ssh-keygen -lf "$SSH_KEY" 2>/dev/null | awk '{print $2}')
+        echo -e "${GREEN}[OK]${NC}      SSH key exists ($SSH_KEY) [$fp]"
+    else
+        echo -e "${RED}[MISSING]${NC} SSH key ($SSH_KEY)"
+    fi
+
+    # Passphrase
+    if [[ -f "$PASSPHRASE_FILE" ]]; then
+        echo -e "${GREEN}[OK]${NC}      Passphrase exists ($PASSPHRASE_FILE)"
+    else
+        echo -e "${RED}[MISSING]${NC} Passphrase ($PASSPHRASE_FILE)"
+    fi
+
+    # Repository - check via config
+    if [[ -f "$CONF_FILE" ]]; then
+        local repo_url
+        repo_url=$(grep -oP '^BORG_REPO="\K[^"]+' "$CONF_FILE" 2>/dev/null || true)
+        if [[ -n "$repo_url" ]]; then
+            echo -e "${GREEN}[OK]${NC}      Repository configured ($repo_url)"
+        else
+            echo -e "${YELLOW}[WARN]${NC}    Repository URL not found in config"
+        fi
+    else
+        echo -e "${RED}[MISSING]${NC} Repository (no config file)"
+    fi
+
+    # Key export
+    if [[ -f "$KEY_EXPORT" ]]; then
+        echo -e "${GREEN}[OK]${NC}      Key exported ($KEY_EXPORT)"
+    else
+        echo -e "${RED}[MISSING]${NC} Key export ($KEY_EXPORT)"
+    fi
+
+    # Configuration
+    if [[ -f "$CONF_FILE" ]]; then
+        echo -e "${GREEN}[OK]${NC}      Configuration ($CONF_FILE)"
+    else
+        echo -e "${RED}[MISSING]${NC} Configuration ($CONF_FILE)"
+    fi
+
+    # Scripts
+    if [[ -f "$BACKUP_SCRIPT" && -f "$RESTORE_SCRIPT" ]]; then
+        echo -e "${GREEN}[OK]${NC}      Scripts deployed ($BACKUP_SCRIPT)"
+    elif [[ -f "$BACKUP_SCRIPT" || -f "$RESTORE_SCRIPT" ]]; then
+        echo -e "${YELLOW}[WARN]${NC}    Scripts partially deployed"
+    else
+        echo -e "${RED}[MISSING]${NC} Scripts ($BACKUP_SCRIPT)"
+    fi
+
+    # Excludes
+    if [[ -f "$EXCLUDES_TARGET" ]]; then
+        echo -e "${GREEN}[OK]${NC}      Excludes file ($EXCLUDES_TARGET)"
+    else
+        echo -e "${RED}[MISSING]${NC} Excludes file ($EXCLUDES_TARGET)"
+    fi
+
+    # Systemd units
+    if [[ -f "$SERVICE_FILE" && -f "$TIMER_FILE" ]]; then
+        echo -e "${GREEN}[OK]${NC}      Systemd units deployed"
+    else
+        echo -e "${RED}[MISSING]${NC} Systemd units"
+    fi
+
+    # Timer active
+    if systemctl is-active --quiet swizzin-backup.timer 2>/dev/null; then
+        local next
+        next=$(systemctl list-timers swizzin-backup.timer --no-pager 2>/dev/null | grep swizzin | awk '{print $1, $2, $3}')
+        echo -e "${GREEN}[OK]${NC}      Timer active (next: ${next:-unknown})"
+    elif systemctl is-enabled --quiet swizzin-backup.timer 2>/dev/null; then
+        echo -e "${YELLOW}[WARN]${NC}    Timer enabled but not active"
+    else
+        echo -e "${RED}[MISSING]${NC} Timer not enabled"
+    fi
+
+    # Logrotate
+    if [[ -f "$LOGROTATE_FILE" ]]; then
+        echo -e "${GREEN}[OK]${NC}      Logrotate configured"
+    else
+        echo -e "${RED}[MISSING]${NC} Logrotate ($LOGROTATE_FILE)"
+    fi
+
+    # Notifications
+    if [[ -f "$CONF_FILE" ]]; then
+        local notif_count=0
+        grep -qP '^DISCORD_WEBHOOK=".+"' "$CONF_FILE" 2>/dev/null && (( notif_count++ ))
+        grep -qP '^PUSHOVER_USER=".+"' "$CONF_FILE" 2>/dev/null && (( notif_count++ ))
+        grep -qP '^NOTIFIARR_API_KEY=".+"' "$CONF_FILE" 2>/dev/null && (( notif_count++ ))
+        grep -qP '^EMAIL_TO=".+"' "$CONF_FILE" 2>/dev/null && (( notif_count++ ))
+        grep -qP '^HC_UUID=".+"' "$CONF_FILE" 2>/dev/null && (( notif_count++ ))
+
+        if (( notif_count > 0 )); then
+            echo -e "${GREEN}[OK]${NC}      Notifications ($notif_count provider(s) configured)"
+        else
+            echo -e "${YELLOW}[WARN]${NC}    No notifications configured"
+        fi
+    fi
+
+    echo ""
+}
+
+# ==============================================================================
+# --remove
+# ==============================================================================
+
+_remove() {
+    echo_header "Remove Swizzin Backup Setup"
+
+    echo_warn "This will remove all deployed files from this server."
+    echo_warn "The remote borg repository will NOT be deleted."
+    echo ""
+
+    if ! ask "Proceed with removal?" N; then
+        echo_info "Removal cancelled"
         exit 0
     fi
 
-    # Remove cron
-    rm -f /etc/cron.d/swizzin-backup
-    log "Removed cron job"
+    # Stop and disable timer
+    echo_progress_start "Stopping timer"
+    systemctl stop swizzin-backup.timer 2>/dev/null || true
+    systemctl disable swizzin-backup.timer 2>/dev/null || true
+    echo_progress_done "Timer stopped and disabled"
 
-    # Remove symlinks
-    rm -f /usr/local/bin/swizzin-backup
-    rm -f /usr/local/bin/swizzin-restore
-    log "Removed symlinks"
+    # Remove deployed files
+    local files_to_remove=(
+        "$BACKUP_SCRIPT"
+        "$RESTORE_SCRIPT"
+        "$EXCLUDES_TARGET"
+        "$SERVICE_FILE"
+        "$TIMER_FILE"
+        "$LOGROTATE_FILE"
+    )
 
-    if ask "Remove backup configuration and scripts?" N; then
-        rm -rf "${BACKUP_DIR}"
-        log "Removed ${BACKUP_DIR}"
-    fi
+    for f in "${files_to_remove[@]}"; do
+        if [[ -f "$f" ]]; then
+            rm -f "$f"
+            echo_success "Removed: $f"
+        fi
+    done
 
-    if ask "Remove password file?" N; then
-        rm -f /root/.swizzin-backup-password
-        log "Removed password file"
-    fi
+    systemctl daemon-reload 2>/dev/null || true
+    echo_success "systemd reloaded"
 
-    # Note: We don't remove restic/rclone as they may be used by other things
-
-    log "Uninstallation complete"
+    # Optionally remove credentials
     echo ""
-    echo -e "${YELLOW}Note: restic and rclone were NOT removed.${NC}"
-    echo -e "${YELLOW}Remote backup repositories were NOT deleted.${NC}"
+    if ask "Remove configuration and credentials?" N; then
+        [[ -f "$CONF_FILE" ]] && rm -f "$CONF_FILE" && echo_success "Removed: $CONF_FILE"
+        [[ -f "$PASSPHRASE_FILE" ]] && rm -f "$PASSPHRASE_FILE" && echo_success "Removed: $PASSPHRASE_FILE"
+        [[ -f "$KEY_EXPORT" ]] && rm -f "$KEY_EXPORT" && echo_success "Removed: $KEY_EXPORT"
+    else
+        echo_info "Credentials kept"
+    fi
+
+    # Optionally remove SSH key
+    if ask "Remove SSH key ($SSH_KEY)?" N; then
+        rm -f "$SSH_KEY" "${SSH_KEY}.pub"
+        echo_success "Removed SSH key"
+    else
+        echo_info "SSH key kept"
+    fi
+
+    echo ""
+    echo_warn "Remote repository was NOT deleted."
+    echo_info "To delete the remote repo, use borg on the Storage Box directly."
+    echo ""
+    echo_success "Removal complete"
 }
 
-# === MAIN ===
+# ==============================================================================
+# --help
+# ==============================================================================
+
+_show_help() {
+    cat <<'EOF'
+Swizzin Backup Setup Wizard (BorgBackup)
+
+Usage:
+  bash swizzin-backup-install.sh              Interactive setup wizard
+  bash swizzin-backup-install.sh --status     Show current setup status
+  bash swizzin-backup-install.sh --remove     Remove deployed files (not remote repo)
+  bash swizzin-backup-install.sh --help       Show this help
+
+Supported backup targets:
+  - Hetzner Storage Box
+  - Rsync.net
+  - BorgBase
+  - Self-hosted (NAS, VPS, dedicated server)
+
+The setup wizard walks through 10 steps:
+  1. Install borgbackup
+  2. SSH key setup (generate + add to remote server)
+  3. Generate encryption passphrase
+  4. Initialize borg repository
+  5. Export encryption key
+  6. Generate configuration
+  7. Deploy scripts, configs, and systemd units
+  8. Verify setup
+  9. Enable daily timer
+ 10. Optional first backup
+
+The wizard is idempotent — safe to re-run. Existing components are
+detected and you're asked whether to reuse or regenerate them.
+
+Files deployed:
+  /usr/local/bin/swizzin-backup.sh       Backup script
+  /usr/local/bin/swizzin-restore.sh      Restore script
+  /etc/swizzin-backup.conf               Configuration
+  /etc/swizzin-excludes.txt              Exclusion patterns
+  /etc/systemd/system/swizzin-backup.*   Systemd service + timer
+  /etc/logrotate.d/swizzin-backup        Log rotation
+
+Credentials stored:
+  /root/.ssh/id_backup                   SSH key pair
+  /root/.swizzin-backup-passphrase       Encryption passphrase
+  /root/swizzin-backup-key-export.txt    Encryption key export
+EOF
+}
+
+# ==============================================================================
+# Main
+# ==============================================================================
+
 main() {
-    check_root
-
-    mkdir -p "$(dirname "$LOG_FILE")"
-
     case "${1:-}" in
-        --uninstall)
-            uninstall
+        --status)
+            _show_status
             exit 0
             ;;
-        --upgrade)
-            header "Upgrading Swizzin Backup"
-            install_restic
-            install_rclone
-            install_files
-            log "Upgrade complete"
+        --remove)
+            require_root
+            _remove
             exit 0
-            ;;
-        --reconfigure)
-            if [[ ! -d "$BACKUP_DIR" ]]; then
-                error "Swizzin Backup not installed. Run without --reconfigure first."
-                exit 1
-            fi
             ;;
         --help|-h)
-            echo "Swizzin Backup Installer"
-            echo ""
-            echo "Usage: $0 [options]"
-            echo ""
-            echo "Options:"
-            echo "  --uninstall     Remove backup system"
-            echo "  --upgrade       Upgrade to latest version"
-            echo "  --reconfigure   Re-run configuration wizard"
-            echo "  --help          Show this help"
+            _show_help
             exit 0
+            ;;
+        "")
+            # Interactive setup — continue below
+            ;;
+        *)
+            echo_error "Unknown option: $1"
+            echo "Run with --help for usage"
+            exit 1
             ;;
     esac
 
-    echo ""
-    echo -e "${CYAN}${BOLD}"
-    echo "  ╔═══════════════════════════════════════════╗"
-    echo "  ║       SWIZZIN BACKUP INSTALLER            ║"
-    echo "  ╚═══════════════════════════════════════════╝"
-    echo -e "${NC}"
+    require_root
 
-    # Install dependencies
-    install_dependencies
+    echo_header "Swizzin Backup Setup Wizard"
 
-    # Create directory structure
-    install_files
+    # Check existing setup
+    local state
+    state=$(_check_existing_setup)
 
-    # Run configuration wizard
-    configure_encryption
-    configure_gdrive
-    configure_sftp
-    configure_pushover
-    configure_discord
-    configure_notifiarr
-    configure_schedule
-    configure_retention
-
-    # Write config
-    write_config
-
-    # Initialize repositories
-    init_repositories
-
-    # Setup cron
-    setup_cron
-
-    # Summary
-    header "Installation Complete"
-
-    echo -e "${GREEN}Swizzin Backup has been installed!${NC}"
-    echo ""
-    echo "Configuration: ${BACKUP_DIR}/backup.conf"
-    echo "Cron job: /etc/cron.d/swizzin-backup"
-    echo ""
-    echo "Commands:"
-    echo "  swizzin-backup run       - Run backup now"
-    echo "  swizzin-backup status    - Check backup status"
-    echo "  swizzin-backup list      - List available snapshots"
-    echo "  swizzin-backup discover  - Preview what will be backed up"
-    echo "  swizzin-restore          - Restore from backup"
-    echo ""
-
-    if ask "Run a test backup now?" Y; then
-        log "Running discovery to show what will be backed up..."
-        "${BACKUP_DIR}/swizzin-backup.sh" discover || true
-
-        if ask "Proceed with actual backup?" Y; then
-            "${BACKUP_DIR}/swizzin-backup.sh" run
+    if [[ "$state" == "complete" ]]; then
+        echo_warn "Setup appears complete. All components are already in place."
+        if ! ask "Re-run setup anyway?" N; then
+            echo_info "Run with --status to view current state"
+            exit 0
         fi
+    elif [[ "$state" == "partial" ]]; then
+        echo_info "Partial setup detected. The wizard will pick up where applicable."
     fi
 
-    log "Installation completed successfully"
+    # Run all steps
+    _install_borgbackup
+    _setup_ssh_key
+    _generate_passphrase
+    _init_repository
+    _export_key
+    _generate_config
+    _deploy_files
+    _verify_setup
+    _enable_timer
+    _offer_first_backup
+    _show_summary
 }
 
 main "$@"

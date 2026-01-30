@@ -48,9 +48,8 @@ Each installer script follows a consistent pattern:
 - **sonarr.sh** - Multi-instance Sonarr manager (add/remove/list named instances)
 - **radarr.sh** - Multi-instance Radarr manager (add/remove/list named instances)
 - **panel_helpers.sh** - Shared utility for Swizzin panel app registration
-- **watchdog.sh** - Generic service watchdog with health checks and notifications
-- **emby-watchdog.sh** - Emby-specific watchdog installer/manager
-- **backup/** - Automated backup system with dual destinations and GFS rotation
+- **watchdog/** - Service watchdog system (see [Service Watchdog](#service-watchdog))
+- **backup/** - BorgBackup-based backup system (see [Backup System](#backup-system))
 - **swizzin-app-info** - Discovers installed apps and extracts URLs, API keys, config paths (installable as global command)
 
 ### Python Apps (uv-based)
@@ -294,21 +293,25 @@ sonarr.sh --list               # List all instances with ports
 
 A cron-based monitoring system that checks service health and automatically restarts unhealthy services with cooldown protection.
 
-**Components:**
+**Directory structure:**
 
-- `watchdog.sh` - Generic engine (process + HTTP health checks, restart logic, notifications)
-- `emby-watchdog.sh` - Emby-specific installer/manager
-- `configs/watchdog.conf.example` - Global config template
-- `configs/emby-watchdog.conf.example` - Emby config template
+```
+watchdog/
+├── watchdog.sh               # Generic watchdog engine
+├── emby-watchdog.sh          # Emby-specific installer/manager
+└── configs/
+    ├── watchdog.conf.example       # Global config template
+    └── emby-watchdog.conf.example  # Emby config template
+```
 
 **Usage:**
 
 ```bash
-bash emby-watchdog.sh              # Interactive setup
-bash emby-watchdog.sh --install    # Install watchdog for Emby
-bash emby-watchdog.sh --remove     # Remove watchdog for Emby
-bash emby-watchdog.sh --status     # Show current status
-bash emby-watchdog.sh --reset      # Clear backoff state, resume monitoring
+bash watchdog/emby-watchdog.sh              # Interactive setup
+bash watchdog/emby-watchdog.sh --install    # Install watchdog for Emby
+bash watchdog/emby-watchdog.sh --remove     # Remove watchdog for Emby
+bash watchdog/emby-watchdog.sh --status     # Show current status
+bash watchdog/emby-watchdog.sh --reset      # Clear backoff state, resume monitoring
 ```
 
 **How it works:**
@@ -330,69 +333,59 @@ bash emby-watchdog.sh --reset      # Clear backoff state, resume monitoring
 | `/var/run/watchdog/emby.state` | State (restart counts, backoff) |
 | `/etc/cron.d/emby-watchdog` | Cron job |
 
-**Adding new services:** Create a new wrapper script (copy `emby-watchdog.sh`) and adjust `SERVICE_NAME`, `HEALTH_URL`, and `HEALTH_EXPECT` for the target service.
+**Adding new services:** Create a new wrapper script (copy `watchdog/emby-watchdog.sh`) and adjust `SERVICE_NAME`, `HEALTH_URL`, and `HEALTH_EXPECT` for the target service.
 
 ### Backup System
 
-Automated backup system using restic with dual-destination support.
+BorgBackup-based backup system supporting any SSH-accessible borg server (Hetzner Storage Box, Rsync.net, BorgBase, self-hosted).
 
 **Directory structure:**
 
 ```
 backup/
-├── swizzin-backup-install.sh    # Interactive installer
-├── swizzin-backup.sh            # Main backup script
-├── swizzin-restore.sh           # Restore script
-├── configs/
-│   ├── backup.conf.example      # Configuration template
-│   ├── app-registry.conf        # App → path mappings
-│   └── excludes.conf            # Global exclusions
-└── hooks/
-    ├── pre-backup.sh.example    # Pre-backup hook
-    └── post-backup.sh.example   # Post-backup hook
+├── swizzin-backup-install.sh   # Interactive setup wizard
+├── swizzin-backup.sh           # Main backup script
+├── swizzin-restore.sh          # Interactive restore
+├── swizzin-backup.conf         # Configuration template
+├── swizzin-excludes.txt        # Exclusion patterns
+├── swizzin-backup.service      # Systemd service unit
+├── swizzin-backup.timer        # Systemd timer (daily at 4 AM)
+├── swizzin-backup-logrotate    # Log rotation config
+└── README.md                   # Setup documentation
 ```
 
 **Runtime files (on server):**
 | File | Purpose |
 |------|---------|
-| `/opt/swizzin-extras/backup/` | Installation directory |
-| `/opt/swizzin-extras/backup/backup.conf` | Configuration |
-| `/opt/swizzin-extras/backup/manifests/` | Generated symlink/path manifests |
-| `/root/.swizzin-backup-password` | Restic encryption password |
-| `/etc/cron.d/swizzin-backup` | Daily cron job |
+| `/etc/swizzin-backup.conf` | Configuration |
+| `/etc/swizzin-excludes.txt` | Exclusion patterns |
+| `/usr/local/bin/swizzin-backup.sh` | Backup script |
+| `/usr/local/bin/swizzin-restore.sh` | Restore script |
+| `/etc/systemd/system/swizzin-backup.*` | Systemd service + timer |
+| `/root/.ssh/id_backup` | SSH key for remote server |
+| `/root/.swizzin-backup-passphrase` | Borg encryption passphrase |
 | `/var/log/swizzin-backup.log` | Backup log |
 
-**App discovery:** Uses lock files (`/install/.<app>.lock`) as source of truth. Multi-instance apps use underscore separator (`.sonarr_4k.lock`).
+**Features:**
 
-**App registry format (`app-registry.conf`):**
-
-```
-APP|CONFIG_PATHS|DATA_PATHS|EXCLUDES|TYPE
-sonarr|/home/*/.config/Sonarr/|/opt/Sonarr/|*.pid,logs/*|arr
-```
-
-**Dynamic path resolution:**
-
-- `DYNAMIC:decypharr_downloads` - Reads from Decypharr config.json
-- `DYNAMIC:arr_root_folders` - Queries SQLite RootFolders table
-- `SWIZDB:key` - Reads from swizdb
-
-**Backup targets:**
-
-- Google Drive via rclone backend
-- Windows Server via SFTP (OpenSSH)
-
-**Retention (GFS):** 7 daily, 4 weekly, 3 monthly snapshots
+- Automatic service stop/start for consistent SQLite backups
+- Multi-instance app support (sonarr-4k, radarr-anime, etc.)
+- Zurg `.zurgtorrent` file backup for Real-Debrid setups
+- `/mnt/symlinks` backup for arr root folder symlinks
+- Notifications via Discord, Pushover, Notifiarr, email
+- Healthchecks.io integration
+- GFS retention: 7 daily, 4 weekly, 6 monthly, 2 yearly
 
 **Commands:**
 
 ```bash
-swizzin-backup run              # Run backup
-swizzin-backup discover         # Preview paths
-swizzin-backup list             # List snapshots
-swizzin-backup status           # Show status
-swizzin-restore                 # Interactive restore
-swizzin-restore --app sonarr    # Restore single app
+swizzin-backup.sh               # Run full backup
+swizzin-backup.sh --dry-run     # Show what would be backed up
+swizzin-backup.sh --list        # List archives
+swizzin-backup.sh --services    # List discovered services
+swizzin-restore.sh              # Interactive restore
+swizzin-restore.sh --app sonarr # Restore single app
+swizzin-restore.sh --mount      # FUSE mount for browsing
 ```
 
 ### Swizzin App Info Tool
