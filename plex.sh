@@ -22,6 +22,7 @@ subdomain_vhost="/etc/nginx/sites-available/${app_name}"
 subdomain_enabled="/etc/nginx/sites-enabled/${app_name}"
 profiles_py="/opt/swizzin/core/custom/profiles.py"
 organizr_config="/opt/swizzin-extras/organizr-auth.conf"
+plex_prefs="/var/lib/plexmediaserver/Library/Application Support/Plex Media Server/Preferences.xml"
 
 # ==============================================================================
 # Domain/LE Helper Functions
@@ -259,6 +260,65 @@ _backup_file() {
 }
 
 # ==============================================================================
+# Plex Preferences
+# ==============================================================================
+
+_set_plex_pref() {
+	local key="$1"
+	local value="$2"
+	if grep -q "${key}=" "$plex_prefs"; then
+		sed -i "s|${key}=\"[^\"]*\"|${key}=\"${value}\"|" "$plex_prefs"
+	else
+		sed -i "s|/>| ${key}=\"${value}\" />|" "$plex_prefs"
+	fi
+}
+
+_remove_plex_pref() {
+	local key="$1"
+	if grep -q "${key}=" "$plex_prefs"; then
+		sed -i "s| ${key}=\"[^\"]*\"||" "$plex_prefs"
+	fi
+}
+
+_configure_plex_preferences() {
+	local domain="$1"
+	local custom_url="https://${domain}:443"
+
+	if [ ! -f "$plex_prefs" ]; then
+		echo_error "Plex Preferences.xml not found at: $plex_prefs"
+		return 1
+	fi
+
+	echo_progress_start "Configuring Plex server preferences"
+
+	# Stop Plex to safely edit preferences (Plex overwrites on shutdown)
+	systemctl stop plexmediaserver
+
+	_set_plex_pref "customConnections" "$custom_url"
+	_set_plex_pref "secureConnections" "1"
+
+	systemctl start plexmediaserver
+
+	echo_progress_done "Plex configured: customConnections=${custom_url}, secureConnections=Preferred"
+}
+
+_reset_plex_preferences() {
+	if [ ! -f "$plex_prefs" ]; then
+		return 0
+	fi
+
+	echo_progress_start "Resetting Plex server preferences"
+
+	systemctl stop plexmediaserver
+
+	_remove_plex_pref "customConnections"
+
+	systemctl start plexmediaserver
+
+	echo_progress_done "Plex preferences reset"
+}
+
+# ==============================================================================
 # Subdomain Vhost Creation
 # ==============================================================================
 
@@ -406,6 +466,7 @@ _install_subdomain() {
 		_add_panel_meta "$domain"
 		_exclude_from_organizr
 		systemctl reload nginx
+		_configure_plex_preferences "$domain"
 		echo_success "${app_name^} converted to subdomain mode"
 		echo_info "Access at: https://$domain"
 		;;
@@ -431,6 +492,7 @@ _revert_subdomain() {
 
 	_remove_panel_meta
 	_include_in_organizr
+	_reset_plex_preferences
 
 	systemctl reload nginx
 	echo_success "${app_name^} reverted to subfolder mode"
