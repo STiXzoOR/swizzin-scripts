@@ -25,6 +25,7 @@ A collection of installer scripts for integrating additional applications into [
 | [dns-fix.sh](#dns-fix)                | -                                                            | Fix DNS issues for FlareSolverr/Byparr cookie validation         |
 | [emby-watchdog.sh](#service-watchdog) | -                                                            | Service watchdog with health checks and auto-restart             |
 | [backup/](#backup-system)             | -                                                            | Automated backup system with dual destinations and GFS rotation  |
+| [swizzin-app-info](#swizzin-app-info) | -                                                            | Discover installed apps and extract URLs, API keys, config paths |
 
 ## Requirements
 
@@ -696,6 +697,66 @@ swizzin-restore
 - Browse files - interactive selection
 
 See [backup/README.md](backup/README.md) for full documentation.
+
+---
+
+### Swizzin App Info
+
+A utility that discovers all installed Swizzin apps and extracts configuration details including URLs, API keys, and config file paths. Useful for automation, documentation, and debugging. Installable as a global command.
+
+```bash
+# Install globally (run once)
+wget https://raw.githubusercontent.com/STiXzoOR/swizzin-scripts/main/swizzin-app-info
+chmod +x swizzin-app-info
+sudo ./swizzin-app-info --install
+
+# Now use from anywhere:
+swizzin-app-info                    # List all installed apps
+swizzin-app-info --json             # Output as JSON (for scripting)
+swizzin-app-info --app sonarr       # Show info for a specific app
+swizzin-app-info --verbose          # Include config file paths
+
+# Uninstall
+sudo swizzin-app-info --uninstall
+```
+
+**Example output:**
+
+```
+App           URL                              API Key
+--------------------------------------------------------------------------------
+radarr        http://localhost:7878/radarr     a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6
+sonarr        http://localhost:8989/sonarr     z9y8x7w6v5u4t3s2r1q0p9o8n7m6l5k4
+sonarr-4k     http://localhost:10001/sonarr-4k abc123def456ghi789jkl012mno345pq
+plex          http://localhost:32400           xYz-AbC-123-PlexToken
+bazarr        http://localhost:6767/bazarr     -
+notifiarr     http://localhost:5454            notifiarr-api-key-here
+```
+
+**How it works:**
+
+- Discovers installed apps via lock files in `/install/`
+- Parses app config files (XML, JSON, YAML, INI, TOML, etc.)
+- Falls back to nginx config or systemd environment if config not found
+- Supports multi-instance apps (sonarr-4k, radarr-anime, bazarr-4k, etc.)
+
+**JSON output fields:**
+
+```json
+{
+  "app": "sonarr",
+  "installed": true,
+  "config_file": "/home/user/.config/Sonarr/config.xml",
+  "port": "8989",
+  "baseurl": "/sonarr",
+  "apikey": "your-api-key-here",
+  "full_url": "http://localhost:8989/sonarr"
+}
+```
+
+**Supported apps:** All \*arr apps (Sonarr, Radarr, Lidarr, Readarr, Prowlarr, Bazarr), media servers (Plex, Emby, Jellyfin), download clients (qBittorrent, Deluge, Transmission, NZBGet, SABnzbd), and custom apps from this repo (Cleanuparr, Decypharr, Huntarr, Notifiarr, Zurg, Lingarr, etc.).
+
+**Requirements:** Python 3.6+ (no external dependencies)
 
 ---
 

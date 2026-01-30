@@ -51,6 +51,7 @@ Each installer script follows a consistent pattern:
 - **watchdog.sh** - Generic service watchdog with health checks and notifications
 - **emby-watchdog.sh** - Emby-specific watchdog installer/manager
 - **backup/** - Automated backup system with dual destinations and GFS rotation
+- **swizzin-app-info** - Discovers installed apps and extracts URLs, API keys, config paths (installable as global command)
 
 ### Python Apps (uv-based)
 
@@ -394,6 +395,52 @@ swizzin-restore                 # Interactive restore
 swizzin-restore --app sonarr    # Restore single app
 ```
 
+### Swizzin App Info Tool
+
+A Python utility that discovers installed Swizzin apps and extracts configuration details (URLs, API keys, config file paths). Installable as a global command.
+
+**Installation:**
+
+```bash
+# Download and install globally
+sudo ./swizzin-app-info --install          # Installs to /usr/local/bin/
+
+# Or run directly without installing
+./swizzin-app-info
+```
+
+**Usage:**
+
+```bash
+swizzin-app-info                           # List all installed apps
+swizzin-app-info --json                    # Output as JSON
+swizzin-app-info --app sonarr              # Show specific app
+swizzin-app-info --verbose                 # Include config file paths
+swizzin-app-info --uninstall               # Remove global installation
+```
+
+**How it works:**
+
+1. Discovers installed apps via lock files in `/install/`
+2. Parses app config files to extract port, baseurl, and API key
+3. Falls back to nginx config or systemd environment if config parsing fails
+4. Supports multiple config formats: XML, JSON, YAML, TOML, INI, PHP, dotenv, Docker Compose
+
+**Output example:**
+
+```
+App           URL                              API Key
+--------------------------------------------------------------------------------
+radarr        http://localhost:7878/radarr     a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6
+sonarr        http://localhost:8989/sonarr     z9y8x7w6v5u4t3s2r1q0p9o8n7m6l5k4
+sonarr-4k     http://localhost:10001/sonarr-4k abc123def456ghi789jkl012mno345pq
+plex          http://localhost:32400           xYz-AbC-123-PlexToken
+```
+
+**Supported apps:** The `APP_CONFIGS` dictionary defines all supported apps with their config paths, formats, and key mappings.
+
+**Maintenance:** When adding a new installer script to this repository, also add an entry to `APP_CONFIGS` in `swizzin-app-info` if the app has extractable configuration (port, API key, baseurl). This keeps the discovery tool comprehensive.
+
 ### Key Swizzin Functions Used
 
 ```bash
@@ -571,3 +618,16 @@ PLEX_DOMAIN="plex.example.com" bash plex.sh --subdomain  # Automated
 - Panel registration: `/opt/swizzin/core/custom/profiles.py`
 - Lock files: `/install/.<appname>.lock`
 - Logs: `/root/logs/swizzin.log`
+
+## Maintenance Checklist
+
+When adding a new installer script to this repository:
+
+1. **Create the installer script** using appropriate template from `templates/`
+2. **Update `swizzin-app-info`** - Add an entry to `APP_CONFIGS` dictionary with:
+   - `config_paths` - List of possible config file paths (use `{user}` placeholder)
+   - `format` - Config format: `xml`, `json`, `yaml`, `ini`, `toml`, `php`, `dotenv`, `docker_compose`, etc.
+   - `keys` - Mapping of result keys to config keys (`port`, `baseurl`, `apikey`)
+   - `default_port` (optional) - Fallback port if detection fails
+3. **Update README.md** - Add entry to Available Scripts table and detailed documentation section
+4. **Update this file (CLAUDE.md)** - Add to Files list and relevant architecture sections
