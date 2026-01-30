@@ -23,8 +23,8 @@ A collection of installer scripts for integrating additional applications into [
 | [zurg.sh](#zurg)                      | [Zurg](https://github.com/debridmediamanager/zurg-testing)   | Real-Debrid WebDAV server with rclone mount                      |
 | [lingarr.sh](#lingarr)                | [Lingarr](https://github.com/lingarr-translate/lingarr)      | Extended Lingarr installer with subdomain support (Docker-based) |
 | [dns-fix.sh](#dns-fix)                | -                                                            | Fix DNS issues for FlareSolverr/Byparr cookie validation         |
-| [emby-watchdog.sh](#service-watchdog) | -                                                            | Service watchdog with health checks and auto-restart             |
-| [backup/](#backup-system)             | -                                                            | Automated backup system with dual destinations and GFS rotation  |
+| [watchdog/](#service-watchdog)        | -                                                            | Service watchdog with health checks and auto-restart             |
+| [backup/](#backup-system)             | -                                                            | BorgBackup-based backup system for any SSH borg server           |
 | [swizzin-app-info](#swizzin-app-info) | -                                                            | Discover installed apps and extract URLs, API keys, config paths |
 
 ## Requirements
@@ -588,19 +588,19 @@ Monitors services via process state and HTTP health checks, automatically restar
 
 ```bash
 # Interactive setup (installs watchdog for Emby)
-bash emby-watchdog.sh
+bash watchdog/emby-watchdog.sh
 
 # Install watchdog
-bash emby-watchdog.sh --install
+bash watchdog/emby-watchdog.sh --install
 
 # Show current status
-bash emby-watchdog.sh --status
+bash watchdog/emby-watchdog.sh --status
 
 # Clear backoff state, resume monitoring
-bash emby-watchdog.sh --reset
+bash watchdog/emby-watchdog.sh --reset
 
 # Remove watchdog
-bash emby-watchdog.sh --remove
+bash watchdog/emby-watchdog.sh --remove
 ```
 
 **How it works:**
@@ -615,7 +615,18 @@ bash emby-watchdog.sh --remove
 
 **Notifications:** During installation, you'll be prompted to configure notification channels. All are optional - leave empty to skip.
 
-**Files:**
+**Repository files:**
+
+```
+watchdog/
+├── watchdog.sh               # Generic watchdog engine
+├── emby-watchdog.sh          # Emby-specific installer/manager
+└── configs/
+    ├── watchdog.conf.example       # Global config template
+    └── emby-watchdog.conf.example  # Emby config template
+```
+
+**Runtime files (on server):**
 | File | Purpose |
 |------|---------|
 | `/opt/swizzin-extras/watchdog.sh` | Generic watchdog engine |
@@ -635,68 +646,87 @@ Restarts:    0/3 in current window
 State:       monitoring
 ```
 
-**Adding other services:** The watchdog engine is generic. Copy `emby-watchdog.sh`, adjust `SERVICE_NAME`, `HEALTH_URL`, and `HEALTH_EXPECT` for your target service (Plex, Jellyfin, etc.).
+**Adding other services:** The watchdog engine is generic. Copy `watchdog/emby-watchdog.sh`, adjust `SERVICE_NAME`, `HEALTH_URL`, and `HEALTH_EXPECT` for your target service (Plex, Jellyfin, etc.).
 
 ---
 
 ### Backup System
 
-Automated backup system for Swizzin servers with dual-destination redundancy, dynamic app discovery, and GFS retention.
+BorgBackup-based backup system supporting any SSH-accessible borg server (Hetzner Storage Box, Rsync.net, BorgBase, self-hosted).
 
 ```bash
-# Copy backup folder to server and run installer
+# Copy backup folder to server and run interactive setup wizard
 cd backup/
 bash swizzin-backup-install.sh
 
+# Or manually install files and configure
+cp swizzin-backup.sh /usr/local/bin/ && chmod +x /usr/local/bin/swizzin-backup.sh
+cp swizzin-restore.sh /usr/local/bin/ && chmod +x /usr/local/bin/swizzin-restore.sh
+# ... (see backup/README.md for full manual setup)
+
 # Run backup manually
-swizzin-backup run
+swizzin-backup.sh
 
-# Check status
-swizzin-backup status
+# Dry run - show what would be backed up
+swizzin-backup.sh --dry-run
 
-# List available snapshots
-swizzin-backup list
+# List archives
+swizzin-backup.sh --list
 
-# Preview what would be backed up
-swizzin-backup discover
+# Show discovered services
+swizzin-backup.sh --services
 
 # Restore (interactive wizard)
-swizzin-restore
+swizzin-restore.sh
+
+# Restore single app
+swizzin-restore.sh --app sonarr
+
+# Mount archive for browsing
+swizzin-restore.sh --mount
 ```
+
+**Supported backup targets:**
+
+- Hetzner Storage Box
+- Rsync.net
+- BorgBase
+- Self-hosted (any Linux server with borg installed)
 
 **Features:**
 
-- Dual destinations: Google Drive (offsite) + Windows Server via SFTP
-- Dynamic app discovery via lock files
-- Multi-instance support (sonarr-4k, radarr-anime, etc.)
-- Symlink preservation for \*arr root folders
-- Smart exclusions (VFS caches, transcodes, regenerable data)
-- GFS rotation: 7 daily, 4 weekly, 3 monthly snapshots
-- Pushover notifications
-- Encrypted backups via restic (AES-256)
+- Automatic service stop/start for consistent SQLite backups
+- Multi-instance app support (sonarr-4k, radarr-anime, etc.)
+- Zurg `.zurgtorrent` file backup for Real-Debrid setups
+- `/mnt/symlinks` backup for \*arr root folder symlinks
+- Notifications via Discord, Pushover, Notifiarr, email
+- Healthchecks.io integration
+- GFS retention: 7 daily, 4 weekly, 6 monthly, 2 yearly
+- Encrypted, deduplicated backups via BorgBackup
 
 **What gets backed up:**
 
 - Swizzin core, nginx, Let's Encrypt, systemd, cron
 - All \*arr apps (configs, databases, multi-instance)
 - Media servers (Plex, Emby, Jellyfin - config + DB only)
-- Custom apps (Notifiarr, Decypharr, Zurg, etc.)
-- Decypharr downloads and \*arr root folder symlinks
+- Custom apps (Notifiarr, Decypharr, Zurg, Huntarr, etc.)
+- Zurg `.zurgtorrent` files and \*arr root folder symlinks
 
 **What's excluded:**
 
-- VFS caches (256GB+)
+- Zurg data directory (except `.zurgtorrent` files)
 - Media server caches and transcodes
-- Mount points (cloud data)
+- Remote mounts (`/mnt/zurg/`, `/mnt/remote/`)
+- Application binaries (regenerable)
 
 **Restore modes:**
 
 - Full restore - rebuild entire server
-- App restore - single app only
-- Config restore - configs only, preserve databases
-- Browse files - interactive selection
+- App restore - single app with service management
+- FUSE mount - browse and extract specific files
+- Extract path - extract specific directory to staging
 
-See [backup/README.md](backup/README.md) for full documentation.
+See [backup/README.md](backup/README.md) for full documentation including setup wizard, service management, and troubleshooting.
 
 ---
 
