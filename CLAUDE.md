@@ -622,5 +622,17 @@ When adding a new installer script to this repository:
    - `format` - Config format: `xml`, `json`, `yaml`, `ini`, `toml`, `php`, `dotenv`, `docker_compose`, etc.
    - `keys` - Mapping of result keys to config keys (`port`, `baseurl`, `apikey`)
    - `default_port` (optional) - Fallback port if detection fails
-3. **Update README.md** - Add entry to Available Scripts table and detailed documentation section
-4. **Update this file (CLAUDE.md)** - Add to Files list and relevant architecture sections
+3. **Update backup system** - Update backup/restore scripts to support the new app:
+   - `backup/swizzin-backup.sh`:
+     - `SERVICE_TYPES` - Add app with type (`"user"` for `@user` template, `"system"` for plain service)
+     - `SERVICE_NAME_MAP` - Add if systemd service name differs from app name (e.g., `["emby"]="emby-server"`)
+     - `SERVICE_STOP_ORDER` - Add to appropriate position (downstream consumers first, infrastructure last)
+     - `SERVICE_STOP_CRITICAL` - Add if app uses SQLite and needs stopping for consistent backup
+   - `backup/swizzin-restore.sh`:
+     - `APP_PATHS` - Add config/data directory path (relative, use `home/*/.config/AppName` pattern)
+     - `SERVICE_TYPES` - Mirror entry from backup script
+     - `SERVICE_NAME_MAP` - Mirror entry from backup script (if applicable)
+   - `backup/swizzin-excludes.txt` - Add exclusion patterns for logs, caches, temp files if needed
+   - `backup/README.md` - Add to Supported Applications table
+4. **Update README.md** - Add entry to Available Scripts table and detailed documentation section
+5. **Update this file (CLAUDE.md)** - Add to Files list and relevant architecture sections
