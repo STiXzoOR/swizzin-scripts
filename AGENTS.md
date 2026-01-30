@@ -1,0 +1,638 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Project Overview
+
+This repository contains Swizzin installer scripts - bash installation scripts for integrating applications into the [Swizzin](https://swizzin.ltd/) self-hosted media server management platform.
+
+## Architecture
+
+### Script Structure
+
+Each installer script follows a consistent pattern:
+
+1. Source Swizzin utilities from `/etc/swizzin/sources/functions/utils`
+2. Load the panel helper (locally or fetched from GitHub)
+3. Define app variables (port, paths, config directory)
+4. Execute installation functions in sequence:
+   - `_install_<app>()` - Download, extract, configure
+   - `_systemd_<app>()` - Create and enable systemd service
+   - `_nginx_<app>()` - Configure reverse proxy (if nginx is installed)
+5. Register with Swizzin panel via `panel_register_app()`
+6. Create lock file at `/install/.<appname>.lock`
+
+### Binary Placement
+
+- **Single-file binaries** → `/usr/bin/<appname>` (e.g., decypharr, notifiarr, zurg)
+- **Multi-file apps** → `/opt/<appname>/` (e.g., cleanuparr, seerr, byparr, huntarr, subgen)
+- **Docker apps** → `/opt/<appname>/` with `docker-compose.yml` (e.g., lingarr, libretranslate)
+
+### Files
+
+- **cleanuparr.sh** - Installs Cleanuparr (download queue cleanup for \*arr apps)
+- **decypharr.sh** - Installs Decypharr (encrypted file/torrent management via rclone)
+- **notifiarr.sh** - Installs Notifiarr client (notification relay for Starr apps)
+- **seerr.sh** - Extended Seerr installer with subdomain support (media request platform)
+- **byparr.sh** - Installs Byparr (FlareSolverr alternative, uses uv + Python 3.13)
+- **huntarr.sh** - Installs Huntarr (automated media discovery for \*arr apps, uses uv)
+- **subgen.sh** - Installs Subgen (Whisper-based subtitle generation, uses uv + Python 3.11 + ffmpeg)
+- **zurg.sh** - Installs Zurg (Real-Debrid WebDAV server + rclone mount)
+- **lingarr.sh** - Extended Lingarr installer with subdomain support (subtitle translation, Docker-based, auto-discovers Sonarr/Radarr)
+- **libretranslate.sh** - Installs LibreTranslate (machine translation API, Docker-based, GPU auto-detection, Lingarr integration)
+- **organizr.sh** - Extended Organizr installer with subdomain and SSO support
+- **plex.sh** - Extended Plex installer with subdomain support
+- **emby.sh** - Extended Emby installer with subdomain and Premiere bypass support
+- **jellyfin.sh** - Extended Jellyfin installer with subdomain support
+- **panel.sh** - Extended Panel installer with subdomain support (modifies default nginx site)
+- **sonarr.sh** - Multi-instance Sonarr manager (add/remove/list named instances)
+- **radarr.sh** - Multi-instance Radarr manager (add/remove/list named instances)
+- **panel_helpers.sh** - Shared utility for Swizzin panel app registration
+- **watchdog/** - Service watchdog system (see [Service Watchdog](#service-watchdog))
+- **backup/** - BorgBackup-based backup system (see [Backup System](#backup-system))
+- **swizzin-app-info** - Discovers installed apps and extracts URLs, API keys, config paths (installable as global command)
+
+### Python Apps (uv-based)
+
+Byparr, Huntarr, and Subgen use `uv` for Python version and dependency management:
+
+- uv is installed per-user at `~/.local/bin/uv`
+- Apps are cloned to `/opt/<appname>`
+- Dependencies installed via `uv sync` or `uv add`
+- Systemd runs apps via `uv run python <entry>.py`
+- Subgen runs `subgen.py` directly (not `launcher.py`), auto-detects NVIDIA GPU
+
+### Docker Apps
+
+Lingarr uses Docker Compose, wrapped by systemd for lifecycle management:
+
+- Docker Engine + Compose plugin auto-installed if missing
+- App config at `/opt/lingarr/config/` (SQLite database)
+- `docker-compose.yml` at `/opt/lingarr/`
+- Systemd service (`Type=oneshot`, `RemainAfterExit=yes`) wraps `docker compose up/down`
+- Media paths auto-discovered from Sonarr/Radarr SQLite databases (base + multi-instance)
+- Sonarr/Radarr API credentials auto-discovered from `config.xml`
+- Port bound to `127.0.0.1` only (nginx handles external access)
+- Container runs as master user UID:GID
+- `--update` flag pulls latest image and recreates container
+- Supports subfolder mode (`/lingarr/` with sub_filter) and subdomain mode (clean URLs, no rewriting)
+- Subdomain mode follows the same pattern as seerr.sh (standalone panel meta class, LE cert, Organizr integration)
+
+### LibreTranslate
+
+LibreTranslate is a Docker-based machine translation API:
+
+- Docker Engine + Compose plugin auto-installed if missing
+- App config at `/opt/libretranslate/config/` (DB + models cache)
+- `docker-compose.yml` at `/opt/libretranslate/`
+- Auto-detects NVIDIA GPU and uses CUDA image if available
+- Whiptail multi-select picker for 48 supported languages
+- Auto-configures Lingarr integration if Lingarr is detected
+- Native `LT_URL_PREFIX` support for subfolder mode (no sub_filter needed)
+- Port dynamically allocated via `port 10000 12000`
+- htpasswd protection on web UI, API endpoints bypass auth
+- Supports subfolder mode (`/libretranslate/`) and subdomain mode
+
+### Zurg (Real-Debrid)
+
+Zurg creates two systemd services:
+
+- `zurg.service` - The WebDAV server
+- `rclone-zurg.service` - The rclone filesystem mount at `/mnt/zurg`
+
+### Extended Installer Pattern
+
+Media server scripts (plex.sh, emby.sh, jellyfin.sh, organizr.sh, seerr.sh, lingarr.sh, libretranslate.sh, panel.sh) follow a unified pattern:
+
+**Usage:**
+
+```bash
+bash <app>.sh                    # Interactive setup - installs app, asks about features
+bash <app>.sh --subdomain        # Convert to subdomain mode (prompts for domain)
+bash <app>.sh --subdomain --revert  # Revert to subfolder mode
+bash <app>.sh --remove [--force]    # Complete removal
+```
+
+**Script structure:**
+
+- `_get_domain()` / `_prompt_domain()` - Domain management with swizdb persistence
+- `_prompt_le_mode()` - Let's Encrypt mode selection (interactive vs automatic)
+- `_get_install_state()` - Detect current state (not_installed, subfolder, subdomain)
+- `_install_app()` - Install via `box install <app>` if needed
+- `_install_subdomain()` / `_revert_subdomain()` - Subdomain conversion
+- `_interactive()` - Interactive mode entry point
+- `_remove()` - Complete removal
+
+**Environment variable bypass:** All prompts can be bypassed via environment variables:
+
+- `<APP>_DOMAIN` - Skip domain prompt
+- `<APP>_LE_HOSTNAME` - Custom Let's Encrypt hostname (defaults to domain)
+- `<APP>_LE_INTERACTIVE` - Set to "yes" for interactive LE (CloudFlare DNS)
+
+### Organizr (SSO Gateway)
+
+organizr.sh is an extended installer that:
+
+- Runs `box install organizr` first if Organizr isn't installed
+- Converts from subfolder (`/organizr`) to subdomain mode
+- Uses Organizr as SSO authentication gateway for other apps via `auth_request`
+- Stores config at `/opt/swizzin-extras/organizr-auth.conf`
+- Backups at `/opt/swizzin-extras/organizr-backups/`
+
+**Flags:**
+
+- `--subdomain` - Convert to subdomain mode
+- `--subdomain --revert` - Revert to subfolder mode
+- `--configure` - Modify which apps are protected
+- `--migrate` - Fix auth_request placement in redirect blocks
+- `--remove` - Complete removal (runs `box remove organizr`)
+
+**Auth levels:** 0=Admin, 1=Co-Admin, 2=Super User, 3=Power User, 4=User, 998=Logged In
+
+**Key files:**
+
+- `/etc/nginx/sites-available/organizr` - Subdomain vhost with auth endpoint
+- `/etc/nginx/snippets/organizr-apps.conf` - Dynamic includes (excludes panel.conf)
+- `/opt/swizzin-extras/organizr-auth.conf` - Protected apps configuration
+
+**Auth mechanism:** Uses internal rewrite to `/api/v2/auth?group=N` which is handled by the existing PHP location block. Apps add `auth_request /organizr-auth/auth-0;` to their location blocks (only on proxy_pass blocks, not return 301 redirects).
+
+**Note:** Swizzin's automated Organizr wizard may fail to create the database. Users should complete setup manually via the web interface if needed.
+
+### Emby Premiere Bypass
+
+emby.sh includes Emby Premiere bypass functionality:
+
+**Usage:**
+
+```bash
+bash emby.sh --premiere           # Enable Premiere bypass
+bash emby.sh --premiere --revert  # Disable Premiere bypass
+```
+
+**How it works:**
+
+1. Retrieves Emby ServerId from API or config file
+2. Computes Premiere key: `MD5("MBSupporter" + serverId + "Ae3#fP!wi")`
+3. Generates self-signed SSL cert for `mb3admin.com`
+4. Adds cert to system CA trust (`/usr/local/share/ca-certificates/`)
+5. Creates nginx site with validation endpoints returning success responses
+6. Patches `/etc/hosts` to redirect `mb3admin.com` to localhost
+
+**Key files:**
+
+- `/etc/nginx/ssl/mb3admin.com/` - Self-signed certificate
+- `/usr/local/share/ca-certificates/mb3admin.crt` - CA trust entry
+- `/etc/nginx/sites-available/mb3admin.com` - Validation nginx site
+- `/etc/hosts.emby-premiere.bak` - Hosts file backup
+
+**Endpoints handled:**
+
+- `/admin/service/registration/validateDevice`
+- `/admin/service/registration/validate`
+- `/admin/service/registration/getStatus`
+- `/admin/service/appstore/register`
+- `/emby/Plugins/SecurityInfo`
+
+### Media Server Subdomain Scripts
+
+plex.sh, emby.sh, and jellyfin.sh follow a common pattern:
+
+- Install app via `box install <app>` if not installed
+- Convert from subfolder (`/<app>`) to dedicated subdomain
+- Request Let's Encrypt certificate via `box install letsencrypt`
+- Backup original nginx config to `/opt/swizzin-extras/<app>-backups/`
+- Update panel meta with `baseurl = None` and `urloverride` in `/opt/swizzin/core/custom/profiles.py`
+- Add `Content-Security-Policy: frame-ancestors` header for Organizr embedding (if configured)
+- Exclude app from Organizr SSO protection (removes from both `/opt/swizzin-extras/organizr-auth.conf` and `/etc/nginx/snippets/organizr-apps.conf`)
+
+**Ports:**
+
+- Plex: 32400 (HTTP)
+- Emby: 8096 (HTTP)
+- Jellyfin: 8922 (HTTPS)
+
+**Nginx features per app:**
+
+- **Plex**: X-Plex-\* proxy headers, `/library/streams/` location
+- **Emby**: Range/If-Range headers for streaming
+- **Jellyfin**: WebSocket `/socket` location, WebOS CORS headers, Range/If-Range headers, `/metrics` with private network ACL
+
+### Panel Subdomain Script
+
+panel.sh adds domain/subdomain support to the Swizzin panel by modifying the default nginx site (not creating a new vhost).
+
+**Usage:**
+
+```bash
+bash panel.sh                       # Interactive - installs panel if needed, asks about subdomain
+bash panel.sh --subdomain           # Convert to subdomain mode (prompts for domain)
+bash panel.sh --subdomain --revert  # Revert to default snake-oil/catch-all mode
+bash panel.sh --remove [--force]    # Complete removal
+```
+
+**What it modifies in `/etc/nginx/sites-enabled/default`:**
+
+- `server_name _;` → `server_name panel.example.com;` (only in port 443 block)
+- `ssl_certificate` → Let's Encrypt certificate path
+- `ssl_certificate_key` → Let's Encrypt key path
+
+**What it does NOT modify:**
+
+- `/etc/nginx/apps/panel.conf` - Never touched
+- Port 80 block - Stays as catch-all for HTTP→HTTPS redirect
+
+**Key files:**
+
+- `/opt/swizzin-extras/panel-backups/default.bak` - Original config backup
+- swizdb entry: `panel/domain` - Stores configured domain
+
+**Organizr integration:** Only prompts for Organizr exclusion if Organizr is in subdomain mode (`/etc/nginx/sites-enabled/organizr` exists).
+
+### Multi-Instance Scripts (Sonarr/Radarr)
+
+sonarr.sh and radarr.sh manage multiple named instances of Sonarr/Radarr:
+
+**Commands:**
+
+```bash
+sonarr.sh                      # Install base if needed, then add instances interactively
+sonarr.sh --add [name]         # Add a named instance (e.g., 4k, anime, kids)
+sonarr.sh --remove [name]      # Remove instance(s) - interactive if no name
+sonarr.sh --remove name --force # Remove without prompts, purge config
+sonarr.sh --list               # List all instances with ports
+```
+
+**Naming convention:**
+| Component | Pattern | Example |
+|-----------|---------|---------|
+| Service | `sonarr-<name>.service` | `sonarr-4k.service` |
+| Config dir | `/home/<user>/.config/sonarr-<name>/` | `/home/user/.config/sonarr-4k/` |
+| Nginx | `/etc/nginx/apps/sonarr-<name>.conf` | `/etc/nginx/apps/sonarr-4k.conf` |
+| URL path | `/sonarr-<name>/` | `/sonarr-4k/` |
+| Lock file | `/install/.sonarr-<name>.lock` | `/install/.sonarr-4k.lock` |
+
+**Instance name validation:**
+
+- Alphanumeric only (a-z, 0-9), converted to lowercase
+- Checked against existing lock files for uniqueness
+- Reserved words blocked: "base"
+
+**Port allocation:** Dynamic via `port 10000 12000` (not the base port)
+
+**Key differences between apps:**
+| Variable | Sonarr | Radarr |
+|----------|--------|--------|
+| `app_binary` | /opt/Sonarr/Sonarr | /opt/Radarr/Radarr |
+| `app_base_port` | 8989 | 7878 |
+| `app_branch` | main | master |
+
+**Base app protection:** Base cannot be removed via these scripts. Remove all instances before running `box remove sonarr/radarr`.
+
+### Service Watchdog
+
+A cron-based monitoring system that checks service health and automatically restarts unhealthy services with cooldown protection.
+
+**Directory structure:**
+
+```
+watchdog/
+├── watchdog.sh               # Generic watchdog engine
+├── emby-watchdog.sh          # Emby-specific installer/manager
+└── configs/
+    ├── watchdog.conf.example       # Global config template
+    └── emby-watchdog.conf.example  # Emby config template
+```
+
+**Usage:**
+
+```bash
+bash watchdog/emby-watchdog.sh              # Interactive setup
+bash watchdog/emby-watchdog.sh --install    # Install watchdog for Emby
+bash watchdog/emby-watchdog.sh --remove     # Remove watchdog for Emby
+bash watchdog/emby-watchdog.sh --status     # Show current status
+bash watchdog/emby-watchdog.sh --reset      # Clear backoff state, resume monitoring
+```
+
+**How it works:**
+
+1. Cron runs `watchdog.sh` every 2 minutes
+2. Checks if process is running (`systemctl is-active`)
+3. Checks HTTP health endpoint (`curl` + response validation)
+4. If unhealthy, restarts service (max 3 restarts per 15 minutes)
+5. Sends notifications via Discord, Pushover, Notifiarr, or email
+6. Enters backoff mode if max restarts reached
+
+**Runtime files:**
+| File | Purpose |
+|------|---------|
+| `/opt/swizzin-extras/watchdog.sh` | Engine script |
+| `/opt/swizzin-extras/watchdog.conf` | Global config (notifications, defaults) |
+| `/opt/swizzin-extras/watchdog.d/emby.conf` | Emby-specific config |
+| `/var/log/watchdog/emby.log` | Log file |
+| `/var/run/watchdog/emby.state` | State (restart counts, backoff) |
+| `/etc/cron.d/emby-watchdog` | Cron job |
+
+**Adding new services:** Create a new wrapper script (copy `watchdog/emby-watchdog.sh`) and adjust `SERVICE_NAME`, `HEALTH_URL`, and `HEALTH_EXPECT` for the target service.
+
+### Backup System
+
+BorgBackup-based backup system supporting any SSH-accessible borg server (Hetzner Storage Box, Rsync.net, BorgBase, self-hosted).
+
+**Directory structure:**
+
+```
+backup/
+├── swizzin-backup-install.sh   # Interactive setup wizard
+├── swizzin-backup.sh           # Main backup script
+├── swizzin-restore.sh          # Interactive restore
+├── swizzin-backup.conf         # Configuration template
+├── swizzin-excludes.txt        # Exclusion patterns
+├── swizzin-backup.service      # Systemd service unit
+├── swizzin-backup.timer        # Systemd timer (daily at 4 AM)
+├── swizzin-backup-logrotate    # Log rotation config
+└── README.md                   # Setup documentation
+```
+
+**Runtime files (on server):**
+| File | Purpose |
+|------|---------|
+| `/etc/swizzin-backup.conf` | Configuration |
+| `/etc/swizzin-excludes.txt` | Exclusion patterns |
+| `/usr/local/bin/swizzin-backup.sh` | Backup script |
+| `/usr/local/bin/swizzin-restore.sh` | Restore script |
+| `/etc/systemd/system/swizzin-backup.*` | Systemd service + timer |
+| `/root/.ssh/id_backup` | SSH key for remote server |
+| `/root/.swizzin-backup-passphrase` | Borg encryption passphrase |
+| `/var/log/swizzin-backup.log` | Backup log |
+
+**Features:**
+
+- Automatic service stop/start for consistent SQLite backups
+- Multi-instance app support (sonarr-4k, radarr-anime, etc.)
+- Zurg `.zurgtorrent` file backup for Real-Debrid setups
+- `/mnt/symlinks` backup for arr root folder symlinks
+- Notifications via Discord, Pushover, Notifiarr, email
+- Healthchecks.io integration
+- GFS retention: 7 daily, 4 weekly, 6 monthly, 2 yearly
+
+**Commands:**
+
+```bash
+swizzin-backup.sh               # Run full backup
+swizzin-backup.sh --dry-run     # Show what would be backed up
+swizzin-backup.sh --list        # List archives
+swizzin-backup.sh --services    # List discovered services
+swizzin-restore.sh              # Interactive restore
+swizzin-restore.sh --app sonarr # Restore single app
+swizzin-restore.sh --mount      # FUSE mount for browsing
+```
+
+### Swizzin App Info Tool
+
+A Python utility that discovers installed Swizzin apps and extracts configuration details (URLs, API keys, config file paths). Installable as a global command.
+
+**Installation:**
+
+```bash
+# Download and install globally
+sudo ./swizzin-app-info --install          # Installs to /usr/local/bin/
+
+# Or run directly without installing
+./swizzin-app-info
+```
+
+**Usage:**
+
+```bash
+swizzin-app-info                           # List all installed apps
+swizzin-app-info --json                    # Output as JSON
+swizzin-app-info --app sonarr              # Show specific app
+swizzin-app-info --verbose                 # Include config file paths
+swizzin-app-info --uninstall               # Remove global installation
+```
+
+**How it works:**
+
+1. Discovers installed apps via lock files in `/install/`
+2. Parses app config files to extract port, baseurl, and API key
+3. Falls back to nginx config or systemd environment if config parsing fails
+4. Supports multiple config formats: XML, JSON, YAML, TOML, INI, PHP, dotenv, Docker Compose
+
+**Output example:**
+
+```
+App           URL                              API Key
+--------------------------------------------------------------------------------
+radarr        http://localhost:7878/radarr     a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6
+sonarr        http://localhost:8989/sonarr     z9y8x7w6v5u4t3s2r1q0p9o8n7m6l5k4
+sonarr-4k     http://localhost:10001/sonarr-4k abc123def456ghi789jkl012mno345pq
+plex          http://localhost:32400           xYz-AbC-123-PlexToken
+```
+
+**Supported apps:** The `APP_CONFIGS` dictionary defines all supported apps with their config paths, formats, and key mappings.
+
+**Maintenance:** When adding a new installer script to this repository, also add an entry to `APP_CONFIGS` in `swizzin-app-info` if the app has extractable configuration (port, API key, baseurl). This keeps the discovery tool comprehensive.
+
+### Key Swizzin Functions Used
+
+```bash
+port <start> <end>           # Allocate free port in range
+apt_install <packages>       # Install packages via apt
+swizdb get/set               # Swizzin database operations
+_get_master_username         # Get primary Swizzin user
+_os_arch                     # Detect CPU architecture (amd64, arm64, armv6)
+echo_progress_start/done     # Progress logging
+echo_error, echo_info        # Status logging
+ask "question?" Y/N          # Interactive yes/no prompts
+```
+
+### Environment Variables
+
+| Script            | Variable                           | Description                                      |
+| ----------------- | ---------------------------------- | ------------------------------------------------ |
+| plex.sh           | `PLEX_DOMAIN`                      | Public FQDN (bypasses prompt)                    |
+| plex.sh           | `PLEX_LE_HOSTNAME`                 | Let's Encrypt hostname (defaults to domain)      |
+| plex.sh           | `PLEX_LE_INTERACTIVE`              | Set to `yes` for interactive LE (CloudFlare DNS) |
+| emby.sh           | `EMBY_DOMAIN`                      | Public FQDN (bypasses prompt)                    |
+| emby.sh           | `EMBY_LE_HOSTNAME`                 | Let's Encrypt hostname                           |
+| emby.sh           | `EMBY_LE_INTERACTIVE`              | Set to `yes` for interactive LE                  |
+| jellyfin.sh       | `JELLYFIN_DOMAIN`                  | Public FQDN (bypasses prompt)                    |
+| jellyfin.sh       | `JELLYFIN_LE_HOSTNAME`             | Let's Encrypt hostname                           |
+| jellyfin.sh       | `JELLYFIN_LE_INTERACTIVE`          | Set to `yes` for interactive LE                  |
+| organizr.sh       | `ORGANIZR_DOMAIN`                  | Public FQDN (bypasses prompt)                    |
+| organizr.sh       | `ORGANIZR_LE_HOSTNAME`             | Let's Encrypt hostname                           |
+| organizr.sh       | `ORGANIZR_LE_INTERACTIVE`          | Set to `yes` for interactive LE                  |
+| seerr.sh          | `SEERR_DOMAIN`                     | Public FQDN (bypasses prompt)                    |
+| seerr.sh          | `SEERR_LE_HOSTNAME`                | Let's Encrypt hostname                           |
+| seerr.sh          | `SEERR_LE_INTERACTIVE`             | Set to `yes` for interactive LE                  |
+| lingarr.sh        | `LINGARR_DOMAIN`                   | Public FQDN (bypasses prompt)                    |
+| lingarr.sh        | `LINGARR_LE_HOSTNAME`              | Let's Encrypt hostname                           |
+| lingarr.sh        | `LINGARR_LE_INTERACTIVE`           | Set to `yes` for interactive LE                  |
+| libretranslate.sh | `LIBRETRANSLATE_DOMAIN`            | Public FQDN (bypasses prompt)                    |
+| libretranslate.sh | `LIBRETRANSLATE_LE_HOSTNAME`       | Let's Encrypt hostname                           |
+| libretranslate.sh | `LIBRETRANSLATE_LE_INTERACTIVE`    | Set to `yes` for interactive LE                  |
+| libretranslate.sh | `LIBRETRANSLATE_LANGUAGES`         | Comma-separated language codes to pre-download   |
+| libretranslate.sh | `LIBRETRANSLATE_GPU`               | Force `cuda` or `cpu` (skips auto-detection)     |
+| libretranslate.sh | `LIBRETRANSLATE_CONFIGURE_LINGARR` | Set to `yes` or `no` to skip prompt              |
+| panel.sh          | `PANEL_DOMAIN`                     | Public FQDN (bypasses prompt)                    |
+| panel.sh          | `PANEL_LE_HOSTNAME`                | Let's Encrypt hostname                           |
+| panel.sh          | `PANEL_LE_INTERACTIVE`             | Set to `yes` for interactive LE                  |
+| notifiarr.sh      | `DN_API_KEY`                       | Notifiarr.com API key (prompted if not set)      |
+| zurg.sh           | Real-Debrid token                  | Real-Debrid API token (prompted if not set)      |
+| All scripts       | `<APP>_OWNER`                      | App owner username (defaults to master user)     |
+
+## Conventions
+
+### Naming
+
+- `app_*` - Application configuration variables
+- `_function_name()` - Private/internal functions (underscore prefix)
+- Function pattern: `_<action>_<appname>()` (e.g., `_install_seerr`, `_systemd_notifiarr`)
+
+### Port Allocation
+
+Most installers use `port 10000 12000` to find an available port in the 10000-12000 range.
+
+**Fixed ports:**
+
+- **Byparr**: 8191 (FlareSolverr compatibility)
+- **Zurg**: 9999 (WebDAV server default)
+
+### Nginx Configuration
+
+- **Cleanuparr/Decypharr/Notifiarr/Huntarr**: Location-based routing at `/<appname>/`
+- **Lingarr**: Subfolder mode (`/lingarr/` with sub_filter) or dedicated subdomain vhost (no sub_filter needed)
+- **Seerr**: Dedicated vhost for subdomain-based access with frame-ancestors CSP
+- **Organizr**: Dedicated vhost at `/etc/nginx/sites-available/organizr` with internal auth rewrite
+- **Plex/Emby/Jellyfin**: Dedicated vhosts with panel meta urloverride and frame-ancestors CSP
+- **Byparr/Subgen/Zurg**: No nginx (internal API/webhook services)
+- API endpoints bypass htpasswd authentication
+
+### Panel Icons
+
+For apps with their own logo, set `app_icon_name="$app_name"` and `app_icon_url` to the icon URL.
+
+For apps without a logo, use the placeholder (automatically downloaded by `panel_helpers.sh`):
+
+```bash
+app_icon_name="placeholder"
+app_icon_url=""
+```
+
+### ShellCheck
+
+Scripts source Swizzin globals and utilities:
+
+```bash
+. /etc/swizzin/sources/globals.sh
+
+#shellcheck source=sources/functions/utils
+. /etc/swizzin/sources/functions/utils
+```
+
+### Coding Standards
+
+**Bracket style:** Use Bash `[[ ]]` for conditionals in new code, but `[ ]` is acceptable:
+
+```bash
+if [[ -f "$file" ]]; then
+if [ -n "$var" ]; then
+```
+
+**Variable quoting:** Always quote variables and use braces for clarity:
+
+```bash
+touch "$log"
+chown "${user}:${user}" "$config_dir"
+mkdir -p "${app_dir}/${app_name}"
+```
+
+**Confirmations:** Use Swizzin's `ask` function for yes/no prompts:
+
+```bash
+if ask "Would you like to purge the configuration?" N; then
+    rm -rf "$config_dir"
+fi
+```
+
+**Panel helper loading:** Use the download-and-cache pattern:
+
+```bash
+PANEL_HELPER_LOCAL="/opt/swizzin-extras/panel_helpers.sh"
+PANEL_HELPER_URL="https://raw.githubusercontent.com/STiXzoOR/swizzin-scripts/main/panel_helpers.sh"
+
+_load_panel_helper() {
+    if [ -f "$PANEL_HELPER_LOCAL" ]; then
+        . "$PANEL_HELPER_LOCAL"
+        return
+    fi
+    mkdir -p "$(dirname "$PANEL_HELPER_LOCAL")"
+    if curl -fsSL "$PANEL_HELPER_URL" -o "$PANEL_HELPER_LOCAL" >>"$log" 2>&1; then
+        chmod +x "$PANEL_HELPER_LOCAL"
+        . "$PANEL_HELPER_LOCAL"
+    fi
+}
+```
+
+## Templates
+
+The `templates/` directory contains starter templates for common script types:
+
+| Template                    | Use Case                                   | Examples                             |
+| --------------------------- | ------------------------------------------ | ------------------------------------ |
+| `template-binary.sh`        | Single binary apps installed to `/usr/bin` | decypharr, notifiarr                 |
+| `template-python.sh`        | Python apps using uv for dependencies      | byparr, huntarr, subgen              |
+| `template-docker.sh`        | Docker Compose apps with systemd wrapper   | lingarr                              |
+| `template-subdomain.sh`     | Extended installers with subdomain support | plex, emby, jellyfin, lingarr, panel |
+| `template-multiinstance.sh` | Managing multiple instances of a base app  | sonarr, radarr                       |
+
+Each template includes:
+
+- Detailed header with customization points (marked `# CUSTOMIZE:`)
+- Standard function structure
+- Inline documentation
+- All coding standards applied
+
+## Testing
+
+Scripts must be tested on a Swizzin-installed system. No automated test framework exists.
+
+```bash
+# Example execution
+bash plex.sh                    # Interactive
+PLEX_DOMAIN="plex.example.com" bash plex.sh --subdomain  # Automated
+```
+
+## Integration Points
+
+- Swizzin utilities: `/etc/swizzin/sources/functions/utils`
+- Swizzin database: accessed via `swizdb` command
+- Panel registration: `/opt/swizzin/core/custom/profiles.py`
+- Lock files: `/install/.<appname>.lock`
+- Logs: `/root/logs/swizzin.log`
+
+## Maintenance Checklist
+
+When adding a new installer script to this repository:
+
+1. **Create the installer script** using appropriate template from `templates/`
+2. **Update `swizzin-app-info`** - Add an entry to `APP_CONFIGS` dictionary with:
+   - `config_paths` - List of possible config file paths (use `{user}` placeholder)
+   - `format` - Config format: `xml`, `json`, `yaml`, `ini`, `toml`, `php`, `dotenv`, `docker_compose`, etc.
+   - `keys` - Mapping of result keys to config keys (`port`, `baseurl`, `apikey`)
+   - `default_port` (optional) - Fallback port if detection fails
+3. **Update backup system** - Update backup/restore scripts to support the new app:
+   - `backup/swizzin-backup.sh`:
+     - `SERVICE_TYPES` - Add app with type (`"user"` for `@user` template, `"system"` for plain service)
+     - `SERVICE_NAME_MAP` - Add if systemd service name differs from app name (e.g., `["emby"]="emby-server"`)
+     - `SERVICE_STOP_ORDER` - Add to appropriate position (downstream consumers first, infrastructure last)
+     - `SERVICE_STOP_CRITICAL` - Add if app uses SQLite and needs stopping for consistent backup
+   - `backup/swizzin-restore.sh`:
+     - `APP_PATHS` - Add config/data directory path (relative, use `home/*/.config/AppName` pattern)
+     - `SERVICE_TYPES` - Mirror entry from backup script
+     - `SERVICE_NAME_MAP` - Mirror entry from backup script (if applicable)
+   - `backup/swizzin-excludes.txt` - Add exclusion patterns for logs, caches, temp files if needed
+   - `backup/README.md` - Add to Supported Applications table
+4. **Update README.md** - Add entry to Available Scripts table and detailed documentation section
+5. **Update this file (CLAUDE.md)** - Add to Files list and relevant architecture sections
