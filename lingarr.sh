@@ -41,12 +41,8 @@ fi
 user="$LINGARR_OWNER"
 app_group="$user"
 
-# Try to read existing port from swizdb, allocate new one only on fresh install
-if _existing_port="$(swizdb get "$app_name/port" 2>/dev/null)" && [[ -n "$_existing_port" ]]; then
-	app_port="$_existing_port"
-else
-	app_port=$(port 10000 12000)
-fi
+# With host networking, the app always uses its internal port
+app_port=9876
 
 app_servicefile="$app_name.service"
 app_dir="/opt/$app_name"
@@ -443,14 +439,15 @@ _discover_arr_api() {
 	fi
 
 	if [[ -n "$sonarr_config" ]]; then
-		local api_key port
+		local api_key port url_base
 		api_key=$(grep -oP '<ApiKey>\K[^<]+' "$sonarr_config" 2>/dev/null) || true
 		port=$(grep -oP '<Port>\K[^<]+' "$sonarr_config" 2>/dev/null) || true
+		url_base=$(grep -oP '<UrlBase>\K[^<]+' "$sonarr_config" 2>/dev/null) || true
 		if [[ -n "$api_key" && -n "$port" ]]; then
-			# Use host.docker.internal so Docker container can reach host services
-			SONARR_URL="http://host.docker.internal:${port}"
+			# Use 127.0.0.1 with host networking, include UrlBase if configured
+			SONARR_URL="http://127.0.0.1:${port}${url_base}"
 			SONARR_API_KEY="$api_key"
-			echo_info "Discovered Sonarr at port ${port} (will use host.docker.internal)"
+			echo_info "Discovered Sonarr at http://127.0.0.1:${port}${url_base}"
 		fi
 	fi
 
@@ -474,14 +471,15 @@ _discover_arr_api() {
 	fi
 
 	if [[ -n "$radarr_config" ]]; then
-		local api_key port
+		local api_key port url_base
 		api_key=$(grep -oP '<ApiKey>\K[^<]+' "$radarr_config" 2>/dev/null) || true
 		port=$(grep -oP '<Port>\K[^<]+' "$radarr_config" 2>/dev/null) || true
+		url_base=$(grep -oP '<UrlBase>\K[^<]+' "$radarr_config" 2>/dev/null) || true
 		if [[ -n "$api_key" && -n "$port" ]]; then
-			# Use host.docker.internal so Docker container can reach host services
-			RADARR_URL="http://host.docker.internal:${port}"
+			# Use 127.0.0.1 with host networking, include UrlBase if configured
+			RADARR_URL="http://127.0.0.1:${port}${url_base}"
 			RADARR_API_KEY="$api_key"
-			echo_info "Discovered Radarr at port ${port} (will use host.docker.internal)"
+			echo_info "Discovered Radarr at http://127.0.0.1:${port}${url_base}"
 		fi
 	fi
 }
@@ -494,12 +492,10 @@ _install_lingarr() {
 	uid=$(id -u "$user")
 	gid=$(id -g "$user")
 
-	# Persist port in swizdb
-	swizdb set "$app_name/port" "$app_port"
-
 	echo_progress_start "Generating Docker Compose configuration"
 
 	# Write docker-compose.yml with proper YAML formatting
+	# Use host networking to avoid UFW/Docker firewall conflicts
 	{
 		cat <<COMPOSE
 services:
@@ -508,12 +504,9 @@ services:
     container_name: lingarr
     restart: unless-stopped
     user: "${uid}:${gid}"
-    ports:
-      - "127.0.0.1:${app_port}:9876"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+    network_mode: host
     environment:
-      - ASPNETCORE_URLS=http://+:9876
+      - ASPNETCORE_URLS=http://127.0.0.1:${app_port}
       - DB_CONNECTION=sqlite
 COMPOSE
 		if [[ -n "${SONARR_URL:-}" ]]; then
@@ -602,10 +595,13 @@ _nginx_lingarr() {
 			    sub_filter_once off;
 			    sub_filter_types text/html text/css text/javascript application/javascript application/json;
 
-			    # HTML attributes
+			    # HTML attributes (both quote styles)
 			    sub_filter 'href="/' 'href="/$app_baseurl/';
+			    sub_filter "href='/" "href='/$app_baseurl/";
 			    sub_filter 'src="/' 'src="/$app_baseurl/';
+			    sub_filter "src='/" "src='/$app_baseurl/";
 			    sub_filter 'action="/' 'action="/$app_baseurl/';
+			    sub_filter "action='/" "action='/$app_baseurl/";
 			    sub_filter 'url(/' 'url(/$app_baseurl/';
 
 			    # API endpoints (35+ endpoints all under /api/*)
@@ -620,12 +616,6 @@ _nginx_lingarr() {
 			    sub_filter '("/signalr' '("/$app_baseurl/signalr';
 			    sub_filter "('/signalr" "('/$app_baseurl/signalr";
 
-			    # Auth redirect paths (Axios interceptor: window.location.href = '/auth/...')
-			    sub_filter '"/auth/' '"/$app_baseurl/auth/';
-			    sub_filter "'/auth/" "'/$app_baseurl/auth/";
-			    sub_filter '= "/auth/' '= "/$app_baseurl/auth/';
-			    sub_filter "= '/auth/" "= '/$app_baseurl/auth/";
-
 			    # Fetch API calls
 			    sub_filter 'fetch("/' 'fetch("/$app_baseurl/';
 			    sub_filter "fetch('/" "fetch('/$app_baseurl/";
@@ -634,9 +624,14 @@ _nginx_lingarr() {
 			    sub_filter 'import("/' 'import("/$app_baseurl/';
 			    sub_filter "import('/" "import('/$app_baseurl/";
 
-			    # Vite preload hints and asset paths
+			    # Vite preload hints and asset paths (absolute)
 			    sub_filter '"/assets/' '"/$app_baseurl/assets/';
 			    sub_filter "'/assets/" "'/$app_baseurl/assets/";
+
+			    # Vite __vite__mapDeps array (relative paths without leading slash)
+			    # Note: No leading / because Vite prepends base "/" -> would create "//lingarr/"
+			    sub_filter '"assets/' '"$app_baseurl/assets/';
+			    sub_filter "'assets/" "'$app_baseurl/assets/";
 
 			    # Inject <base> tag so Vue Router picks up the subpath
 			    # Note: Don't rewrite router path configs - <base> tag handles routing
