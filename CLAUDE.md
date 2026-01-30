@@ -26,7 +26,7 @@ Each installer script follows a consistent pattern:
 
 - **Single-file binaries** → `/usr/bin/<appname>` (e.g., decypharr, notifiarr, zurg)
 - **Multi-file apps** → `/opt/<appname>/` (e.g., cleanuparr, seerr, byparr, huntarr, subgen)
-- **Docker apps** → `/opt/<appname>/` with `docker-compose.yml` (e.g., lingarr)
+- **Docker apps** → `/opt/<appname>/` with `docker-compose.yml` (e.g., lingarr, libretranslate)
 
 ### Files
 
@@ -39,6 +39,7 @@ Each installer script follows a consistent pattern:
 - **subgen.sh** - Installs Subgen (Whisper-based subtitle generation, uses uv + Python 3.11 + ffmpeg)
 - **zurg.sh** - Installs Zurg (Real-Debrid WebDAV server + rclone mount)
 - **lingarr.sh** - Extended Lingarr installer with subdomain support (subtitle translation, Docker-based, auto-discovers Sonarr/Radarr)
+- **libretranslate.sh** - Installs LibreTranslate (machine translation API, Docker-based, GPU auto-detection, Lingarr integration)
 - **organizr.sh** - Extended Organizr installer with subdomain and SSO support
 - **plex.sh** - Extended Plex installer with subdomain support
 - **emby.sh** - Extended Emby installer with subdomain and Premiere bypass support
@@ -77,6 +78,21 @@ Lingarr uses Docker Compose, wrapped by systemd for lifecycle management:
 - Supports subfolder mode (`/lingarr/` with sub_filter) and subdomain mode (clean URLs, no rewriting)
 - Subdomain mode follows the same pattern as seerr.sh (standalone panel meta class, LE cert, Organizr integration)
 
+### LibreTranslate
+
+LibreTranslate is a Docker-based machine translation API:
+
+- Docker Engine + Compose plugin auto-installed if missing
+- App config at `/opt/libretranslate/config/` (DB + models cache)
+- `docker-compose.yml` at `/opt/libretranslate/`
+- Auto-detects NVIDIA GPU and uses CUDA image if available
+- Whiptail multi-select picker for 48 supported languages
+- Auto-configures Lingarr integration if Lingarr is detected
+- Native `LT_URL_PREFIX` support for subfolder mode (no sub_filter needed)
+- Port dynamically allocated via `port 10000 12000`
+- htpasswd protection on web UI, API endpoints bypass auth
+- Supports subfolder mode (`/libretranslate/`) and subdomain mode
+
 ### Zurg (Real-Debrid)
 
 Zurg creates two systemd services:
@@ -86,7 +102,7 @@ Zurg creates two systemd services:
 
 ### Extended Installer Pattern
 
-Media server scripts (plex.sh, emby.sh, jellyfin.sh, organizr.sh, seerr.sh, lingarr.sh, panel.sh) follow a unified pattern:
+Media server scripts (plex.sh, emby.sh, jellyfin.sh, organizr.sh, seerr.sh, lingarr.sh, libretranslate.sh, panel.sh) follow a unified pattern:
 
 **Usage:**
 
@@ -393,32 +409,38 @@ ask "question?" Y/N          # Interactive yes/no prompts
 
 ### Environment Variables
 
-| Script       | Variable                  | Description                                      |
-| ------------ | ------------------------- | ------------------------------------------------ |
-| plex.sh      | `PLEX_DOMAIN`             | Public FQDN (bypasses prompt)                    |
-| plex.sh      | `PLEX_LE_HOSTNAME`        | Let's Encrypt hostname (defaults to domain)      |
-| plex.sh      | `PLEX_LE_INTERACTIVE`     | Set to `yes` for interactive LE (CloudFlare DNS) |
-| emby.sh      | `EMBY_DOMAIN`             | Public FQDN (bypasses prompt)                    |
-| emby.sh      | `EMBY_LE_HOSTNAME`        | Let's Encrypt hostname                           |
-| emby.sh      | `EMBY_LE_INTERACTIVE`     | Set to `yes` for interactive LE                  |
-| jellyfin.sh  | `JELLYFIN_DOMAIN`         | Public FQDN (bypasses prompt)                    |
-| jellyfin.sh  | `JELLYFIN_LE_HOSTNAME`    | Let's Encrypt hostname                           |
-| jellyfin.sh  | `JELLYFIN_LE_INTERACTIVE` | Set to `yes` for interactive LE                  |
-| organizr.sh  | `ORGANIZR_DOMAIN`         | Public FQDN (bypasses prompt)                    |
-| organizr.sh  | `ORGANIZR_LE_HOSTNAME`    | Let's Encrypt hostname                           |
-| organizr.sh  | `ORGANIZR_LE_INTERACTIVE` | Set to `yes` for interactive LE                  |
-| seerr.sh     | `SEERR_DOMAIN`            | Public FQDN (bypasses prompt)                    |
-| seerr.sh     | `SEERR_LE_HOSTNAME`       | Let's Encrypt hostname                           |
-| seerr.sh     | `SEERR_LE_INTERACTIVE`    | Set to `yes` for interactive LE                  |
-| lingarr.sh   | `LINGARR_DOMAIN`          | Public FQDN (bypasses prompt)                    |
-| lingarr.sh   | `LINGARR_LE_HOSTNAME`     | Let's Encrypt hostname                           |
-| lingarr.sh   | `LINGARR_LE_INTERACTIVE`  | Set to `yes` for interactive LE                  |
-| panel.sh     | `PANEL_DOMAIN`            | Public FQDN (bypasses prompt)                    |
-| panel.sh     | `PANEL_LE_HOSTNAME`       | Let's Encrypt hostname                           |
-| panel.sh     | `PANEL_LE_INTERACTIVE`    | Set to `yes` for interactive LE                  |
-| notifiarr.sh | `DN_API_KEY`              | Notifiarr.com API key (prompted if not set)      |
-| zurg.sh      | Real-Debrid token         | Real-Debrid API token (prompted if not set)      |
-| All scripts  | `<APP>_OWNER`             | App owner username (defaults to master user)     |
+| Script            | Variable                           | Description                                      |
+| ----------------- | ---------------------------------- | ------------------------------------------------ |
+| plex.sh           | `PLEX_DOMAIN`                      | Public FQDN (bypasses prompt)                    |
+| plex.sh           | `PLEX_LE_HOSTNAME`                 | Let's Encrypt hostname (defaults to domain)      |
+| plex.sh           | `PLEX_LE_INTERACTIVE`              | Set to `yes` for interactive LE (CloudFlare DNS) |
+| emby.sh           | `EMBY_DOMAIN`                      | Public FQDN (bypasses prompt)                    |
+| emby.sh           | `EMBY_LE_HOSTNAME`                 | Let's Encrypt hostname                           |
+| emby.sh           | `EMBY_LE_INTERACTIVE`              | Set to `yes` for interactive LE                  |
+| jellyfin.sh       | `JELLYFIN_DOMAIN`                  | Public FQDN (bypasses prompt)                    |
+| jellyfin.sh       | `JELLYFIN_LE_HOSTNAME`             | Let's Encrypt hostname                           |
+| jellyfin.sh       | `JELLYFIN_LE_INTERACTIVE`          | Set to `yes` for interactive LE                  |
+| organizr.sh       | `ORGANIZR_DOMAIN`                  | Public FQDN (bypasses prompt)                    |
+| organizr.sh       | `ORGANIZR_LE_HOSTNAME`             | Let's Encrypt hostname                           |
+| organizr.sh       | `ORGANIZR_LE_INTERACTIVE`          | Set to `yes` for interactive LE                  |
+| seerr.sh          | `SEERR_DOMAIN`                     | Public FQDN (bypasses prompt)                    |
+| seerr.sh          | `SEERR_LE_HOSTNAME`                | Let's Encrypt hostname                           |
+| seerr.sh          | `SEERR_LE_INTERACTIVE`             | Set to `yes` for interactive LE                  |
+| lingarr.sh        | `LINGARR_DOMAIN`                   | Public FQDN (bypasses prompt)                    |
+| lingarr.sh        | `LINGARR_LE_HOSTNAME`              | Let's Encrypt hostname                           |
+| lingarr.sh        | `LINGARR_LE_INTERACTIVE`           | Set to `yes` for interactive LE                  |
+| libretranslate.sh | `LIBRETRANSLATE_DOMAIN`            | Public FQDN (bypasses prompt)                    |
+| libretranslate.sh | `LIBRETRANSLATE_LE_HOSTNAME`       | Let's Encrypt hostname                           |
+| libretranslate.sh | `LIBRETRANSLATE_LE_INTERACTIVE`    | Set to `yes` for interactive LE                  |
+| libretranslate.sh | `LIBRETRANSLATE_LANGUAGES`         | Comma-separated language codes to pre-download   |
+| libretranslate.sh | `LIBRETRANSLATE_GPU`               | Force `cuda` or `cpu` (skips auto-detection)     |
+| libretranslate.sh | `LIBRETRANSLATE_CONFIGURE_LINGARR` | Set to `yes` or `no` to skip prompt              |
+| panel.sh          | `PANEL_DOMAIN`                     | Public FQDN (bypasses prompt)                    |
+| panel.sh          | `PANEL_LE_HOSTNAME`                | Let's Encrypt hostname                           |
+| panel.sh          | `PANEL_LE_INTERACTIVE`             | Set to `yes` for interactive LE                  |
+| notifiarr.sh      | `DN_API_KEY`                       | Notifiarr.com API key (prompted if not set)      |
+| zurg.sh           | Real-Debrid token                  | Real-Debrid API token (prompted if not set)      |
+| All scripts       | `<APP>_OWNER`                      | App owner username (defaults to master user)     |
 
 ## Conventions
 

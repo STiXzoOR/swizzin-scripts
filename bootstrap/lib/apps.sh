@@ -28,10 +28,10 @@ APP_BUNDLES[arr]="sonarr radarr bazarr prowlarr jackett"
 APP_BUNDLES[debrid]="zurg decypharr"
 
 # Helpers: Additional tools
-APP_BUNDLES[helpers]="huntarr cleanuparr byparr notifiarr filebrowser librespeed"
+APP_BUNDLES[helpers]="huntarr cleanuparr byparr notifiarr filebrowser librespeed libretranslate"
 
 # Full Stack: Everything
-APP_BUNDLES[full]="plex emby jellyfin seerr sonarr radarr bazarr prowlarr jackett zurg decypharr huntarr cleanuparr byparr notifiarr filebrowser librespeed organizr"
+APP_BUNDLES[full]="plex emby jellyfin seerr sonarr radarr bazarr prowlarr jackett zurg decypharr huntarr cleanuparr byparr notifiarr filebrowser librespeed libretranslate organizr"
 
 # ==============================================================================
 # Installation Order
@@ -91,6 +91,8 @@ INSTALL_ORDER=(
     "byparr"
     "notifiarr"
     "subgen"
+    "lingarr"
+    "libretranslate"
 
     # Phase 8: Backup & Sync
     "nextcloud"
@@ -148,6 +150,8 @@ APP_SOURCE[cleanuparr]="repo"
 APP_SOURCE[byparr]="repo"
 APP_SOURCE[notifiarr]="repo"
 APP_SOURCE[subgen]="repo"
+APP_SOURCE[lingarr]="repo"
+APP_SOURCE[libretranslate]="repo"
 APP_SOURCE[organizr]="repo"
 APP_SOURCE[seerr]="repo"
 APP_SOURCE[emby-watchdog]="repo"
@@ -214,6 +218,8 @@ APP_SCRIPT[cleanuparr]="cleanuparr.sh"
 APP_SCRIPT[byparr]="byparr.sh"
 APP_SCRIPT[notifiarr]="notifiarr.sh"
 APP_SCRIPT[subgen]="subgen.sh"
+APP_SCRIPT[lingarr]="lingarr.sh"
+APP_SCRIPT[libretranslate]="libretranslate.sh"
 APP_SCRIPT[organizr]="organizr.sh"
 APP_SCRIPT[seerr]="seerr.sh"
 APP_SCRIPT[emby-watchdog]="emby-watchdog.sh"
@@ -420,6 +426,8 @@ select_custom_apps() {
         "byparr" "Byparr (FlareSolverr Alternative)" "OFF"
         "notifiarr" "Notifiarr (Notifications)" "OFF"
         "subgen" "Subgen (Whisper Subtitles)" "OFF"
+        "lingarr" "Lingarr (Subtitle Translation)" "OFF"
+        "libretranslate" "LibreTranslate (Translation API)" "OFF"
         # Backup & Sync
         "nextcloud" "Nextcloud" "OFF"
         "syncthing" "Syncthing" "OFF"
@@ -593,6 +601,8 @@ _select_custom_apps_fallback() {
         "byparr:Byparr (FlareSolverr Alternative)"
         "notifiarr:Notifiarr (Notifications)"
         "subgen:Subgen (Whisper Subtitles)"
+        "lingarr:Lingarr (Subtitle Translation)"
+        "libretranslate:LibreTranslate (Translation API)"
     )
     for app_info in "${helper_apps[@]}"; do
         local app="${app_info%%:*}"
