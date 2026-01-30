@@ -638,19 +638,8 @@ _nginx_lingarr() {
 			    sub_filter '"/assets/' '"/$app_baseurl/assets/';
 			    sub_filter "'/assets/" "'/$app_baseurl/assets/";
 
-			    # Vue Router paths (compiled to JS objects)
-			    sub_filter 'path:"/' 'path:"/$app_baseurl/';
-			    sub_filter "path:'/" "path:'/$app_baseurl/";
-			    sub_filter 'path: "/' 'path: "/$app_baseurl/';
-			    sub_filter "path: '/" "path: '/$app_baseurl/";
-
-			    # Router navigation (router.push, router.replace)
-			    sub_filter '.push("/' '.push("/$app_baseurl/';
-			    sub_filter ".push('/" ".push('/$app_baseurl/";
-			    sub_filter '.replace("/' '.replace("/$app_baseurl/';
-			    sub_filter ".replace('/" ".replace('/$app_baseurl/";
-
 			    # Inject <base> tag so Vue Router picks up the subpath
+			    # Note: Don't rewrite router path configs - <base> tag handles routing
 			    sub_filter '</head>' '<base href="/$app_baseurl/"></head>';
 
 			    auth_basic "What's the password?";
