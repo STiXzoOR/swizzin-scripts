@@ -519,10 +519,6 @@ _install_libretranslate() {
 	mkdir -p "$app_configdir/models"
 	chown -R "${user}:${user}" "$app_dir"
 
-	local uid gid
-	uid=$(id -u "$user")
-	gid=$(id -g "$user")
-
 	# Detect GPU
 	local gpu_mode
 	gpu_mode=$(_detect_gpu)
@@ -542,12 +538,21 @@ _install_libretranslate() {
 	echo_progress_start "Generating Docker Compose configuration"
 
 	# Determine image and volume path based on GPU mode
+	# Non-CUDA image runs as user 'libretranslate' (uid 1032)
+	# CUDA image runs as root
 	local docker_image="libretranslate/libretranslate:latest"
 	local models_path="/home/libretranslate/.local"
+	local container_uid=1032
+	local container_gid=1032
 	if [[ "$gpu_mode" == "cuda" ]]; then
 		docker_image="libretranslate/libretranslate:latest-cuda"
 		models_path="/root/.local"
+		container_uid=0
+		container_gid=0
 	fi
+
+	# Set ownership to match container's internal user
+	chown -R "${container_uid}:${container_gid}" "$app_configdir"
 
 	# Write docker-compose.yml
 	{
