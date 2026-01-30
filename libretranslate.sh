@@ -425,30 +425,45 @@ _configure_lingarr() {
 		fi
 	fi
 
-	# Update Lingarr's SQLite database if possible
-	local lingarr_db="/opt/lingarr/config/lingarr.db"
-	if [[ -f "$lingarr_db" ]] && command -v sqlite3 &>/dev/null; then
-		echo_progress_start "Configuring Lingarr to use local LibreTranslate"
+	local lingarr_compose="/opt/lingarr/docker-compose.yml"
+	local libretranslate_url="http://127.0.0.1:${app_port}"
 
-		# Check if the Settings table exists and has the LibreTranslateUrl key
-		local has_setting
-		has_setting=$(sqlite3 "$lingarr_db" "SELECT COUNT(*) FROM Settings WHERE Key='LibreTranslateUrl';" 2>/dev/null) || true
-
-		if [[ "$has_setting" == "1" ]]; then
-			sqlite3 "$lingarr_db" "UPDATE Settings SET Value='http://127.0.0.1:${app_port}' WHERE Key='LibreTranslateUrl';" 2>/dev/null || true
-		else
-			sqlite3 "$lingarr_db" "INSERT OR REPLACE INTO Settings (Key, Value) VALUES ('LibreTranslateUrl', 'http://127.0.0.1:${app_port}');" 2>/dev/null || true
-		fi
-
-		# Restart Lingarr to pick up changes
-		systemctl restart lingarr 2>/dev/null || true
-
-		echo_progress_done "Lingarr configured"
-		echo_info "Lingarr will use LibreTranslate at http://127.0.0.1:${app_port}"
-	else
+	if [[ ! -f "$lingarr_compose" ]]; then
+		echo_info "Lingarr docker-compose.yml not found"
 		echo_info "Configure manually in Lingarr web UI:"
-		echo_info "  Settings > Translation > LibreTranslate URL = http://127.0.0.1:${app_port}"
+		echo_info "  Settings > Translation > LibreTranslate URL = $libretranslate_url"
+		return 0
 	fi
+
+	echo_progress_start "Configuring Lingarr to use local LibreTranslate"
+
+	# Check if LIBRE_TRANSLATE_URL is already in the compose file
+	if grep -q "LIBRE_TRANSLATE_URL" "$lingarr_compose"; then
+		# Update existing entry
+		sed -i "s|LIBRE_TRANSLATE_URL=.*|LIBRE_TRANSLATE_URL=${libretranslate_url}|" "$lingarr_compose"
+	else
+		# Add LIBRE_TRANSLATE_URL before the volumes: line (after environment vars)
+		if grep -q "^    volumes:" "$lingarr_compose"; then
+			sed -i "/^    volumes:/i\\      - LIBRE_TRANSLATE_URL=${libretranslate_url}" "$lingarr_compose"
+		elif grep -q "^    environment:" "$lingarr_compose"; then
+			# No volumes section, append after environment section
+			# Find last env var line and append after it
+			local last_env_line
+			last_env_line=$(grep -n "^      - " "$lingarr_compose" | tail -1 | cut -d: -f1)
+			if [[ -n "$last_env_line" ]]; then
+				sed -i "${last_env_line}a\\      - LIBRE_TRANSLATE_URL=${libretranslate_url}" "$lingarr_compose"
+			fi
+		fi
+	fi
+
+	echo_progress_done "Lingarr docker-compose.yml updated"
+
+	# Recreate the Lingarr container to pick up the new environment variable
+	echo_progress_start "Restarting Lingarr to apply changes"
+	docker compose -f "$lingarr_compose" up -d >>"$log" 2>&1 || true
+	echo_progress_done "Lingarr restarted"
+
+	echo_info "Lingarr will use LibreTranslate at $libretranslate_url"
 }
 
 # ==============================================================================
