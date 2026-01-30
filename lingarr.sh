@@ -447,9 +447,10 @@ _discover_arr_api() {
 		api_key=$(grep -oP '<ApiKey>\K[^<]+' "$sonarr_config" 2>/dev/null) || true
 		port=$(grep -oP '<Port>\K[^<]+' "$sonarr_config" 2>/dev/null) || true
 		if [[ -n "$api_key" && -n "$port" ]]; then
-			SONARR_URL="http://localhost:${port}"
+			# Use host.docker.internal so Docker container can reach host services
+			SONARR_URL="http://host.docker.internal:${port}"
 			SONARR_API_KEY="$api_key"
-			echo_info "Discovered Sonarr at ${SONARR_URL}"
+			echo_info "Discovered Sonarr at port ${port} (will use host.docker.internal)"
 		fi
 	fi
 
@@ -477,9 +478,10 @@ _discover_arr_api() {
 		api_key=$(grep -oP '<ApiKey>\K[^<]+' "$radarr_config" 2>/dev/null) || true
 		port=$(grep -oP '<Port>\K[^<]+' "$radarr_config" 2>/dev/null) || true
 		if [[ -n "$api_key" && -n "$port" ]]; then
-			RADARR_URL="http://localhost:${port}"
+			# Use host.docker.internal so Docker container can reach host services
+			RADARR_URL="http://host.docker.internal:${port}"
 			RADARR_API_KEY="$api_key"
-			echo_info "Discovered Radarr at ${RADARR_URL}"
+			echo_info "Discovered Radarr at port ${port} (will use host.docker.internal)"
 		fi
 	fi
 }
@@ -508,6 +510,8 @@ services:
     user: "${uid}:${gid}"
     ports:
       - "127.0.0.1:${app_port}:9876"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       - ASPNETCORE_URLS=http://+:9876
       - DB_CONNECTION=sqlite
