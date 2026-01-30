@@ -1,0 +1,69 @@
+# Maintenance Checklist
+
+When adding a new installer script to this repository:
+
+## 1. Create the Installer Script
+
+Use the appropriate template from `templates/`:
+
+- `template-binary.sh` for single binaries
+- `template-python.sh` for Python/uv apps
+- `template-docker.sh` for Docker Compose apps
+- `template-subdomain.sh` for extended installers
+- `template-multiinstance.sh` for instance managers
+
+## 2. Update swizzin-app-info
+
+Add an entry to the `APP_CONFIGS` dictionary:
+
+```python
+"myapp": {
+    "config_paths": ["/home/{user}/.config/Myapp/config.xml"],
+    "format": "xml",  # or json, yaml, ini, toml, php, dotenv, docker_compose
+    "keys": {
+        "port": "Port",
+        "baseurl": "UrlBase",
+        "apikey": "ApiKey"
+    },
+    "default_port": 8080  # optional fallback
+}
+```
+
+## 3. Update Backup System
+
+### backup/swizzin-backup.sh
+
+Add to these arrays:
+
+- `SERVICE_TYPES` - App with type (`"user"` for `@user` template, `"system"` for plain service)
+- `SERVICE_NAME_MAP` - If systemd service name differs from app name (e.g., `["emby"]="emby-server"`)
+- `SERVICE_STOP_ORDER` - Position in stop order (downstream consumers first, infrastructure last)
+- `SERVICE_STOP_CRITICAL` - If app uses SQLite and needs stopping for consistent backup
+
+### backup/swizzin-restore.sh
+
+Mirror the above, plus:
+
+- `APP_PATHS` - Config/data directory path (use `home/*/.config/AppName` pattern)
+
+### backup/swizzin-excludes.txt
+
+Add exclusion patterns for logs, caches, temp files.
+
+### backup/README.md
+
+Add to Supported Applications table.
+
+## 4. Update README.md
+
+Add entry to:
+
+- Available Scripts table
+- Detailed documentation section (if needed)
+
+## 5. Update AGENTS.md
+
+Add to:
+
+- Files overview in [docs/architecture.md](architecture.md)
+- App-specific documentation if complex enough to warrant its own section

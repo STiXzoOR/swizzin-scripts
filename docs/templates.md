@@ -1,0 +1,70 @@
+# Templates
+
+The `templates/` directory contains starter templates for common script types.
+
+## Available Templates
+
+| Template                    | Use Case                                   | Examples                    |
+| --------------------------- | ------------------------------------------ | --------------------------- |
+| `template-binary.sh`        | Single binary apps installed to `/usr/bin` | decypharr, notifiarr        |
+| `template-python.sh`        | Python apps using uv for dependencies      | byparr, huntarr, subgen     |
+| `template-docker.sh`        | Docker Compose apps with systemd wrapper   | lingarr, libretranslate     |
+| `template-subdomain.sh`     | Extended installers with subdomain support | plex, emby, jellyfin, panel |
+| `template-multiinstance.sh` | Managing multiple instances of a base app  | sonarr, radarr              |
+
+## Using a Template
+
+1. Copy the appropriate template:
+
+   ```bash
+   cp templates/template-binary.sh myapp.sh
+   ```
+
+2. Search and replace the placeholder names:
+
+   ```bash
+   sed -i 's/myapp/yourapp/g; s/Myapp/Yourapp/g; s/MYAPP/YOURAPP/g' myapp.sh
+   ```
+
+3. Look for `# CUSTOMIZE:` comments and update those sections
+
+## Customization Points
+
+Each template marks customization points with `# CUSTOMIZE:` comments:
+
+1. **App variables** - name, port, binary URL, icon
+2. **Architecture mapping** - in `_install_<app>()`
+3. **Config file format** - in `_install_<app>()`
+4. **Systemd service options** - in `_systemd_<app>()`
+5. **Nginx location config** - in `_nginx_<app>()`
+
+## Template Features
+
+All templates include:
+
+- Detailed header with usage
+- Standard function structure
+- Inline documentation
+- Coding standards already applied
+- Lock file handling
+- Panel registration
+- Remove functionality
+
+## Extended Installer Pattern
+
+Scripts with subdomain support (plex.sh, emby.sh, etc.) follow this CLI pattern:
+
+```bash
+bash <app>.sh                       # Interactive setup
+bash <app>.sh --subdomain           # Convert to subdomain mode
+bash <app>.sh --subdomain --revert  # Revert to subfolder mode
+bash <app>.sh --remove [--force]    # Complete removal
+```
+
+Key functions in extended installers:
+
+- `_get_domain()` / `_prompt_domain()` - Domain management with swizdb persistence
+- `_prompt_le_mode()` - Let's Encrypt mode selection
+- `_get_install_state()` - Detect current state (not_installed, subfolder, subdomain)
+- `_install_subdomain()` / `_revert_subdomain()` - Subdomain conversion
+- `_interactive()` - Interactive mode entry point
