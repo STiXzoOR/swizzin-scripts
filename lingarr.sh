@@ -611,6 +611,12 @@ _nginx_lingarr() {
 			    sub_filter "fetch('/" "fetch('/$app_baseurl/";
 			    sub_filter '"/signalr' '"/$app_baseurl/signalr';
 			    sub_filter "'/signalr" "'/$app_baseurl/signalr";
+			    # Vite dynamic imports (code splitting)
+			    sub_filter 'import("/' 'import("/$app_baseurl/';
+			    sub_filter "import('/" "import('/$app_baseurl/";
+			    # Vite preload hints
+			    sub_filter '"/assets/' '"/$app_baseurl/assets/';
+			    sub_filter "'/assets/" "'/$app_baseurl/assets/";
 			    # Inject <base> tag so Vue Router picks up the subpath
 			    # (vue-router's normalizeBase reads <base href> as fallback)
 			    sub_filter '</head>' '<base href="/$app_baseurl/"></head>';
