@@ -70,6 +70,48 @@ _install_uv() {
 	echo_progress_done "uv installed"
 }
 
+_prompt_whisper_model() {
+	# Allow bypassing with environment variable
+	if [ -n "$SUBGEN_MODEL" ]; then
+		whisper_model="$SUBGEN_MODEL"
+		echo_info "Using Whisper model from environment: $whisper_model"
+		return
+	fi
+
+	# Detect if GPU is available for model recommendations
+	local has_gpu=false
+	if nvidia-smi &>/dev/null; then
+		has_gpu=true
+	fi
+
+	# Model options with descriptions (memory requirements are approximate)
+	local default_model="medium"
+	if [ "$has_gpu" = true ]; then
+		default_model="medium"
+	else
+		default_model="small"
+	fi
+
+	whisper_model=$(whiptail --title "Whisper Model Selection" --menu \
+		"Select the Whisper model for transcription.\n\nLarger models are more accurate but slower and use more memory.\nRecommended: $default_model (based on your hardware)" \
+		20 78 10 \
+		"tiny" "~75MB VRAM - Fastest, lowest accuracy" \
+		"base" "~150MB VRAM - Fast, basic accuracy" \
+		"small" "~500MB VRAM - Good balance (Recommended for CPU)" \
+		"medium" "~2GB VRAM - High accuracy (Recommended for GPU)" \
+		"large-v3" "~5GB VRAM - Highest accuracy, slowest" \
+		"large-v3-turbo" "~5GB VRAM - High accuracy, faster than large-v3" \
+		"distil-large-v3" "~3GB VRAM - Distilled, good speed/accuracy" \
+		"distil-medium.en" "~1GB VRAM - English-only, fast" \
+		3>&1 1>&2 2>&3) || whisper_model="$default_model"
+
+	if [ -z "$whisper_model" ]; then
+		whisper_model="$default_model"
+	fi
+
+	echo_info "Selected Whisper model: $whisper_model"
+}
+
 _install_subgen() {
 	if [ ! -d "$app_configdir" ]; then
 		mkdir -p "$app_configdir"
@@ -135,6 +177,9 @@ PYPROJ
 		cpu_threads=8
 	fi
 
+	# Prompt for Whisper model selection
+	_prompt_whisper_model
+
 	# Create env file with sensible defaults
 	# Both systemd (EnvironmentFile) and launcher.py (load_env_variables) read this
 	cat >"$app_configdir/env.conf" <<EOF
@@ -143,7 +188,7 @@ PYPROJ
 WEBHOOK_PORT=$app_port
 
 # Whisper settings
-WHISPER_MODEL=medium
+WHISPER_MODEL=$whisper_model
 TRANSCRIBE_DEVICE=$transcribe_device
 WHISPER_THREADS=$cpu_threads
 
@@ -237,6 +282,7 @@ ExecStart=/home/${user}/.local/bin/uv run python -u subgen.py
 Restart=on-failure
 RestartSec=10
 TimeoutStopSec=60
+SuccessExitStatus=143
 
 [Install]
 WantedBy=multi-user.target

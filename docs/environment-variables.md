@@ -31,6 +31,12 @@ Where `<APP>` is: `PLEX`, `EMBY`, `JELLYFIN`, `ORGANIZR`, `SEERR`, `LINGARR`, `L
 | ------------ | ------------------------------------------- |
 | `DN_API_KEY` | Notifiarr.com API key (prompted if not set) |
 
+### Subgen
+
+| Variable       | Description                                              |
+| -------------- | -------------------------------------------------------- |
+| `SUBGEN_MODEL` | Whisper model (tiny/small/medium/large-v3/etc)           |
+
 ### Zurg
 
 | Variable     | Description                                 |
