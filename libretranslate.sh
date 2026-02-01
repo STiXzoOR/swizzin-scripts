@@ -417,16 +417,25 @@ _configure_lingarr() {
 
 	echo_info "Lingarr detected on this system"
 
+	# Determine if we're using URL prefix (subfolder mode)
+	local state
+	state=$(_get_install_state)
+	local url_suffix=""
+	if [[ "$state" != "subdomain" ]]; then
+		url_suffix="/$app_baseurl"
+	fi
+
+	local libretranslate_url="http://127.0.0.1:${app_port}${url_suffix}"
+
 	if [[ "${LIBRETRANSLATE_CONFIGURE_LINGARR:-}" != "yes" ]]; then
 		if ! ask "Configure Lingarr to use this LibreTranslate instance?" Y; then
 			echo_info "Skipping Lingarr integration"
-			echo_info "Manual config: Settings > Translation > LibreTranslate URL = http://127.0.0.1:${app_port}"
+			echo_info "Manual config: Settings > Translation > LibreTranslate URL = $libretranslate_url"
 			return 0
 		fi
 	fi
 
 	local lingarr_compose="/opt/lingarr/docker-compose.yml"
-	local libretranslate_url="http://127.0.0.1:${app_port}"
 
 	if [[ ! -f "$lingarr_compose" ]]; then
 		echo_info "Lingarr docker-compose.yml not found"
