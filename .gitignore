@@ -16,3 +16,6 @@ local/
 
 # Bootstrap config (contains secrets)
 bootstrap/configs/bootstrap.conf
+
+# Git worktrees
+.worktrees/
