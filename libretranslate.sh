@@ -32,6 +32,17 @@ _load_panel_helper() {
 export log=/root/logs/swizzin.log
 touch "$log"
 
+# ==============================================================================
+# Verbose Mode
+# ==============================================================================
+verbose=false
+
+_verbose() {
+	if [[ "$verbose" == "true" ]]; then
+		echo_info "  $*"
+	fi
+}
+
 app_name="libretranslate"
 
 # Get owner from swizdb (needed for both install and remove)
@@ -995,7 +1006,7 @@ _usage() {
 	echo "  (no args)             Interactive setup"
 	echo "  --subdomain           Convert to subdomain mode"
 	echo "  --subdomain --revert  Revert to subfolder mode"
-	echo "  --update              Pull latest Docker image"
+	echo "  --update [--verbose]  Pull latest Docker image"
 	echo "  --remove [--force]    Complete removal"
 	echo "  --register-panel      Re-register with panel"
 	exit 1
@@ -1011,7 +1022,10 @@ _update_libretranslate() {
 		exit 1
 	fi
 
+	echo_info "Updating ${app_name^}..."
+
 	echo_progress_start "Pulling latest LibreTranslate image"
+	_verbose "Running: docker compose -f ${app_dir}/docker-compose.yml pull"
 	docker compose -f "$app_dir/docker-compose.yml" pull >>"$log" 2>&1 || {
 		echo_error "Failed to pull latest image"
 		exit 1
@@ -1019,13 +1033,15 @@ _update_libretranslate() {
 	echo_progress_done "Latest image pulled"
 
 	echo_progress_start "Recreating LibreTranslate container"
+	_verbose "Running: docker compose up -d"
 	docker compose -f "$app_dir/docker-compose.yml" up -d >>"$log" 2>&1 || {
 		echo_error "Failed to recreate container"
 		exit 1
 	}
 	echo_progress_done "Container recreated"
 
-	# Clean up old images
+	# Clean up old dangling images
+	_verbose "Pruning unused images"
 	docker image prune -f >>"$log" 2>&1 || true
 
 	echo_success "${app_name^} has been updated"
@@ -1125,6 +1141,13 @@ _remove_libretranslate() {
 # ==============================================================================
 # Main
 # ==============================================================================
+
+# Parse global flags
+for arg in "$@"; do
+	case "$arg" in
+	--verbose) verbose=true ;;
+	esac
+done
 
 case "$1" in
 "--subdomain")
