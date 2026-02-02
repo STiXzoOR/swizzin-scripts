@@ -121,15 +121,19 @@ home/*/.config/Prowlarr/logs/**
 home/*/.config/Prowlarr/UpdateLogs
 home/*/.config/Prowlarr/UpdateLogs/**
 
-# === BAZARR (base: /opt/bazarr/data/, multi-instance: ~/.config/bazarr-*/) ===
-opt/bazarr/data/log
-opt/bazarr/data/log/**
-opt/bazarr/data/cache
-opt/bazarr/data/cache/**
-home/*/.config/bazarr-*/config/log
-home/*/.config/bazarr-*/config/log/**
-home/*/.config/bazarr-*/config/cache
-home/*/.config/bazarr-*/config/cache/**
+# === BAZARR ===
+# Base instance: ~/.config/bazarr/ (NOT /opt/bazarr/data/ - auto-update wipes that!)
+# Multi-instance: ~/.config/bazarr-*/
+# Note: Data stored in ~/.config/ is protected from bazarr's destructive auto-update
+# Migration: bash bazarr.sh --migrate
+home/*/.config/bazarr/log
+home/*/.config/bazarr/log/**
+home/*/.config/bazarr/cache
+home/*/.config/bazarr/cache/**
+home/*/.config/bazarr-*/log
+home/*/.config/bazarr-*/log/**
+home/*/.config/bazarr-*/cache
+home/*/.config/bazarr-*/cache/**
 
 # === AUTOBRR ===
 home/*/.config/autobrr/logs

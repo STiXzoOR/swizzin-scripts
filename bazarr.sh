@@ -499,13 +499,18 @@ _migrate_single_config() {
 	echo_info "Old config backed up to: ${ini_file}.old"
 }
 
-# Migrate base bazarr installation
+# Migrate base bazarr installation (INI to YAML)
 _migrate_base() {
-	local base_config_dir="/opt/bazarr/data/config"
+	local base_config_dir
 
-	if [[ ! -d "$base_config_dir" ]]; then
-		echo_warn "Base ${app_pretty} config directory not found"
-		return 1
+	# Check new location first, then legacy location
+	if [[ -d "/home/${user}/.config/${app_name}/config" ]]; then
+		base_config_dir="/home/${user}/.config/${app_name}/config"
+	elif [[ -d "/opt/bazarr/data/config" ]]; then
+		base_config_dir="/opt/bazarr/data/config"
+	else
+		# No config dir found - skip silently (fresh install will create YAML)
+		return 0
 	fi
 
 	_migrate_single_config "$base_config_dir" "$app_name"
@@ -528,13 +533,23 @@ _migrate_instances() {
 }
 
 # Migrate all configs (base + instances)
+# Handles: base location migration (/opt → ~/.config) + INI to YAML format
 _migrate_all() {
-	echo_info "Migrating ${app_pretty} configurations from INI to YAML format"
+	echo_info "Running ${app_pretty} migrations..."
 	echo ""
+
+	# Phase 1: Migrate base location if needed (protects from auto-update)
+	if [[ -f "/install/.${app_lockname}.lock" ]]; then
+		echo_info "Phase 1: Checking base ${app_pretty} data location..."
+		_migrate_base_location
+		echo ""
+	fi
+
+	# Phase 2: Migrate configs from INI to YAML format
+	echo_info "Phase 2: Checking config format (INI → YAML)..."
 
 	# Migrate base if installed
 	if [[ -f "/install/.${app_lockname}.lock" ]]; then
-		echo_info "Migrating base ${app_pretty}..."
 		_migrate_base
 	fi
 
@@ -542,8 +557,90 @@ _migrate_all() {
 	_migrate_instances
 
 	echo ""
-	echo_success "Migration complete!"
-	echo_info "Note: Bazarr will regenerate additional settings on first startup"
+	echo_success "All migrations complete!"
+}
+
+# Migrate base bazarr data from /opt/bazarr/data/ to ~/.config/bazarr/
+# This protects data from bazarr's destructive auto-update which wipes /opt/bazarr/
+_migrate_base_location() {
+	local old_data_dir="/opt/bazarr/data"
+	local new_data_dir="/home/${user}/.config/${app_name}"
+	local service_file="/etc/systemd/system/${app_name}.service"
+
+	# Check if base bazarr is installed
+	if [[ ! -f "/install/.${app_lockname}.lock" ]]; then
+		echo_error "Base ${app_pretty} is not installed"
+		return 1
+	fi
+
+	# Check if already migrated (new location exists with config)
+	if [[ -f "${new_data_dir}/config/config.yaml" ]]; then
+		# Verify service uses new location
+		if grep -q "\-\-config ${new_data_dir}" "$service_file" 2>/dev/null; then
+			echo_info "Base ${app_pretty} already migrated to ${new_data_dir}"
+			return 0
+		fi
+	fi
+
+	# Check if old data exists
+	if [[ ! -d "$old_data_dir" ]]; then
+		# Maybe fresh install or data was already wiped by auto-update
+		if [[ -d "$new_data_dir" ]]; then
+			echo_info "Data already at new location: ${new_data_dir}"
+		else
+			echo_warn "No data found at ${old_data_dir} - may need fresh setup"
+			mkdir -p "$new_data_dir"
+			chown -R "${user}:${user}" "$new_data_dir"
+		fi
+	else
+		echo_info "Migrating base ${app_pretty} data location"
+		echo_info "From: ${old_data_dir}"
+		echo_info "To:   ${new_data_dir}"
+		echo ""
+
+		# Stop service
+		echo_progress_start "Stopping ${app_pretty}"
+		systemctl stop "${app_name}.service" 2>/dev/null || true
+		echo_progress_done
+
+		# Move data to new location
+		echo_progress_start "Moving data to new location"
+		mkdir -p "$(dirname "$new_data_dir")"
+		if [[ -d "$new_data_dir" ]]; then
+			# Merge if new location already has some data
+			cp -a "${old_data_dir}"/* "$new_data_dir"/ 2>/dev/null || true
+			rm -rf "$old_data_dir"
+		else
+			mv "$old_data_dir" "$new_data_dir"
+		fi
+		chown -R "${user}:${user}" "$new_data_dir"
+		echo_progress_done
+
+		# Update backup folder path in config.yaml
+		if [[ -f "${new_data_dir}/config/config.yaml" ]]; then
+			echo_progress_start "Updating config paths"
+			sed -i "s|folder: ${old_data_dir}/backup|folder: ${new_data_dir}/backup|" "${new_data_dir}/config/config.yaml"
+			echo_progress_done
+		fi
+	fi
+
+	# Update systemd service to use --config flag
+	echo_progress_start "Updating systemd service"
+	if ! grep -q "\-\-config" "$service_file" 2>/dev/null; then
+		# Add --config flag to ExecStart
+		sed -i "s|ExecStart=${app_python} ${app_script}|ExecStart=${app_python} ${app_script} --config ${new_data_dir}|" "$service_file"
+	fi
+	systemctl daemon-reload
+	echo_progress_done
+
+	# Start service
+	echo_progress_start "Starting ${app_pretty}"
+	systemctl start "${app_name}.service"
+	echo_progress_done
+
+	echo ""
+	echo_success "Base ${app_pretty} migrated to ${new_data_dir}"
+	echo_info "Data is now protected from auto-update overwrites"
 }
 
 # Main
@@ -605,7 +702,9 @@ case "$1" in
 	echo "  --remove name --force  Remove instance without prompts"
 	echo "  --list                 List all instances"
 	echo "  --register-panel       Re-register all instances with panel"
-	echo "  --migrate              Migrate all configs from INI to YAML format"
+	echo "  --migrate              Run all migrations:"
+	echo "                           - Move base data to ~/.config/bazarr/"
+	echo "                           - Convert INI configs to YAML format"
 	exit 1
 	;;
 esac
