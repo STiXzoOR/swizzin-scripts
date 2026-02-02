@@ -1,7 +1,7 @@
 #!/bin/bash
 # cleanuparr installer
 # STiXzoOR 2025
-# Usage: bash cleanuparr.sh [--remove [--force]] [--register-panel]
+# Usage: bash cleanuparr.sh [--update [--full] [--verbose]|--remove [--force]] [--register-panel]
 
 . /etc/swizzin/sources/globals.sh
 
@@ -31,6 +31,17 @@ _load_panel_helper() {
 # Log to Swizzin.log
 export log=/root/logs/swizzin.log
 touch $log
+
+# ==============================================================================
+# Verbose Mode
+# ==============================================================================
+verbose=false
+
+_verbose() {
+	if [[ "$verbose" == "true" ]]; then
+		echo_info "  $*"
+	fi
+}
 
 app_name="cleanuparr"
 
@@ -118,6 +129,176 @@ CFG
 
 	chown -R "$user":"$user" "$app_dir"
 	echo_progress_done "Default config created"
+}
+
+# ==============================================================================
+# Backup (for rollback on failed update)
+# ==============================================================================
+_backup_cleanuparr() {
+	local backup_dir="/tmp/swizzin-update-backups/${app_name}"
+
+	_verbose "Creating backup directory: ${backup_dir}"
+	mkdir -p "$backup_dir"
+
+	if [[ -f "${app_dir}/${app_binary}" ]]; then
+		_verbose "Backing up binary: ${app_dir}/${app_binary}"
+		cp "${app_dir}/${app_binary}" "${backup_dir}/${app_binary}"
+		_verbose "Backup complete ($(du -h "${backup_dir}/${app_binary}" | cut -f1))"
+	else
+		echo_error "Binary not found: ${app_dir}/${app_binary}"
+		return 1
+	fi
+}
+
+# ==============================================================================
+# Rollback (restore from backup on failed update)
+# ==============================================================================
+_rollback_cleanuparr() {
+	local backup_dir="/tmp/swizzin-update-backups/${app_name}"
+
+	echo_error "Update failed, rolling back..."
+
+	if [[ -f "${backup_dir}/${app_binary}" ]]; then
+		_verbose "Restoring binary from backup"
+		cp "${backup_dir}/${app_binary}" "${app_dir}/${app_binary}"
+		chmod +x "${app_dir}/${app_binary}"
+
+		_verbose "Restarting service"
+		systemctl restart "$app_servicefile" 2>/dev/null || true
+
+		echo_info "Rollback complete. Previous version restored."
+	else
+		echo_error "No backup found at ${backup_dir}"
+		echo_info "Manual intervention required"
+	fi
+
+	rm -rf "$backup_dir"
+}
+
+# ==============================================================================
+# Update
+# ==============================================================================
+_update_cleanuparr() {
+	local full_reinstall="$1"
+
+	if [[ ! -f "/install/.${app_lockname}.lock" ]]; then
+		echo_error "${app_name^} is not installed"
+		exit 1
+	fi
+
+	# Full reinstall
+	if [[ "$full_reinstall" == "true" ]]; then
+		echo_info "Performing full reinstall of ${app_name^}..."
+		echo_progress_start "Stopping service"
+		systemctl stop "$app_servicefile" 2>/dev/null || true
+		echo_progress_done "Service stopped"
+
+		_install_cleanuparr
+
+		echo_progress_start "Starting service"
+		systemctl start "$app_servicefile"
+		echo_progress_done "Service started"
+		echo_success "${app_name^} reinstalled"
+		exit 0
+	fi
+
+	# Binary-only update (default)
+	echo_info "Updating ${app_name^}..."
+
+	echo_progress_start "Backing up current binary"
+	if ! _backup_cleanuparr; then
+		echo_error "Backup failed, aborting update"
+		exit 1
+	fi
+	echo_progress_done "Backup created"
+
+	echo_progress_start "Stopping service"
+	systemctl stop "$app_servicefile" 2>/dev/null || true
+	echo_progress_done "Service stopped"
+
+	echo_progress_start "Downloading latest release"
+
+	case "$(_os_arch)" in
+	"amd64") arch='linux-amd64' ;;
+	"arm64") arch='linux-arm64' ;;
+	*)
+		echo_error "Architecture not supported"
+		_rollback_cleanuparr
+		exit 1
+		;;
+	esac
+
+	local github_repo="Cleanuparr/Cleanuparr"
+	_verbose "Querying GitHub API: https://api.github.com/repos/${github_repo}/releases/latest"
+
+	latest=$(curl -sL "https://api.github.com/repos/${github_repo}/releases/latest" |
+		grep "browser_download_url" |
+		grep "$arch" |
+		grep ".zip" |
+		cut -d\" -f4) || {
+		echo_error "Failed to query GitHub"
+		_rollback_cleanuparr
+		exit 1
+	}
+
+	if [[ -z "$latest" ]]; then
+		echo_error "No matching release found"
+		_rollback_cleanuparr
+		exit 1
+	fi
+
+	_verbose "Downloading: ${latest}"
+	if ! curl -fsSL "$latest" -o "/tmp/${app_name}.zip" >>"$log" 2>&1; then
+		echo_error "Download failed"
+		_rollback_cleanuparr
+		exit 1
+	fi
+	echo_progress_done "Downloaded"
+
+	echo_progress_start "Installing update"
+	# Extract to temp location first (zip contains versioned subfolder)
+	rm -rf "/tmp/${app_name}-extract"
+	mkdir -p "/tmp/${app_name}-extract"
+	if ! unzip -o "/tmp/${app_name}.zip" -d "/tmp/${app_name}-extract" >>"$log" 2>&1; then
+		echo_error "Extraction failed"
+		rm -f "/tmp/${app_name}.zip"
+		rm -rf "/tmp/${app_name}-extract"
+		_rollback_cleanuparr
+		exit 1
+	fi
+	rm -f "/tmp/${app_name}.zip"
+
+	# Move contents from versioned subfolder to app_dir
+	extracted_folder=$(find "/tmp/${app_name}-extract" -maxdepth 1 -type d -name "Cleanuparr-*" | head -1)
+	if [[ -z "$extracted_folder" ]]; then
+		echo_error "Could not find extracted folder"
+		rm -rf "/tmp/${app_name}-extract"
+		_rollback_cleanuparr
+		exit 1
+	fi
+	# Move binary from extracted folder (preserve config)
+	mv "$extracted_folder/${app_binary}" "${app_dir}/${app_binary}" >>"$log" 2>&1
+	rm -rf "/tmp/${app_name}-extract"
+	chmod +x "${app_dir}/${app_binary}"
+	chown "${user}:${user}" "${app_dir}/${app_binary}"
+	echo_progress_done "Installed"
+
+	echo_progress_start "Restarting service"
+	systemctl start "$app_servicefile"
+
+	sleep 2
+	if systemctl is-active --quiet "$app_servicefile"; then
+		echo_progress_done "Service running"
+		_verbose "Service status: active"
+	else
+		echo_progress_done "Service may have issues"
+		_rollback_cleanuparr
+		exit 1
+	fi
+
+	rm -rf "/tmp/swizzin-update-backups/${app_name}"
+	echo_success "${app_name^} updated"
+	exit 0
 }
 
 _remove_cleanuparr() {
@@ -244,6 +425,24 @@ _nginx_cleanuparr() {
 		echo_info "$app_name will run on port $app_port"
 	fi
 }
+
+# Parse global flags
+for arg in "$@"; do
+	case "$arg" in
+	--verbose) verbose=true ;;
+	esac
+done
+
+# Handle --update flag
+if [[ "$1" == "--update" ]]; then
+	full_reinstall=false
+	for arg in "$@"; do
+		case "$arg" in
+		--full) full_reinstall=true ;;
+		esac
+	done
+	_update_cleanuparr "$full_reinstall"
+fi
 
 # Handle --remove flag
 if [ "$1" = "--remove" ]; then

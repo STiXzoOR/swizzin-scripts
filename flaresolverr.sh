@@ -1,7 +1,7 @@
 #!/bin/bash
 # flaresolverr installer
 # STiXzoOR 2025
-# Usage: bash flaresolverr.sh [--remove [--force]] [--register-panel]
+# Usage: bash flaresolverr.sh [--update [--full] [--verbose]|--remove [--force]] [--register-panel]
 
 . /etc/swizzin/sources/globals.sh
 
@@ -31,6 +31,17 @@ _load_panel_helper() {
 # Log to Swizzin.log
 export log=/root/logs/swizzin.log
 touch "$log"
+
+# ==============================================================================
+# Verbose Mode
+# ==============================================================================
+verbose=false
+
+_verbose() {
+	if [[ "$verbose" == "true" ]]; then
+		echo_info "  $*"
+	fi
+}
 
 app_name="flaresolverr"
 app_pretty="FlareSolverr"
@@ -159,6 +170,165 @@ _install_flaresolverr() {
 	echo_progress_done "Configuration created"
 }
 
+# ==============================================================================
+# Backup (for rollback on failed update)
+# ==============================================================================
+_backup_flaresolverr() {
+	local backup_dir="/tmp/swizzin-update-backups/${app_name}"
+
+	_verbose "Creating backup directory: ${backup_dir}"
+	mkdir -p "$backup_dir"
+
+	if [[ -d "$app_dir" ]]; then
+		_verbose "Backing up application directory: ${app_dir}"
+		cp -r "$app_dir" "${backup_dir}/app"
+		_verbose "Backup complete ($(du -sh "${backup_dir}/app" | cut -f1))"
+	else
+		echo_error "Application directory not found: ${app_dir}"
+		return 1
+	fi
+}
+
+# ==============================================================================
+# Rollback (restore from backup on failed update)
+# ==============================================================================
+_rollback_flaresolverr() {
+	local backup_dir="/tmp/swizzin-update-backups/${app_name}"
+
+	echo_error "Update failed, rolling back..."
+
+	if [[ -d "${backup_dir}/app" ]]; then
+		_verbose "Restoring application from backup"
+		rm -rf "$app_dir"
+		cp -r "${backup_dir}/app" "$app_dir"
+		chmod +x "${app_dir}/${app_binary}"
+		chown -R "${user}:${user}" "$app_dir"
+
+		_verbose "Restarting service"
+		systemctl restart "$app_servicefile" 2>/dev/null || true
+
+		echo_info "Rollback complete. Previous version restored."
+	else
+		echo_error "No backup found at ${backup_dir}"
+		echo_info "Manual intervention required"
+	fi
+
+	rm -rf "$backup_dir"
+}
+
+# ==============================================================================
+# Update
+# ==============================================================================
+_update_flaresolverr() {
+	local full_reinstall="$1"
+
+	if [[ ! -f "/install/.${app_lockname}.lock" ]]; then
+		echo_error "${app_pretty} is not installed"
+		exit 1
+	fi
+
+	# Full reinstall
+	if [[ "$full_reinstall" == "true" ]]; then
+		echo_info "Performing full reinstall of ${app_pretty}..."
+		echo_progress_start "Stopping service"
+		systemctl stop "$app_servicefile" 2>/dev/null || true
+		echo_progress_done "Service stopped"
+
+		_install_flaresolverr
+
+		echo_progress_start "Starting service"
+		systemctl start "$app_servicefile"
+		echo_progress_done "Service started"
+		echo_success "${app_pretty} reinstalled"
+		exit 0
+	fi
+
+	# Binary-only update (default)
+	echo_info "Updating ${app_pretty}..."
+
+	echo_progress_start "Backing up current installation"
+	if ! _backup_flaresolverr; then
+		echo_error "Backup failed, aborting update"
+		exit 1
+	fi
+	echo_progress_done "Backup created"
+
+	echo_progress_start "Stopping service"
+	systemctl stop "$app_servicefile" 2>/dev/null || true
+	echo_progress_done "Service stopped"
+
+	echo_progress_start "Downloading latest release"
+
+	# Check architecture - FlareSolverr only supports x64
+	case "$(_os_arch)" in
+	"amd64") arch='linux_x64' ;;
+	*)
+		echo_error "FlareSolverr only supports amd64/x64 architecture"
+		_rollback_flaresolverr
+		exit 1
+		;;
+	esac
+
+	local github_repo="FlareSolverr/FlareSolverr"
+	_verbose "Querying GitHub API: https://api.github.com/repos/${github_repo}/releases/latest"
+
+	latest=$(curl -sL "https://api.github.com/repos/${github_repo}/releases/latest" |
+		grep "browser_download_url" |
+		grep "${arch}" |
+		grep ".tar.gz" |
+		cut -d\" -f4) || {
+		echo_error "Failed to query GitHub"
+		_rollback_flaresolverr
+		exit 1
+	}
+
+	if [[ -z "$latest" ]]; then
+		echo_error "No matching release found"
+		_rollback_flaresolverr
+		exit 1
+	fi
+
+	_verbose "Downloading: ${latest}"
+	if ! curl -fsSL "$latest" -o "/tmp/${app_name}.tar.gz" >>"$log" 2>&1; then
+		echo_error "Download failed"
+		_rollback_flaresolverr
+		exit 1
+	fi
+	echo_progress_done "Downloaded"
+
+	echo_progress_start "Installing update"
+	# Remove old installation but preserve config
+	rm -rf "$app_dir"
+	mkdir -p "$app_dir"
+	if ! tar xf "/tmp/${app_name}.tar.gz" --strip-components=1 -C "$app_dir" >>"$log" 2>&1; then
+		echo_error "Extraction failed"
+		rm -f "/tmp/${app_name}.tar.gz"
+		_rollback_flaresolverr
+		exit 1
+	fi
+	rm -f "/tmp/${app_name}.tar.gz"
+	chown -R "${user}:${user}" "$app_dir"
+	chmod +x "${app_dir}/${app_binary}"
+	echo_progress_done "Installed"
+
+	echo_progress_start "Restarting service"
+	systemctl start "$app_servicefile"
+
+	sleep 2
+	if systemctl is-active --quiet "$app_servicefile"; then
+		echo_progress_done "Service running"
+		_verbose "Service status: active"
+	else
+		echo_progress_done "Service may have issues"
+		_rollback_flaresolverr
+		exit 1
+	fi
+
+	rm -rf "/tmp/swizzin-update-backups/${app_name}"
+	echo_success "${app_pretty} updated"
+	exit 0
+}
+
 _remove_flaresolverr() {
 	local force="$1"
 
@@ -245,6 +415,24 @@ _systemd_flaresolverr() {
 	sleep 2
 	echo_progress_done "Service installed and enabled"
 }
+
+# Parse global flags
+for arg in "$@"; do
+	case "$arg" in
+	--verbose) verbose=true ;;
+	esac
+done
+
+# Handle --update flag
+if [[ "$1" == "--update" ]]; then
+	full_reinstall=false
+	for arg in "$@"; do
+		case "$arg" in
+		--full) full_reinstall=true ;;
+		esac
+	done
+	_update_flaresolverr "$full_reinstall"
+fi
 
 # Handle --remove flag
 if [[ "$1" == "--remove" ]]; then

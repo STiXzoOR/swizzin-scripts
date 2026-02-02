@@ -1,7 +1,7 @@
 #!/bin/bash
 # decypharr installer
 # STiXzoOR 2025
-# Usage: bash decypharr.sh [--remove [--force]] [--register-panel]
+# Usage: bash decypharr.sh [--update [--full] [--verbose]|--remove [--force]] [--register-panel]
 
 . /etc/swizzin/sources/globals.sh
 
@@ -31,6 +31,17 @@ _load_panel_helper() {
 # Log to Swizzin.log
 export log=/root/logs/swizzin.log
 touch $log
+
+# ==============================================================================
+# Verbose Mode
+# ==============================================================================
+verbose=false
+
+_verbose() {
+	if [[ "$verbose" == "true" ]]; then
+		echo_info "  $*"
+	fi
+}
 
 app_name="decypharr"
 
@@ -319,6 +330,160 @@ CFG
 	echo_progress_done "Default config created"
 }
 
+# ==============================================================================
+# Backup (for rollback on failed update)
+# ==============================================================================
+_backup_decypharr() {
+	local backup_dir="/tmp/swizzin-update-backups/${app_name}"
+
+	_verbose "Creating backup directory: ${backup_dir}"
+	mkdir -p "$backup_dir"
+
+	if [[ -f "${app_dir}/${app_binary}" ]]; then
+		_verbose "Backing up binary: ${app_dir}/${app_binary}"
+		cp "${app_dir}/${app_binary}" "${backup_dir}/${app_binary}"
+		_verbose "Backup complete ($(du -h "${backup_dir}/${app_binary}" | cut -f1))"
+	else
+		echo_error "Binary not found: ${app_dir}/${app_binary}"
+		return 1
+	fi
+}
+
+# ==============================================================================
+# Rollback (restore from backup on failed update)
+# ==============================================================================
+_rollback_decypharr() {
+	local backup_dir="/tmp/swizzin-update-backups/${app_name}"
+
+	echo_error "Update failed, rolling back..."
+
+	if [[ -f "${backup_dir}/${app_binary}" ]]; then
+		_verbose "Restoring binary from backup"
+		cp "${backup_dir}/${app_binary}" "${app_dir}/${app_binary}"
+		chmod +x "${app_dir}/${app_binary}"
+
+		_verbose "Restarting service"
+		systemctl restart "$app_servicefile" 2>/dev/null || true
+
+		echo_info "Rollback complete. Previous version restored."
+	else
+		echo_error "No backup found at ${backup_dir}"
+		echo_info "Manual intervention required"
+	fi
+
+	rm -rf "$backup_dir"
+}
+
+# ==============================================================================
+# Update
+# ==============================================================================
+_update_decypharr() {
+	local full_reinstall="$1"
+
+	if [[ ! -f "/install/.${app_lockname}.lock" ]]; then
+		echo_error "${app_name^} is not installed"
+		exit 1
+	fi
+
+	# Full reinstall
+	if [[ "$full_reinstall" == "true" ]]; then
+		echo_info "Performing full reinstall of ${app_name^}..."
+		echo_progress_start "Stopping service"
+		systemctl stop "$app_servicefile" 2>/dev/null || true
+		echo_progress_done "Service stopped"
+
+		_install_decypharr
+
+		echo_progress_start "Starting service"
+		systemctl start "$app_servicefile"
+		echo_progress_done "Service started"
+		echo_success "${app_name^} reinstalled"
+		exit 0
+	fi
+
+	# Binary-only update (default)
+	echo_info "Updating ${app_name^}..."
+
+	echo_progress_start "Backing up current binary"
+	if ! _backup_decypharr; then
+		echo_error "Backup failed, aborting update"
+		exit 1
+	fi
+	echo_progress_done "Backup created"
+
+	echo_progress_start "Stopping service"
+	systemctl stop "$app_servicefile" 2>/dev/null || true
+	echo_progress_done "Service stopped"
+
+	echo_progress_start "Downloading latest release"
+
+	case "$(_os_arch)" in
+	"amd64") arch='x86_64' ;;
+	"arm64") arch='arm64' ;;
+	"armhf") arch='armv6' ;;
+	*)
+		echo_error "Architecture not supported"
+		_rollback_decypharr
+		exit 1
+		;;
+	esac
+
+	local github_repo="STiXzoOR/decypharr"
+	_verbose "Querying GitHub API: https://api.github.com/repos/${github_repo}/releases/latest"
+
+	latest=$(curl -sL "https://api.github.com/repos/${github_repo}/releases/latest" |
+		grep "Linux_$arch" |
+		grep "browser_download_url" |
+		grep ".tar.gz" |
+		cut -d\" -f4) || {
+		echo_error "Failed to query GitHub"
+		_rollback_decypharr
+		exit 1
+	}
+
+	if [[ -z "$latest" ]]; then
+		echo_error "No matching release found"
+		_rollback_decypharr
+		exit 1
+	fi
+
+	_verbose "Downloading: ${latest}"
+	if ! curl -fsSL "$latest" -o "/tmp/${app_name}.tar.gz" >>"$log" 2>&1; then
+		echo_error "Download failed"
+		_rollback_decypharr
+		exit 1
+	fi
+	echo_progress_done "Downloaded"
+
+	echo_progress_start "Installing update"
+	if ! tar xfv "/tmp/${app_name}.tar.gz" --directory /usr/bin/ >>"$log" 2>&1; then
+		echo_error "Extraction failed"
+		rm -f "/tmp/${app_name}.tar.gz"
+		_rollback_decypharr
+		exit 1
+	fi
+	rm -f "/tmp/${app_name}.tar.gz"
+	chmod +x "${app_dir}/${app_binary}"
+	echo_progress_done "Installed"
+
+	echo_progress_start "Restarting service"
+	systemctl start "$app_servicefile"
+
+	sleep 2
+	if systemctl is-active --quiet "$app_servicefile"; then
+		echo_progress_done "Service running"
+		_verbose "Service status: active"
+	else
+		echo_progress_done "Service may have issues"
+		_rollback_decypharr
+		exit 1
+	fi
+
+	rm -rf "/tmp/swizzin-update-backups/${app_name}"
+	echo_success "${app_name^} updated"
+	exit 0
+}
+
 _remove_decypharr() {
 	local force="$1"
 	if [ "$force" != "--force" ] && [ ! -f "/install/.$app_lockname.lock" ]; then
@@ -455,6 +620,24 @@ _nginx_decypharr() {
 		echo_info "$app_name will run on port $app_port"
 	fi
 }
+
+# Parse global flags
+for arg in "$@"; do
+	case "$arg" in
+	--verbose) verbose=true ;;
+	esac
+done
+
+# Handle --update flag
+if [[ "$1" == "--update" ]]; then
+	full_reinstall=false
+	for arg in "$@"; do
+		case "$arg" in
+		--full) full_reinstall=true ;;
+		esac
+	done
+	_update_decypharr "$full_reinstall"
+fi
 
 # Handle --remove flag
 if [ "$1" = "--remove" ]; then
