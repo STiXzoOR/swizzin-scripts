@@ -5,7 +5,7 @@
 # Template for installing Docker-based applications via Docker Compose
 # Examples: lingarr
 #
-# Usage: bash <appname>.sh [--update|--remove [--force]|--register-panel]
+# Usage: bash <appname>.sh [--update [--verbose]|--remove [--force]|--register-panel]
 #
 # CUSTOMIZATION POINTS (search for "# CUSTOMIZE:"):
 # 1. App variables (name, image, port, icon, etc.)
@@ -302,7 +302,10 @@ _update_myapp() {
 		exit 1
 	fi
 
+	echo_info "Updating ${app_pretty}..."
+
 	echo_progress_start "Pulling latest ${app_pretty} image"
+	_verbose "Running: docker compose -f ${app_dir}/docker-compose.yml pull"
 	docker compose -f "${app_dir}/docker-compose.yml" pull >>"$log" 2>&1 || {
 		echo_error "Failed to pull latest image"
 		exit 1
@@ -310,6 +313,7 @@ _update_myapp() {
 	echo_progress_done "Latest image pulled"
 
 	echo_progress_start "Recreating ${app_pretty} container"
+	_verbose "Running: docker compose up -d"
 	docker compose -f "${app_dir}/docker-compose.yml" up -d >>"$log" 2>&1 || {
 		echo_error "Failed to recreate container"
 		exit 1
@@ -317,6 +321,7 @@ _update_myapp() {
 	echo_progress_done "Container recreated"
 
 	# Clean up old dangling images
+	_verbose "Pruning unused images"
 	docker image prune -f >>"$log" 2>&1 || true
 
 	echo_success "${app_pretty} has been updated"
