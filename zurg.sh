@@ -1,7 +1,7 @@
 #!/bin/bash
 # zurg installer
 # STiXzoOR 2025
-# Usage: bash zurg.sh [--remove [--force]] [--switch-version [free|paid]] [--upgrade [--binary-only] [--latest]] [--register-panel]
+# Usage: bash zurg.sh [--remove [--force]] [--switch-version [free|paid]] [--update [--full] [--latest] [--verbose]] [--register-panel]
 
 . /etc/swizzin/sources/globals.sh
 
@@ -31,6 +31,17 @@ _load_panel_helper() {
 # Log to Swizzin.log
 export log=/root/logs/swizzin.log
 touch "$log"
+
+# ==============================================================================
+# Verbose Mode
+# ==============================================================================
+verbose=false
+
+_verbose() {
+	if [[ "$verbose" == "true" ]]; then
+		echo_info "  $*"
+	fi
+}
 
 app_name="zurg"
 
@@ -1048,7 +1059,7 @@ _nginx_zurg() {
 }
 
 _upgrade_binary_zurg() {
-	echo_info "Upgrading zurg binary only..."
+	echo_info "Updating zurg binary..."
 
 	# Read version from swizdb
 	local zurg_version
@@ -1058,9 +1069,12 @@ _upgrade_binary_zurg() {
 		exit 1
 	fi
 
+	_verbose "Detected installed version: $zurg_version"
+
 	# For paid version, get GitHub authentication
 	local github_token=""
 	if [ "$zurg_version" = "paid" ]; then
+		_verbose "Paid version detected, authenticating with GitHub..."
 		if ! _get_github_token; then
 			echo_error "GitHub authentication failed for paid version."
 			exit 1
@@ -1079,6 +1093,8 @@ _upgrade_binary_zurg() {
 		;;
 	esac
 
+	_verbose "Detected architecture: $arch"
+
 	# Set repo based on version
 	local zurg_repo
 	if [ "$zurg_version" = "paid" ]; then
@@ -1086,6 +1102,8 @@ _upgrade_binary_zurg() {
 	else
 		zurg_repo="debridmediamanager/zurg-testing"
 	fi
+
+	_verbose "Using repository: $zurg_repo"
 
 	# Determine which release to download
 	local release_endpoint
@@ -1097,8 +1115,10 @@ _upgrade_binary_zurg() {
 		echo_info "Using specific version tag: $ZURG_VERSION_TAG"
 	elif [[ "$use_latest_tag" == "true" || "$use_latest_tag" == "1" || "$use_latest_tag" == "yes" ]]; then
 		release_endpoint="repos/$zurg_repo/releases?per_page=1"
+		_verbose "Using latest tag endpoint (includes prereleases)"
 	else
 		release_endpoint="repos/$zurg_repo/releases/latest"
+		_verbose "Using latest stable release endpoint"
 	fi
 
 	local is_array_response="false"
@@ -1106,11 +1126,13 @@ _upgrade_binary_zurg() {
 		is_array_response="true"
 	fi
 
+	_verbose "Querying GitHub API: $release_endpoint"
 	echo_progress_start "Downloading $zurg_version release"
 
 	# Download release
 	if [ "$zurg_version" = "paid" ]; then
 		if [ "$github_token" = "gh_cli" ]; then
+			_verbose "Using gh CLI for authentication"
 			local release_info
 			release_info=$(gh api "$release_endpoint" 2>>"$log") || {
 				echo_error "Failed to query GitHub for release"
@@ -1132,11 +1154,13 @@ _upgrade_binary_zurg() {
 				exit 1
 			fi
 
+			_verbose "Downloading asset from: $latest"
 			if ! gh api "$latest" -H "Accept: application/octet-stream" >/tmp/$app_name.zip 2>>"$log"; then
 				echo_error "Download failed, exiting"
 				exit 1
 			fi
 		else
+			_verbose "Using token-based authentication"
 			local release_json
 			release_json=$(curl -sL -H "Authorization: token $github_token" \
 				"https://api.github.com/$release_endpoint") || {
@@ -1178,6 +1202,7 @@ _upgrade_binary_zurg() {
 				exit 1
 			fi
 
+			_verbose "Downloading asset from: $latest"
 			if ! curl -H "Authorization: token $github_token" \
 				-H "Accept: application/octet-stream" \
 				"$latest" -L -o "/tmp/$app_name.zip" >>"$log" 2>&1; then
@@ -1187,6 +1212,7 @@ _upgrade_binary_zurg() {
 		fi
 	else
 		# Free version - no auth needed
+		_verbose "Free version - no authentication required"
 		local release_json
 		release_json=$(curl -sL "https://api.github.com/$release_endpoint") || {
 			echo_error "Failed to query GitHub for release"
@@ -1221,6 +1247,7 @@ _upgrade_binary_zurg() {
 			exit 1
 		fi
 
+		_verbose "Downloading asset from: $latest"
 		if ! curl "$latest" -L -o "/tmp/$app_name.zip" >>"$log" 2>&1; then
 			echo_error "Download failed, exiting"
 			exit 1
@@ -1229,6 +1256,7 @@ _upgrade_binary_zurg() {
 	echo_progress_done "Archive downloaded"
 
 	echo_progress_start "Extracting and replacing binary"
+	_verbose "Extracting to /tmp/$app_name"
 	unzip -o "/tmp/$app_name.zip" -d "/tmp/$app_name" >>"$log" 2>&1 || {
 		echo_error "Failed to extract"
 		exit 1
@@ -1240,14 +1268,16 @@ _upgrade_binary_zurg() {
 
 	# Restart services
 	echo_progress_start "Restarting zurg services"
+	_verbose "Restarting $app_servicefile"
 	systemctl restart "$app_servicefile" 2>/dev/null || true
 	if [ "$zurg_version" = "free" ] && [ -f "/etc/systemd/system/$app_mount_servicefile" ]; then
 		sleep 2
+		_verbose "Restarting $app_mount_servicefile"
 		systemctl restart "$app_mount_servicefile" 2>/dev/null || true
 	fi
 	echo_progress_done "Services restarted"
 
-	echo_success "Zurg binary upgraded ($zurg_version version)"
+	echo_success "Zurg binary updated ($zurg_version version)"
 }
 
 # Handle --remove flag
@@ -1281,11 +1311,10 @@ if [ "$1" = "--register-panel" ]; then
 	exit 0
 fi
 
-# Parse modifier flags from all arguments
-binary_only="false"
+# Parse global flags from all arguments
 for arg in "$@"; do
 	case "$arg" in
-	--binary-only) binary_only="true" ;;
+	--verbose) verbose=true ;;
 	--latest) ZURG_USE_LATEST_TAG="true" ;;
 	esac
 done
@@ -1344,18 +1373,27 @@ if [ "$switch_mode" != "true" ] && [ -f "/install/.$app_lockname.lock" ]; then
 	_use_latest="${ZURG_USE_LATEST_TAG:-}"
 	_use_latest="${_use_latest,,}"  # lowercase
 
-	# Check if user wants to upgrade/reinstall
-	if [ "$1" = "--upgrade" ] || [ "${ZURG_UPGRADE:-}" = "true" ]; then
-		if [ "$binary_only" = "true" ]; then
+	# Check if user wants to update/reinstall
+	if [ "$1" = "--update" ] || [ "${ZURG_UPGRADE:-}" = "true" ]; then
+		# Parse --full flag for full reinstall
+		full_reinstall=false
+		for arg in "$@"; do
+			case "$arg" in
+			--full) full_reinstall=true ;;
+			esac
+		done
+
+		if [ "$full_reinstall" = "false" ]; then
+			# Default: binary-only update
 			_upgrade_binary_zurg
 			exit 0
 		fi
-		echo_info "Upgrading zurg..."
+		echo_info "Full reinstall requested..."
 	elif [[ "$_use_latest" == "true" || "$_use_latest" == "1" || "$_use_latest" == "yes" ]] || [ -n "${ZURG_VERSION_TAG:-}" ]; then
 		echo_info "Version change requested (tag mode), proceeding with install..."
 	else
-		echo_info "Use --upgrade to reinstall/upgrade, or --switch-version to change versions"
-		echo_info "Use --upgrade --binary-only to update only the binary"
+		echo_info "Use --update to update the binary, or --update --full to reinstall"
+		echo_info "Use --switch-version to change between free/paid versions"
 		echo_info "Use --latest or ZURG_VERSION_TAG=vX.X.X to install specific version"
 		exit 0
 	fi
