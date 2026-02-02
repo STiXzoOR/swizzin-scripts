@@ -289,7 +289,6 @@ _discover_media_paths() {
 	MEDIA_PATHS=()
 	MEDIA_MOUNT_NAMES=()
 	local -A seen_paths=()
-	local -A seen_mounts=()
 
 	echo_progress_start "Discovering media paths from Sonarr/Radarr"
 
@@ -339,33 +338,21 @@ _discover_media_paths() {
 
 	echo_progress_done "Discovery complete"
 
-	# Generate mount names from path basenames
+	# Use full paths as mount names so Lingarr sees the same paths as Sonarr/Radarr
 	for path in "${MEDIA_PATHS[@]}"; do
-		local mount_name
-		mount_name=$(basename "$path")
-		# Handle duplicate mount names by appending a number
-		if [[ -n "${seen_mounts[$mount_name]+x}" ]]; then
-			local count=2
-			while [[ -n "${seen_mounts[${mount_name}${count}]+x}" ]]; do
-				((count++))
-			done
-			mount_name="${mount_name}${count}"
-		fi
-		seen_mounts["$mount_name"]=1
-		MEDIA_MOUNT_NAMES+=("$mount_name")
+		MEDIA_MOUNT_NAMES+=("$path")
 	done
 
 	# Display discovered paths
 	if [[ ${#MEDIA_PATHS[@]} -gt 0 ]]; then
 		echo_info "Discovered media paths:"
 		for i in "${!MEDIA_PATHS[@]}"; do
-			echo_info "  ${MEDIA_PATHS[$i]} -> /${MEDIA_MOUNT_NAMES[$i]}"
+			echo_info "  ${MEDIA_PATHS[$i]} -> ${MEDIA_MOUNT_NAMES[$i]}"
 		done
 
 		if ! ask "Use these paths?" Y; then
 			MEDIA_PATHS=()
 			MEDIA_MOUNT_NAMES=()
-			seen_mounts=()
 		fi
 	else
 		echo_info "No Sonarr/Radarr installations found for auto-discovery"
@@ -399,20 +386,9 @@ _discover_media_paths() {
 
 		seen_paths["$new_path"]=1
 		MEDIA_PATHS+=("$new_path")
+		MEDIA_MOUNT_NAMES+=("$new_path")
 
-		local mount_name
-		mount_name=$(basename "$new_path")
-		if [[ -n "${seen_mounts[$mount_name]+x}" ]]; then
-			local count=2
-			while [[ -n "${seen_mounts[${mount_name}${count}]+x}" ]]; do
-				((count++))
-			done
-			mount_name="${mount_name}${count}"
-		fi
-		seen_mounts["$mount_name"]=1
-		MEDIA_MOUNT_NAMES+=("$mount_name")
-
-		echo_info "Added: $new_path -> /$mount_name"
+		echo_info "Added: $new_path"
 	done
 
 	if [[ ${#MEDIA_PATHS[@]} -eq 0 ]]; then
@@ -531,7 +507,7 @@ COMPOSE
 		echo "    volumes:"
 		echo "      - ${app_configdir}:/app/config"
 		for i in "${!MEDIA_PATHS[@]}"; do
-			echo "      - ${MEDIA_PATHS[$i]}:/${MEDIA_MOUNT_NAMES[$i]}"
+			echo "      - ${MEDIA_PATHS[$i]}:${MEDIA_MOUNT_NAMES[$i]}"
 		done
 	} > "$app_dir/docker-compose.yml"
 
