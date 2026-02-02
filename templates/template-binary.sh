@@ -5,7 +5,7 @@
 # Template for installing single-binary applications to /usr/bin
 # Examples: decypharr, notifiarr
 #
-# Usage: bash <appname>.sh [--remove [--force]|--register-panel]
+# Usage: bash <appname>.sh [--update [--full] [--verbose]|--remove [--force]|--register-panel]
 #
 # CUSTOMIZATION POINTS (search for "# CUSTOMIZE:"):
 # 1. App variables (name, port, binary URL, icon, etc.)
@@ -175,6 +175,169 @@ _install_myapp() {
 }
 
 # ==============================================================================
+# Backup (for rollback on failed update)
+# ==============================================================================
+_backup_myapp() {
+	local backup_dir="/tmp/swizzin-update-backups/${app_name}"
+
+	_verbose "Creating backup directory: ${backup_dir}"
+	mkdir -p "$backup_dir"
+
+	if [[ -f "${app_dir}/${app_binary}" ]]; then
+		_verbose "Backing up binary: ${app_dir}/${app_binary}"
+		cp "${app_dir}/${app_binary}" "${backup_dir}/${app_binary}"
+		_verbose "Backup complete ($(du -h "${backup_dir}/${app_binary}" | cut -f1))"
+	else
+		echo_error "Binary not found: ${app_dir}/${app_binary}"
+		return 1
+	fi
+}
+
+# ==============================================================================
+# Rollback (restore from backup on failed update)
+# ==============================================================================
+_rollback_myapp() {
+	local backup_dir="/tmp/swizzin-update-backups/${app_name}"
+
+	echo_error "Update failed, rolling back..."
+
+	if [[ -f "${backup_dir}/${app_binary}" ]]; then
+		_verbose "Restoring binary from backup"
+		cp "${backup_dir}/${app_binary}" "${app_dir}/${app_binary}"
+		chmod +x "${app_dir}/${app_binary}"
+
+		_verbose "Restarting service"
+		systemctl restart "$app_servicefile" 2>/dev/null || true
+
+		echo_info "Rollback complete. Previous version restored."
+	else
+		echo_error "No backup found at ${backup_dir}"
+		echo_info "Manual intervention required"
+	fi
+
+	# Clean up backup
+	rm -rf "$backup_dir"
+}
+
+# ==============================================================================
+# Update
+# ==============================================================================
+_update_myapp() {
+	local full_reinstall="$1"
+
+	if [[ ! -f "/install/.${app_lockname}.lock" ]]; then
+		echo_error "${app_pretty} is not installed"
+		exit 1
+	fi
+
+	# Full reinstall requested
+	if [[ "$full_reinstall" == "true" ]]; then
+		echo_info "Performing full reinstall of ${app_pretty}..."
+
+		# Stop service
+		echo_progress_start "Stopping service"
+		systemctl stop "$app_servicefile" 2>/dev/null || true
+		echo_progress_done "Service stopped"
+
+		# Re-run full installation
+		_install_myapp
+
+		# Restart service
+		echo_progress_start "Starting service"
+		systemctl start "$app_servicefile"
+		echo_progress_done "Service started"
+
+		echo_success "${app_pretty} reinstalled"
+		exit 0
+	fi
+
+	# Binary-only update (default)
+	echo_info "Updating ${app_pretty}..."
+
+	# Create backup
+	echo_progress_start "Backing up current binary"
+	if ! _backup_myapp; then
+		echo_error "Backup failed, aborting update"
+		exit 1
+	fi
+	echo_progress_done "Backup created"
+
+	# Stop service
+	echo_progress_start "Stopping service"
+	systemctl stop "$app_servicefile" 2>/dev/null || true
+	echo_progress_done "Service stopped"
+
+	# Download new binary
+	echo_progress_start "Downloading latest release"
+
+	# CUSTOMIZE: Map architecture names to what the release uses
+	case "$(_os_arch)" in
+	"amd64") arch='x86_64' ;;
+	"arm64") arch='arm64' ;;
+	"armhf") arch='armv6' ;;
+	*)
+		echo_error "Architecture not supported"
+		_rollback_myapp
+		exit 1
+		;;
+	esac
+
+	# CUSTOMIZE: Set the GitHub API URL for releases
+	local github_repo="owner/repo"
+	_verbose "Querying GitHub API: https://api.github.com/repos/${github_repo}/releases/latest"
+
+	latest=$(curl -sL "https://api.github.com/repos/${github_repo}/releases/latest" |
+		grep "browser_download_url" |
+		grep "${arch}" |
+		grep ".tar.gz" |
+		cut -d\" -f4) || {
+		echo_error "Failed to query GitHub for latest version"
+		_rollback_myapp
+		exit 1
+	}
+
+	_verbose "Downloading: ${latest}"
+	if ! curl -fsSL "$latest" -o "/tmp/${app_name}.tar.gz" >>"$log" 2>&1; then
+		echo_error "Download failed"
+		_rollback_myapp
+		exit 1
+	fi
+	echo_progress_done "Downloaded"
+
+	# Extract and replace binary
+	echo_progress_start "Installing new binary"
+	tar xf "/tmp/${app_name}.tar.gz" --directory "${app_dir}/" >>"$log" 2>&1 || {
+		echo_error "Failed to extract"
+		_rollback_myapp
+		exit 1
+	}
+	rm -f "/tmp/${app_name}.tar.gz"
+	chmod +x "${app_dir}/${app_binary}"
+	echo_progress_done "Binary installed"
+
+	# Restart service
+	echo_progress_start "Restarting service"
+	systemctl start "$app_servicefile"
+
+	# Verify service started
+	sleep 2
+	if systemctl is-active --quiet "$app_servicefile"; then
+		echo_progress_done "Service running"
+		_verbose "Service status: active"
+	else
+		echo_progress_done "Service may have issues"
+		_rollback_myapp
+		exit 1
+	fi
+
+	# Clean up backup
+	rm -rf "/tmp/swizzin-update-backups/${app_name}"
+
+	echo_success "${app_pretty} updated"
+	exit 0
+}
+
+# ==============================================================================
 # Removal
 # ==============================================================================
 _remove_myapp() {
@@ -327,6 +490,17 @@ done
 # Handle --remove flag
 if [[ "$1" == "--remove" ]]; then
 	_remove_myapp "$2"
+fi
+
+# Handle --update flag
+if [[ "$1" == "--update" ]]; then
+	full_reinstall=false
+	for arg in "$@"; do
+		case "$arg" in
+		--full) full_reinstall=true ;;
+		esac
+	done
+	_update_myapp "$full_reinstall"
 fi
 
 # Handle --register-panel flag
