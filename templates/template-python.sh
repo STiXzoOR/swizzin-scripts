@@ -5,7 +5,7 @@
 # Template for installing Python applications using uv for dependency management
 # Examples: byparr, huntarr, subgen
 #
-# Usage: bash <appname>.sh [--remove [--force]|--register-panel]
+# Usage: bash <appname>.sh [--update [--full] [--verbose]|--remove [--force]|--register-panel]
 #
 # CUSTOMIZATION POINTS (search for "# CUSTOMIZE:"):
 # 1. App variables (name, port, repo URL, icon, etc.)
@@ -181,6 +181,145 @@ _install_myapp() {
 }
 
 # ==============================================================================
+# Backup (for rollback on failed update)
+# ==============================================================================
+_backup_myapp() {
+	local backup_dir="/tmp/swizzin-update-backups/${app_name}"
+
+	_verbose "Creating backup directory: ${backup_dir}"
+	mkdir -p "$backup_dir"
+
+	if [[ -d "$app_dir" ]]; then
+		_verbose "Backing up application directory: ${app_dir}"
+		cp -r "$app_dir" "${backup_dir}/app"
+		_verbose "Backup complete ($(du -sh "${backup_dir}/app" | cut -f1))"
+	else
+		echo_error "Application directory not found: ${app_dir}"
+		return 1
+	fi
+}
+
+# ==============================================================================
+# Rollback (restore from backup on failed update)
+# ==============================================================================
+_rollback_myapp() {
+	local backup_dir="/tmp/swizzin-update-backups/${app_name}"
+
+	echo_error "Update failed, rolling back..."
+
+	if [[ -d "${backup_dir}/app" ]]; then
+		_verbose "Restoring application from backup"
+		rm -rf "$app_dir"
+		cp -r "${backup_dir}/app" "$app_dir"
+		chown -R "${user}:${user}" "$app_dir"
+
+		_verbose "Restarting service"
+		systemctl restart "$app_servicefile" 2>/dev/null || true
+
+		echo_info "Rollback complete. Previous version restored."
+	else
+		echo_error "No backup found at ${backup_dir}"
+		echo_info "Manual intervention required"
+	fi
+
+	# Clean up backup
+	rm -rf "$backup_dir"
+}
+
+# ==============================================================================
+# Update
+# ==============================================================================
+_update_myapp() {
+	local full_reinstall="$1"
+
+	if [[ ! -f "/install/.${app_lockname}.lock" ]]; then
+		echo_error "${app_pretty} is not installed"
+		exit 1
+	fi
+
+	# Full reinstall requested
+	if [[ "$full_reinstall" == "true" ]]; then
+		echo_info "Performing full reinstall of ${app_pretty}..."
+
+		# Stop service
+		echo_progress_start "Stopping service"
+		systemctl stop "$app_servicefile" 2>/dev/null || true
+		echo_progress_done "Service stopped"
+
+		# Remove existing directory
+		rm -rf "$app_dir"
+
+		# Re-run full installation
+		_install_myapp
+
+		# Restart service
+		echo_progress_start "Starting service"
+		systemctl start "$app_servicefile"
+		echo_progress_done "Service started"
+
+		echo_success "${app_pretty} reinstalled"
+		exit 0
+	fi
+
+	# Smart update (git pull + uv sync) - default
+	echo_info "Updating ${app_pretty}..."
+
+	# Create backup
+	echo_progress_start "Backing up current installation"
+	if ! _backup_myapp; then
+		echo_error "Backup failed, aborting update"
+		exit 1
+	fi
+	echo_progress_done "Backup created"
+
+	# Stop service
+	echo_progress_start "Stopping service"
+	systemctl stop "$app_servicefile" 2>/dev/null || true
+	echo_progress_done "Service stopped"
+
+	# Pull latest code
+	echo_progress_start "Pulling latest code"
+	_verbose "Running: git -C ${app_dir} pull"
+	if ! su - "$user" -c "cd '${app_dir}' && git pull" >>"$log" 2>&1; then
+		echo_error "Git pull failed"
+		_rollback_myapp
+		exit 1
+	fi
+	echo_progress_done "Code updated"
+
+	# Update dependencies
+	echo_progress_start "Updating dependencies"
+	_verbose "Running: uv sync"
+	if ! su - "$user" -c "cd '${app_dir}' && uv sync" >>"$log" 2>&1; then
+		echo_error "Dependency update failed"
+		_rollback_myapp
+		exit 1
+	fi
+	echo_progress_done "Dependencies updated"
+
+	# Restart service
+	echo_progress_start "Restarting service"
+	systemctl start "$app_servicefile"
+
+	# Verify service started
+	sleep 2
+	if systemctl is-active --quiet "$app_servicefile"; then
+		echo_progress_done "Service running"
+		_verbose "Service status: active"
+	else
+		echo_progress_done "Service may have issues"
+		_rollback_myapp
+		exit 1
+	fi
+
+	# Clean up backup
+	rm -rf "/tmp/swizzin-update-backups/${app_name}"
+
+	echo_success "${app_pretty} updated"
+	exit 0
+}
+
+# ==============================================================================
 # Removal
 # ==============================================================================
 _remove_myapp() {
@@ -339,6 +478,17 @@ done
 # Handle --remove flag
 if [[ "$1" == "--remove" ]]; then
 	_remove_myapp "$2"
+fi
+
+# Handle --update flag
+if [[ "$1" == "--update" ]]; then
+	full_reinstall=false
+	for arg in "$@"; do
+		case "$arg" in
+		--full) full_reinstall=true ;;
+		esac
+	done
+	_update_myapp "$full_reinstall"
 fi
 
 # Handle --register-panel flag
