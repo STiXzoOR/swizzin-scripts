@@ -1,7 +1,7 @@
 #!/bin/bash
 # subgen installer
 # STiXzoOR 2025
-# Usage: bash subgen.sh [--remove [--force]] [--register-panel]
+# Usage: bash subgen.sh [--remove [--force]] [--update [--full] [--verbose]] [--register-panel]
 
 . /etc/swizzin/sources/globals.sh
 
@@ -31,6 +31,17 @@ _load_panel_helper() {
 # Log to Swizzin.log
 export log=/root/logs/swizzin.log
 touch "$log"
+
+# ==============================================================================
+# Verbose Mode
+# ==============================================================================
+verbose=false
+
+_verbose() {
+	if [[ "$verbose" == "true" ]]; then
+		echo_info "  $*"
+	fi
+}
 
 app_name="subgen"
 
@@ -209,6 +220,129 @@ EOF
 	echo_info "Configure Plex/Jellyfin/Emby webhook to: http://<server>:$app_port/webhook"
 }
 
+# ==============================================================================
+# Backup (for rollback on failed update)
+# ==============================================================================
+_backup_subgen() {
+	local backup_dir="/tmp/swizzin-update-backups/${app_name}"
+
+	_verbose "Creating backup directory: ${backup_dir}"
+	mkdir -p "$backup_dir"
+
+	if [[ -d "$app_dir" ]]; then
+		_verbose "Backing up application directory: ${app_dir}"
+		cp -r "$app_dir" "${backup_dir}/app"
+		_verbose "Backup complete ($(du -sh "${backup_dir}/app" | cut -f1))"
+	else
+		echo_error "Application directory not found: ${app_dir}"
+		return 1
+	fi
+}
+
+# ==============================================================================
+# Rollback (restore from backup on failed update)
+# ==============================================================================
+_rollback_subgen() {
+	local backup_dir="/tmp/swizzin-update-backups/${app_name}"
+
+	echo_error "Update failed, rolling back..."
+
+	if [[ -d "${backup_dir}/app" ]]; then
+		_verbose "Restoring application from backup"
+		rm -rf "$app_dir"
+		cp -r "${backup_dir}/app" "$app_dir"
+		chown -R "${user}:${user}" "$app_dir"
+
+		_verbose "Restarting service"
+		systemctl restart "$app_servicefile" 2>/dev/null || true
+
+		echo_info "Rollback complete. Previous version restored."
+	else
+		echo_error "No backup found at ${backup_dir}"
+		echo_info "Manual intervention required"
+	fi
+
+	rm -rf "$backup_dir"
+}
+
+# ==============================================================================
+# Update
+# ==============================================================================
+_update_subgen() {
+	local full_reinstall="$1"
+
+	if [[ ! -f "/install/.${app_lockname}.lock" ]]; then
+		echo_error "${app_name^} is not installed"
+		exit 1
+	fi
+
+	# Full reinstall
+	if [[ "$full_reinstall" == "true" ]]; then
+		echo_info "Performing full reinstall of ${app_name^}..."
+		echo_progress_start "Stopping service"
+		systemctl stop "$app_servicefile" 2>/dev/null || true
+		echo_progress_done "Service stopped"
+
+		rm -rf "$app_dir"
+		_install_subgen
+
+		echo_progress_start "Starting service"
+		systemctl start "$app_servicefile"
+		echo_progress_done "Service started"
+		echo_success "${app_name^} reinstalled"
+		exit 0
+	fi
+
+	# Smart update (git pull + uv sync)
+	echo_info "Updating ${app_name^}..."
+
+	echo_progress_start "Backing up current installation"
+	if ! _backup_subgen; then
+		echo_error "Backup failed, aborting update"
+		exit 1
+	fi
+	echo_progress_done "Backup created"
+
+	echo_progress_start "Stopping service"
+	systemctl stop "$app_servicefile" 2>/dev/null || true
+	echo_progress_done "Service stopped"
+
+	echo_progress_start "Pulling latest code"
+	_verbose "Running: git -C ${app_dir} pull"
+	if ! su - "$user" -c "cd '${app_dir}' && git pull" >>"$log" 2>&1; then
+		echo_error "Git pull failed"
+		_rollback_subgen
+		exit 1
+	fi
+	echo_progress_done "Code updated"
+
+	echo_progress_start "Updating dependencies"
+	_verbose "Running: uv sync"
+	if ! su - "$user" -c "cd '${app_dir}' && uv sync" >>"$log" 2>&1; then
+		echo_error "Dependency update failed"
+		_rollback_subgen
+		exit 1
+	fi
+	echo_progress_done "Dependencies updated"
+
+	echo_progress_start "Restarting service"
+	systemctl start "$app_servicefile"
+
+	sleep 2
+	if systemctl is-active --quiet "$app_servicefile"; then
+		echo_progress_done "Service running"
+		_verbose "Service status: active"
+	else
+		echo_progress_done "Service may have issues"
+		_rollback_subgen
+		exit 1
+	fi
+
+	rm -rf "/tmp/swizzin-update-backups/${app_name}"
+	echo_success "${app_name^} updated"
+	exit 0
+}
+
 _remove_subgen() {
 	local force="$1"
 	if [ "$force" != "--force" ] && [ ! -f "/install/.$app_lockname.lock" ]; then
@@ -294,6 +428,24 @@ EOF
 	echo_progress_done "${app_name^} service installed and enabled"
 	echo_info "${app_name^} webhook available at http://127.0.0.1:$app_port/webhook"
 }
+
+# Parse global flags
+for arg in "$@"; do
+	case "$arg" in
+	--verbose) verbose=true ;;
+	esac
+done
+
+# Handle --update flag
+if [[ "$1" == "--update" ]]; then
+	full_reinstall=false
+	for arg in "$@"; do
+		case "$arg" in
+		--full) full_reinstall=true ;;
+		esac
+	done
+	_update_subgen "$full_reinstall"
+fi
 
 # Handle --remove flag
 if [ "$1" = "--remove" ]; then
