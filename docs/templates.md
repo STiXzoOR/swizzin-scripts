@@ -68,3 +68,32 @@ Key functions in extended installers:
 - `_get_install_state()` - Detect current state (not_installed, subfolder, subdomain)
 - `_install_subdomain()` / `_revert_subdomain()` - Subdomain conversion
 - `_interactive()` - Interactive mode entry point
+
+## Update Mechanism
+
+All templates support the `--update` flag for updating installed applications.
+
+### Binary Template
+
+- `--update` - Replace binary only (default), downloads latest from GitHub
+- `--update --full` - Full reinstall (re-runs complete install process)
+- `--update --verbose` - Show detailed progress
+
+### Python Template
+
+- `--update` - Smart update: `git pull` + `uv sync` (default)
+- `--update --full` - Full reinstall (removes directory, re-clones)
+- `--update --verbose` - Show detailed progress
+
+### Docker Template
+
+- `--update` - Pull latest image and recreate container
+- `--update --verbose` - Show detailed progress
+
+### Rollback
+
+Binary and Python templates automatically rollback on failure:
+
+- Backup created in `/tmp/swizzin-update-backups/{app}/` before update
+- If update fails (download, extraction, or service start), previous version restored
+- Backup cleaned up after successful update or on system reboot

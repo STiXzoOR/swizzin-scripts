@@ -67,3 +67,13 @@ Add to:
 
 - Files overview in [docs/architecture.md](architecture.md)
 - App-specific documentation if complex enough to warrant its own section
+
+## 6. Update Testing
+
+When implementing `--update` for a new script:
+
+- [ ] Test `--update` updates the application correctly
+- [ ] Test `--update --full` performs complete reinstall
+- [ ] Test `--update --verbose` shows detailed output
+- [ ] Test rollback triggers on simulated failure (e.g., stop service before update completes)
+- [ ] Verify backup is cleaned up after successful update

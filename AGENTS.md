@@ -22,6 +22,7 @@ Swizzin installer scripts - bash installation scripts for integrating applicatio
 ## Subsystems
 
 - [Backup System](docs/subsystems/backup.md) - BorgBackup
+- [Update System](docs/subsystems/update-system.md) - `--update` flag with rollback
 - [Watchdog](docs/subsystems/watchdog.md) - Service health monitoring
 - [App Info Tool](docs/subsystems/app-info.md) - swizzin-app-info utility
 
