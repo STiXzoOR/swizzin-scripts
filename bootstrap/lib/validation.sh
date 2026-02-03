@@ -153,17 +153,23 @@ validate_disk_space() {
 }
 
 validate_memory() {
-    local min_memory_gb="${1:-2}"
+    local min_memory_gb="${1:-4}"
+    local warn_memory_gb="${2:-8}"
 
     local total_kb
     total_kb=$(grep MemTotal /proc/meminfo | awk '{print $2}')
     local total_gb=$(( total_kb / 1024 / 1024 ))
 
     if (( total_gb < min_memory_gb )); then
-        echo_warn "Low memory: ${total_gb}GB detected, ${min_memory_gb}GB recommended"
-        if ! ask "Continue anyway?" N; then
+        echo_error "Insufficient memory: ${total_gb}GB detected, ${min_memory_gb}GB minimum required"
+        echo_info "For streaming/transcoding workloads, 8GB+ is recommended"
+        if ! ask "Continue anyway? (Not recommended)" N; then
             exit 0
         fi
+    elif (( total_gb < warn_memory_gb )); then
+        echo_warn "Limited memory: ${total_gb}GB detected"
+        echo_info "For optimal streaming/transcoding, 8GB+ RAM is recommended"
+        echo_info "Concurrent transcoding may be limited with current memory"
     fi
 
     echo_debug "Memory check passed: ${total_gb}GB total"

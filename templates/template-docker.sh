@@ -181,6 +181,15 @@ _install_myapp() {
 	# CUSTOMIZE: Adjust environment variables and volumes for your app.
 	# Build the docker-compose.yml using a block redirect for clean YAML output.
 	# Use the heredoc for the static portion, then echo for dynamic parts.
+	#
+	# Resource limits (override with environment variables):
+	#   DOCKER_CPU_LIMIT - CPU limit (default: 4 cores)
+	#   DOCKER_MEM_LIMIT - Memory limit (default: 4G)
+	#   DOCKER_MEM_RESERVE - Memory reservation (default: 512M)
+	local cpu_limit="${DOCKER_CPU_LIMIT:-4}"
+	local mem_limit="${DOCKER_MEM_LIMIT:-4G}"
+	local mem_reserve="${DOCKER_MEM_RESERVE:-512M}"
+
 	{
 		cat <<COMPOSE
 services:
@@ -191,6 +200,13 @@ services:
     user: "${uid}:${gid}"
     ports:
       - "127.0.0.1:${app_port}:${app_container_port}"
+    deploy:
+      resources:
+        limits:
+          cpus: '${cpu_limit}'
+          memory: ${mem_limit}
+        reservations:
+          memory: ${mem_reserve}
     environment:
 COMPOSE
 		# CUSTOMIZE: Add your app's environment variables here
@@ -334,6 +350,14 @@ _update_myapp() {
 _systemd_myapp() {
 	echo_progress_start "Installing systemd service"
 
+	# Resource limits (can be customized via environment variables)
+	# SYSTEMD_MEM_MAX - Maximum memory (default: 4G)
+	# SYSTEMD_CPU_QUOTA - CPU quota percentage (default: 400% = 4 cores)
+	# SYSTEMD_TASKS_MAX - Max processes (default: 4096)
+	local mem_max="${SYSTEMD_MEM_MAX:-4G}"
+	local cpu_quota="${SYSTEMD_CPU_QUOTA:-400%}"
+	local tasks_max="${SYSTEMD_TASKS_MAX:-4096}"
+
 	cat >"/etc/systemd/system/${app_servicefile}" <<EOF
 [Unit]
 Description=${app_pretty}
@@ -349,6 +373,14 @@ WorkingDirectory=${app_dir}
 ExecStart=/usr/bin/docker compose up -d
 ExecStop=/usr/bin/docker compose down
 TimeoutStartSec=120
+TimeoutStopSec=30
+
+# Resource limits to prevent runaway processes
+MemoryMax=${mem_max}
+MemoryHigh=$(echo "${mem_max}" | sed 's/G$//')G
+CPUQuota=${cpu_quota}
+TasksMax=${tasks_max}
+LimitNOFILE=500000
 
 [Install]
 WantedBy=multi-user.target
