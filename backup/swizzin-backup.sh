@@ -200,6 +200,7 @@ declare -A SERVICE_STOP_CRITICAL=(
     ["jackett"]=1 ["nzbhydra"]=1
     ["overseerr"]=1 ["jellyseerr"]=1 ["seerr"]=1 ["ombi"]=1
     ["tautulli"]=1
+    ["jellyfin"]=1
 )
 
 #===============================================================================
