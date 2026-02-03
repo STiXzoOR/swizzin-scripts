@@ -372,11 +372,20 @@ server {
     proxy_redirect off;
     proxy_buffering off;
 
+    # Streaming timeouts (1 hour for long-running streams)
+    proxy_read_timeout 3600;
+    proxy_send_timeout 3600;
+    proxy_connect_timeout 60;
+
     ${csp_header}
 
     location / {
         include snippets/proxy.conf;
         proxy_pass http://127.0.0.1:${app_port}/;
+
+        # WebSocket support for Plex Together, sync notifications
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
 
         proxy_set_header X-Plex-Client-Identifier \$http_x_plex_client_identifier;
         proxy_set_header X-Plex-Device \$http_x_plex_device;
@@ -394,7 +403,15 @@ server {
 
     location /library/streams/ {
         proxy_pass http://127.0.0.1:${app_port};
-        proxy_pass_request_headers off;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_read_timeout 3600;
+        proxy_send_timeout 3600;
     }
 }
 VHOST

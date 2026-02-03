@@ -454,6 +454,11 @@ server {
 
     client_max_body_size 0;
 
+    # Streaming timeouts (1 hour for long-running streams)
+    proxy_read_timeout 3600;
+    proxy_send_timeout 3600;
+    proxy_connect_timeout 60;
+
     ${csp_header}
 
     location / {
@@ -482,6 +487,9 @@ server {
 
     location ~ (/jellyfin)?/socket {
         include /etc/nginx/snippets/proxy.conf;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
         if (\$http_user_agent ~ Web0S) {
             add_header Access-Control-Allow-Origin "luna://com.webos.service.config" always;
         }

@@ -274,14 +274,37 @@ server {
     ssl_certificate_key ${cert_dir}/key.pem;
     include snippets/ssl-params.conf;
 
+    client_max_body_size 0;
+
+    # Streaming timeouts (1 hour for long-running streams)
+    proxy_read_timeout 3600;
+    proxy_send_timeout 3600;
+    proxy_connect_timeout 60;
+
     ${csp_header}
 
     location / {
         include snippets/proxy.conf;
         proxy_pass http://127.0.0.1:${app_port}/;
 
+        # WebSocket support
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection \$http_connection;
+
         proxy_set_header Range \$http_range;
         proxy_set_header If-Range \$http_if_range;
+    }
+
+    # WebSocket endpoint for real-time updates
+    location /embywebsocket {
+        proxy_pass http://127.0.0.1:${app_port};
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
     }
 }
 VHOST
