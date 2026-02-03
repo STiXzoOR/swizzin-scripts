@@ -1,7 +1,7 @@
 #!/bin/bash
 # decypharr installer
 # STiXzoOR 2025
-# Usage: bash decypharr.sh [--update [--full] [--verbose]|--remove [--force]] [--register-panel]
+# Usage: bash decypharr.sh [--update [--full] [--verbose]|--remove [--force]] [--register-panel] [--fix-mounts]
 
 . /etc/swizzin/sources/globals.sh
 
@@ -137,6 +137,36 @@ _get_zurg_config() {
 			echo_info "Found zurg installation at: $zurg_mount"
 		fi
 	fi
+}
+
+# Prepare mount point directories with proper ownership
+# When rclone is enabled, Decypharr creates FUSE mounts for each debrid service
+# The mount points must be writable by the user running Decypharr
+_prepare_mount_points() {
+	local mount_base="$1"
+	local owner="$2"
+
+	# Known debrid services that Decypharr supports
+	local debrid_services=("realdebrid" "torbox" "alldebrid" "debridlink" "premiumize" "offcloud")
+
+	echo_progress_start "Preparing mount point directories"
+
+	# Create base mount path if it doesn't exist
+	if [ ! -d "$mount_base" ]; then
+		mkdir -p "$mount_base"
+	fi
+
+	# Create mount points for each debrid service with proper ownership
+	for service in "${debrid_services[@]}"; do
+		local mount_point="${mount_base}/${service}"
+		if [ ! -d "$mount_point" ]; then
+			mkdir -p "$mount_point"
+			_verbose "Created mount point: $mount_point"
+		fi
+		chown "$owner":"$owner" "$mount_point"
+	done
+
+	echo_progress_done "Mount points prepared with correct ownership"
 }
 
 _install_decypharr() {
@@ -392,7 +422,18 @@ _update_decypharr() {
 		systemctl stop "$app_servicefile" 2>/dev/null || true
 		echo_progress_done "Service stopped"
 
+		# Get mount path from swizdb for reinstall
+		local reinstall_mount_path
+		reinstall_mount_path=$(swizdb get "decypharr/mount_path" 2>/dev/null) || reinstall_mount_path="$app_default_mount"
+		app_mount_path="$reinstall_mount_path"
+
+		_get_zurg_config
 		_install_decypharr
+
+		# Prepare mount points when rclone is enabled (no zurg)
+		if [ -z "$zurg_mount" ]; then
+			_prepare_mount_points "$app_mount_path" "$user"
+		fi
 
 		echo_progress_start "Starting service"
 		systemctl start "$app_servicefile"
@@ -670,6 +711,33 @@ if [ "$1" = "--register-panel" ]; then
 	exit 0
 fi
 
+# Handle --fix-mounts flag (fix mount point permissions for existing installs)
+if [ "$1" = "--fix-mounts" ]; then
+	if [ ! -f "/install/.$app_lockname.lock" ]; then
+		echo_error "${app_name^} is not installed"
+		exit 1
+	fi
+
+	# Get mount path from swizdb
+	fix_mount_path=$(swizdb get "decypharr/mount_path" 2>/dev/null) || fix_mount_path="$app_default_mount"
+
+	echo_info "Fixing mount point permissions at: $fix_mount_path"
+	_prepare_mount_points "$fix_mount_path" "$user"
+
+	# Restart service to retry mounts
+	echo_progress_start "Restarting ${app_name^} service"
+	systemctl restart "$app_servicefile"
+	sleep 2
+	if systemctl is-active --quiet "$app_servicefile"; then
+		echo_progress_done "Service restarted"
+	else
+		echo_warn "Service may have issues, check: journalctl -u $app_servicefile"
+	fi
+
+	echo_success "Mount point permissions fixed"
+	exit 0
+fi
+
 # Check if already installed
 if [ -f "/install/.$app_lockname.lock" ]; then
 	echo_info "${app_name^} is already installed"
@@ -687,6 +755,13 @@ else
 	_get_zurg_config
 
 	_install_decypharr
+
+	# Prepare mount points when rclone is enabled (no zurg)
+	# This ensures the user has write access for FUSE mounts
+	if [ -z "$zurg_mount" ]; then
+		_prepare_mount_points "$app_mount_path" "$user"
+	fi
+
 	_systemd_decypharr
 	_nginx_decypharr
 
