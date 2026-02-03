@@ -15,6 +15,7 @@ Swizzin installer scripts - bash installation scripts for integrating applicatio
 
 - [Docker Apps](docs/apps/docker-apps.md) - Lingarr, LibreTranslate
 - [Media Servers](docs/apps/media-servers.md) - Plex, Emby, Jellyfin subdomain scripts
+- [Plex Tunnel](docs/apps/plex-tunnel.md) - Plex with VPN tunnel (Hetzner bypass)
 - [Organizr](docs/apps/organizr.md) - SSO gateway
 - [Multi-Instance](docs/apps/multi-instance.md) - Sonarr/Radarr instance management
 - [Zurg](docs/apps/zurg.md) - Real-Debrid WebDAV + rclone
