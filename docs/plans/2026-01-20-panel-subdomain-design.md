@@ -64,8 +64,9 @@ bash panel.sh --remove --force      # Remove without prompts
 
 ```nginx
 server {
-  listen 443 ssl http2 default_server;
-  listen [::]:443 ssl http2 default_server;
+  listen 443 ssl default_server;
+  listen [::]:443 ssl default_server;
+  http2 on;
   server_name _;
   ssl_certificate /etc/ssl/certs/ssl-cert-snakeoil.pem;
   ssl_certificate_key /etc/ssl/private/ssl-cert-snakeoil.key;
@@ -86,8 +87,9 @@ server {
 
 ```nginx
 server {
-  listen 443 ssl http2 default_server;
-  listen [::]:443 ssl http2 default_server;
+  listen 443 ssl default_server;
+  listen [::]:443 ssl default_server;
+  http2 on;
   server_name panel.example.com;
   ssl_certificate /etc/nginx/ssl/panel.example.com/fullchain.pem;
   ssl_certificate_key /etc/nginx/ssl/panel.example.com/key.pem;

@@ -125,8 +125,9 @@ server {
 }
 
 server {
-    listen 443 ssl http2;
-    listen [::]:443 ssl http2;
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
     server_name mb3admin.com;
 
     ssl_certificate /etc/nginx/ssl/mb3admin.com/fullchain.pem;

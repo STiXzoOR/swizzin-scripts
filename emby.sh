@@ -266,8 +266,9 @@ server {
 }
 
 server {
-    listen 443 ssl http2;
-    listen [::]:443 ssl http2;
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
     server_name $domain;
 
     ssl_certificate ${cert_dir}/fullchain.pem;
@@ -464,8 +465,9 @@ server {
 }
 
 server {
-    listen 443 ssl http2;
-    listen [::]:443 ssl http2;
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
     server_name mb3admin.com;
 
     ssl_certificate ${premiere_cert_dir}/fullchain.pem;

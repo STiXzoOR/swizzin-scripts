@@ -55,7 +55,8 @@ server {
 }
 
 server {
-    listen 443 ssl http2;
+    listen 443 ssl;
+    http2 on;
     server_name organizr.example.com;
 
     ssl_certificate /etc/nginx/ssl/organizr.example.com/fullchain.pem;

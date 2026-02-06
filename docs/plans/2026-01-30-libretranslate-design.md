@@ -213,7 +213,8 @@ Standard vhost - no `LT_URL_PREFIX` needed when on root:
 
 ```nginx
 server {
-    listen 443 ssl http2;
+    listen 443 ssl;
+    http2 on;
     server_name translate.example.com;
 
     ssl_certificate /etc/nginx/ssl/translate.example.com/fullchain.pem;
