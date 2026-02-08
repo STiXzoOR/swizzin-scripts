@@ -383,7 +383,7 @@ _nginx_huntarr() {
 			}
 
 			location ^~ /$app_baseurl/ {
-			    proxy_pass http://127.0.0.1:$app_port/;
+			    proxy_pass http://127.0.0.1:$app_port;
 			    proxy_set_header Host \$host;
 			    proxy_set_header X-Real-IP \$remote_addr;
 			    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
@@ -399,8 +399,8 @@ _nginx_huntarr() {
 			}
 
 			location ^~ /$app_baseurl/api {
-			    auth_request off;
-			    proxy_pass http://127.0.0.1:$app_port/api;
+			    auth_basic off;
+			    proxy_pass http://127.0.0.1:$app_port;
 			    proxy_set_header Host \$host;
 			    proxy_set_header X-Real-IP \$remote_addr;
 			    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
