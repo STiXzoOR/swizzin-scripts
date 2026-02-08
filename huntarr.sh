@@ -234,8 +234,8 @@ _update_huntarr() {
 	echo_progress_done "Service stopped"
 
 	echo_progress_start "Pulling latest code"
-	_verbose "Running: git -C ${app_dir} pull"
-	if ! su - "$user" -c "cd '${app_dir}' && git pull" >>"$log" 2>&1; then
+	_verbose "Running: git fetch + reset to origin/main"
+	if ! su - "$user" -c "cd '${app_dir}' && git fetch origin && git reset --hard origin/main" >>"$log" 2>&1; then
 		echo_error "Git pull failed"
 		_rollback_huntarr
 		exit 1
@@ -243,6 +243,18 @@ _update_huntarr() {
 	echo_progress_done "Code updated"
 
 	echo_progress_start "Updating dependencies"
+	# Regenerate pyproject.toml from updated requirements.txt
+	if [ -f "$app_dir/requirements.txt" ]; then
+		deps_array=$(grep -vE '^\s*#|^\s*$' "$app_dir/requirements.txt" | sed 's/\s*#.*//' | sed 's/pyyaml==6\.0$/pyyaml>=6.0.1/' | sed 's/.*/"&",/' | tr '\n' ' ' | sed 's/, $//')
+		cat >"$app_dir/pyproject.toml" <<PYPROJ
+[project]
+name = "huntarr"
+version = "0.0.0"
+requires-python = ">=3.9,<3.13"
+dependencies = [$deps_array]
+PYPROJ
+		chown "$user":"$user" "$app_dir/pyproject.toml"
+	fi
 	_verbose "Running: uv sync"
 	if ! su - "$user" -c "cd '${app_dir}' && uv sync" >>"$log" 2>&1; then
 		echo_error "Dependency update failed"
