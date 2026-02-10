@@ -361,6 +361,31 @@ class ArrAPI:
     def get_import_list_schema(self) -> List[dict]:
         return self._request("/importlist/schema")
 
+    def get_sync_targets(self, all_instances: List[Tuple[str, "ArrAPI"]]) -> List[str]:
+        """Get names of instances this one syncs FROM via RadarrImport/SonarrImport.
+        Returns list of instance names whose URLs match sync list baseUrls."""
+        # Build URL -> name mapping for all other instances
+        url_to_name = {}
+        for inst_name, other_api in all_instances:
+            if other_api is not self:
+                base = f"{other_api.url}{other_api.base_url}".rstrip("/").lower()
+                url_to_name[base] = inst_name
+
+        targets = []
+        try:
+            for il in self.get_import_lists():
+                impl = il.get("implementation", "")
+                if impl not in ("RadarrImport", "SonarrImport"):
+                    continue
+                for field in il.get("fields", []):
+                    if field.get("name") == "baseUrl" and field.get("value"):
+                        target = field["value"].rstrip("/").lower()
+                        if target in url_to_name:
+                            targets.append(url_to_name[target])
+        except Exception:
+            pass
+        return targets
+
 
 # =============================================================================
 # Arr Instance Discovery
@@ -985,13 +1010,27 @@ def main():
     total_added = 0
 
     # Sync movie lists to Radarr instances
-    # Skip variant instances (e.g., radarr-4k) if the base instance (radarr) exists
+    # Skip instances that sync from another instance (e.g., radarr-4k syncing from radarr)
     if radarr_apis and movie_lists:
         log(f"\n{Colors.BOLD}Syncing movie lists to Radarr...{Colors.NC}")
-        radarr_names = {name for name, _ in radarr_apis}
+        # Determine which instances are secondary (sync from a primary)
+        # If A syncs from B but B doesn't sync from A, A is secondary.
+        # If bidirectional, the base instance (shorter name) is primary.
+        sync_map = {n: api.get_sync_targets(radarr_apis) for n, api in radarr_apis}
+        skip_radarr = set()
+        for inst_name, targets in sync_map.items():
+            for target in targets:
+                target_syncs_back = inst_name in sync_map.get(target, [])
+                if not target_syncs_back:
+                    # Unidirectional: this instance is secondary
+                    skip_radarr.add(inst_name)
+                elif len(inst_name) > len(target):
+                    # Bidirectional: longer name (e.g., radarr-4k) is secondary
+                    skip_radarr.add(inst_name)
+
         for name, api in radarr_apis:
-            if name != "radarr" and "radarr" in radarr_names:
-                log_debug(f"  Skipping {name}: base instance 'radarr' handles sync")
+            if name in skip_radarr:
+                log(f"  Skipping {name}: syncs from another instance")
                 continue
 
             defaults = get_radarr_defaults(api, config)
@@ -1008,11 +1047,10 @@ def main():
 
     # Sync show lists to Sonarr instances
     # Route anime lists to anime instances, non-anime to regular instances
-    # Skip variant instances (e.g., sonarr-4k) if the base instance (sonarr) exists
+    # Skip instances that sync from another instance (e.g., sonarr-4k syncing from sonarr)
     if sonarr_apis and show_lists:
         log(f"\n{Colors.BOLD}Syncing show lists to Sonarr...{Colors.NC}")
         has_anime_instance = any("anime" in name for name, _ in sonarr_apis)
-        sonarr_names = {name for name, _ in sonarr_apis}
 
         if has_anime_instance:
             anime_shows = [lst for lst in show_lists if is_anime_list(lst)]
@@ -1022,12 +1060,20 @@ def main():
             anime_shows = []
             regular_shows = show_lists
 
+        # Determine which Sonarr instances are secondary
+        sync_map = {n: api.get_sync_targets(sonarr_apis) for n, api in sonarr_apis}
+        skip_sonarr = set()
+        for inst_name, targets in sync_map.items():
+            for target in targets:
+                target_syncs_back = inst_name in sync_map.get(target, [])
+                if not target_syncs_back:
+                    skip_sonarr.add(inst_name)
+                elif len(inst_name) > len(target):
+                    skip_sonarr.add(inst_name)
+
         for name, api in sonarr_apis:
-            # Anime instances always get synced (with anime-specific lists)
-            is_anime = "anime" in name
-            # Skip non-anime variant instances when the base instance exists
-            if not is_anime and name != "sonarr" and "sonarr" in sonarr_names:
-                log_debug(f"  Skipping {name}: base instance 'sonarr' handles sync")
+            if name in skip_sonarr:
+                log(f"  Skipping {name}: syncs from another instance")
                 continue
 
             defaults = get_sonarr_defaults(api, config, name)
@@ -1036,7 +1082,7 @@ def main():
                 continue
 
             # Anime instances get anime lists, regular instances get the rest
-            instance_lists = anime_shows if is_anime else regular_shows
+            instance_lists = anime_shows if "anime" in name else regular_shows
 
             added = sync_lists_to_instance(
                 name, api, instance_lists, max_shows, defaults,
