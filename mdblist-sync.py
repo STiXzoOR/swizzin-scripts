@@ -323,18 +323,21 @@ class ArrAPI:
                     return {}
                 return json.loads(raw)
         except HTTPError as e:
-            log_error(f"Arr API error: {e.code} {e.reason}")
-            log_error(f"  URL: {full_url}")
+            # Read error body and attach to exception for caller to inspect
+            error_msg = ""
             try:
                 error_body = e.read().decode()
                 if error_body:
                     try:
-                        error_json = json.loads(error_body)
-                        log_error(f"  Message: {error_json}")
+                        error_msg = json.loads(error_body)
                     except json.JSONDecodeError:
-                        log_error(f"  Response: {error_body[:500]}")
+                        error_msg = error_body[:500]
             except Exception:
                 pass
+            e.error_detail = error_msg
+            log_debug(f"Arr API error: {e.code} {e.reason} | {full_url}")
+            if error_msg:
+                log_debug(f"  Detail: {error_msg}")
             raise
         except URLError as e:
             log_error(f"Arr connection error: {e.reason}")
@@ -808,6 +811,18 @@ def sync_lists_to_instance(
                     "items": lst.get("items") or 0,
                     "added_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                 }
+            except HTTPError as e:
+                detail = getattr(e, "error_detail", "")
+                if e.code == 400 and detail:
+                    # Extract meaningful message from Sonarr/Radarr validation errors
+                    msgs = []
+                    if isinstance(detail, list):
+                        msgs = [d.get("errorMessage", "") for d in detail if isinstance(d, dict)]
+                    msg = msgs[0] if msgs else str(detail)
+                    log_warn(f"  Skipped '{lst['name']}' on {instance_name}: {msg[:120]}")
+                else:
+                    log_error(f"  Failed to add '{lst['name']}' to {instance_name}: {e.code} {e.reason}")
+                continue
             except Exception as e:
                 log_error(f"  Failed to add '{lst['name']}' to {instance_name}: {e}")
                 continue
