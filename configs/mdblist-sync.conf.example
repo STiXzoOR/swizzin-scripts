@@ -1,0 +1,119 @@
+# /opt/swizzin-extras/mdblist-sync.conf
+# Configuration for MDBList Auto-Sync
+#
+# Automatically discovers popular lists from MDBList.com and adds them as
+# import lists in Sonarr/Radarr so they handle polling and downloading.
+#
+# Get your free API key: https://mdblist.com/preferences/
+
+# ==============================================================================
+# MDBList API Key (REQUIRED)
+# ==============================================================================
+
+MDBLIST_API_KEY=""
+
+# ==============================================================================
+# List Discovery Settings
+# ==============================================================================
+
+# Minimum number of Trakt likes for a list to be added (default: 50)
+# Higher = more conservative, only well-known lists
+# Lower = more lists, potentially niche/low-quality
+MIN_LIKES=50
+
+# Minimum number of items in a list (default: 10)
+MIN_ITEMS=10
+
+# Maximum number of lists to manage per type
+# These are PER-INSTANCE limits (e.g., 15 movie lists in each Radarr instance)
+MAX_LISTS_MOVIES=15
+MAX_LISTS_SHOWS=15
+
+# Search terms for discovering lists (comma-separated)
+# Leave empty to only use top lists. Examples:
+# SEARCH_TERMS="trending,popular,netflix,best 2026,sci-fi,horror,anime"
+SEARCH_TERMS=""
+
+# Specific MDBList list IDs to always include (comma-separated)
+# These bypass MIN_LIKES and MIN_ITEMS filters
+# Find list IDs from the MDBList URL or API
+# PINNED_LISTS="1176,2194"
+PINNED_LISTS=""
+
+# Specific MDBList list IDs to never include (comma-separated)
+# BLOCKED_LISTS="12345,67890"
+BLOCKED_LISTS=""
+
+# ==============================================================================
+# Radarr Settings
+# ==============================================================================
+# These settings apply when creating import lists in Radarr.
+
+# Monitor setting: movieOnly, movieAndCollection, none
+RADARR_MONITOR="movieOnly"
+
+# Minimum availability: tba, announced, inCinemas, released
+RADARR_MIN_AVAILABILITY="released"
+
+# Search for movies when added to library
+RADARR_SEARCH_ON_ADD="true"
+
+# Quality profile name (leave empty to auto-detect first profile)
+# RADARR_QUALITY_PROFILE="HD-1080p"
+RADARR_QUALITY_PROFILE=""
+
+# Root folder path (leave empty to auto-detect first folder)
+# RADARR_ROOT_FOLDER="/mnt/media/movies"
+RADARR_ROOT_FOLDER=""
+
+# ==============================================================================
+# Sonarr Settings
+# ==============================================================================
+# These settings apply when creating import lists in Sonarr.
+
+# Monitor setting: all, future, missing, existing, pilot, firstSeason, latestSeason, none
+SONARR_MONITOR="all"
+
+# Series type: standard, daily, anime
+SONARR_SERIES_TYPE="standard"
+
+# Use season folders
+SONARR_SEASON_FOLDER="true"
+
+# Search for missing episodes when added
+SONARR_SEARCH_ON_ADD="true"
+
+# Quality profile name (leave empty to auto-detect)
+# SONARR_QUALITY_PROFILE="HD-1080p"
+SONARR_QUALITY_PROFILE=""
+
+# Root folder path (leave empty to auto-detect)
+# SONARR_ROOT_FOLDER="/mnt/media/tv"
+SONARR_ROOT_FOLDER=""
+
+# ==============================================================================
+# Instance Override
+# ==============================================================================
+# By default, all detected Radarr/Sonarr instances are used.
+# Override to target specific instances only (comma-separated).
+
+# RADARR_INSTANCES="radarr,radarr-4k"
+RADARR_INSTANCES=""
+
+# SONARR_INSTANCES="sonarr,sonarr-anime"
+SONARR_INSTANCES=""
+
+# ==============================================================================
+# Cleanup Settings
+# ==============================================================================
+
+# When running --cleanup, remove managed lists with fewer likes than this
+CLEANUP_MIN_LIKES=20
+
+# ==============================================================================
+# Advanced
+# ==============================================================================
+
+# Prefix for managed import list names (used to identify our lists)
+# Change this if it conflicts with your naming convention
+LIST_NAME_PREFIX="[mdblist-auto]"
