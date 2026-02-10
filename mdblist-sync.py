@@ -241,6 +241,7 @@ class MDBListAPI:
 
         req = Request(url)
         req.add_header("Accept", "application/json")
+        req.add_header("User-Agent", "mdblist-sync/1.0")
         try:
             with urlopen(req, timeout=30) as resp:
                 return json.loads(resp.read().decode())
