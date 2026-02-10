@@ -117,6 +117,16 @@ ARR_INSTANCES = {
     },
 }
 
+# Keywords that indicate an anime list (matched case-insensitively in name/description)
+ANIME_KEYWORDS = ["anime", "crunchyroll", "funimation", "anilist", "myanimelist", "mal top"]
+
+
+def is_anime_list(lst: dict) -> bool:
+    """Check if a list is anime-related based on its name and description."""
+    text = f"{lst.get('name', '')} {lst.get('description', '')}".lower()
+    return any(kw in text for kw in ANIME_KEYWORDS)
+
+
 # =============================================================================
 # Logging
 # =============================================================================
@@ -473,10 +483,19 @@ def get_radarr_defaults(api: ArrAPI, config: Dict[str, str]) -> Optional[dict]:
     }
 
 
-def get_sonarr_defaults(api: ArrAPI, config: Dict[str, str]) -> Optional[dict]:
-    """Get quality profile and root folder for Sonarr import lists."""
-    profile_name = config["SONARR_QUALITY_PROFILE"]
-    root_path = config["SONARR_ROOT_FOLDER"]
+def get_sonarr_defaults(api: ArrAPI, config: Dict[str, str], instance_name: str = "") -> Optional[dict]:
+    """Get quality profile and root folder for Sonarr import lists.
+    Supports per-instance overrides via SONARR_<SUFFIX>_QUALITY_PROFILE and
+    SONARR_<SUFFIX>_ROOT_FOLDER (e.g., SONARR_ANIME_QUALITY_PROFILE).
+    """
+    # Check for instance-specific config (e.g., sonarr-anime -> SONARR_ANIME_*)
+    suffix = instance_name.replace("sonarr-", "").replace("sonarr", "").upper()
+    if suffix:
+        profile_name = config.get(f"SONARR_{suffix}_QUALITY_PROFILE", "") or config["SONARR_QUALITY_PROFILE"]
+        root_path = config.get(f"SONARR_{suffix}_ROOT_FOLDER", "") or config["SONARR_ROOT_FOLDER"]
+    else:
+        profile_name = config["SONARR_QUALITY_PROFILE"]
+        root_path = config["SONARR_ROOT_FOLDER"]
 
     if not profile_name:
         profiles = api.get_quality_profiles()
@@ -501,11 +520,16 @@ def get_sonarr_defaults(api: ArrAPI, config: Dict[str, str]) -> Optional[dict]:
         root_path = folders[0]["path"]
         log_debug(f"Auto-selected root folder: {root_path}")
 
+    # Auto-set series type to "anime" for anime instances
+    series_type = config["SONARR_SERIES_TYPE"]
+    if "anime" in instance_name and series_type == "standard":
+        series_type = "anime"
+
     return {
         "qualityProfileId": profile_id,
         "rootFolderPath": root_path,
         "shouldMonitor": config["SONARR_MONITOR"],
-        "seriesType": config["SONARR_SERIES_TYPE"],
+        "seriesType": series_type,
         "seasonFolder": config["SONARR_SEASON_FOLDER"].lower() == "true",
         "searchForMissingEpisodes": config["SONARR_SEARCH_ON_ADD"].lower() == "true",
     }
@@ -515,10 +539,11 @@ def get_sonarr_defaults(api: ArrAPI, config: Dict[str, str]) -> Optional[dict]:
 # List Discovery
 # =============================================================================
 
-def discover_lists(mdb: MDBListAPI, config: Dict[str, str]) -> Tuple[List[dict], List[dict]]:
+def discover_lists(mdb: MDBListAPI, config: Dict[str, str], has_anime_instance: bool = False) -> Tuple[List[dict], List[dict]]:
     """
     Discover MDBList lists worth subscribing to.
     Returns (movie_lists, show_lists) sorted by likes descending.
+    When has_anime_instance is True, anime show lists bypass the likes threshold.
     """
     min_likes = int(config["MIN_LIKES"])
     min_items = int(config["MIN_ITEMS"])
@@ -590,9 +615,16 @@ def discover_lists(mdb: MDBListAPI, config: Dict[str, str]) -> Tuple[List[dict],
         likes = lst.get("likes") or 0
         items = lst.get("items") or 0
         is_pinned = lst.get("_pinned", False)
+        anime = is_anime_list(lst)
 
-        if not is_pinned and (likes < min_likes or items < min_items):
-            continue
+        # Anime show lists bypass likes threshold when an anime instance exists
+        # (anime lists on MDBList tend to have very few likes)
+        if not is_pinned:
+            if anime and has_anime_instance:
+                if items < min_items:
+                    continue
+            elif likes < min_likes or items < min_items:
+                continue
 
         mediatype = lst.get("mediatype", "")
         if mediatype == "movie":
@@ -945,16 +977,23 @@ def main():
 
     # --- Main sync ---
     log(f"\n{Colors.BOLD}Discovering lists from MDBList...{Colors.NC}")
-    movie_lists, show_lists = discover_lists(mdb, config)
+    has_anime_instance = any("anime" in name for name, _ in sonarr_apis)
+    movie_lists, show_lists = discover_lists(mdb, config, has_anime_instance)
 
     max_movies = int(config["MAX_LISTS_MOVIES"])
     max_shows = int(config["MAX_LISTS_SHOWS"])
     total_added = 0
 
     # Sync movie lists to Radarr instances
+    # Skip variant instances (e.g., radarr-4k) if the base instance (radarr) exists
     if radarr_apis and movie_lists:
         log(f"\n{Colors.BOLD}Syncing movie lists to Radarr...{Colors.NC}")
+        radarr_names = {name for name, _ in radarr_apis}
         for name, api in radarr_apis:
+            if name != "radarr" and "radarr" in radarr_names:
+                log_debug(f"  Skipping {name}: base instance 'radarr' handles sync")
+                continue
+
             defaults = get_radarr_defaults(api, config)
             if not defaults:
                 log_warn(f"Skipping {name}: could not determine defaults")
@@ -968,16 +1007,39 @@ def main():
             log(f"  {name}: {added} lists added")
 
     # Sync show lists to Sonarr instances
+    # Route anime lists to anime instances, non-anime to regular instances
+    # Skip variant instances (e.g., sonarr-4k) if the base instance (sonarr) exists
     if sonarr_apis and show_lists:
         log(f"\n{Colors.BOLD}Syncing show lists to Sonarr...{Colors.NC}")
+        has_anime_instance = any("anime" in name for name, _ in sonarr_apis)
+        sonarr_names = {name for name, _ in sonarr_apis}
+
+        if has_anime_instance:
+            anime_shows = [lst for lst in show_lists if is_anime_list(lst)]
+            regular_shows = [lst for lst in show_lists if not is_anime_list(lst)]
+            log_debug(f"  Split: {len(anime_shows)} anime lists, {len(regular_shows)} regular lists")
+        else:
+            anime_shows = []
+            regular_shows = show_lists
+
         for name, api in sonarr_apis:
-            defaults = get_sonarr_defaults(api, config)
+            # Anime instances always get synced (with anime-specific lists)
+            is_anime = "anime" in name
+            # Skip non-anime variant instances when the base instance exists
+            if not is_anime and name != "sonarr" and "sonarr" in sonarr_names:
+                log_debug(f"  Skipping {name}: base instance 'sonarr' handles sync")
+                continue
+
+            defaults = get_sonarr_defaults(api, config, name)
             if not defaults:
                 log_warn(f"Skipping {name}: could not determine defaults")
                 continue
 
+            # Anime instances get anime lists, regular instances get the rest
+            instance_lists = anime_shows if is_anime else regular_shows
+
             added = sync_lists_to_instance(
-                name, api, show_lists, max_shows, defaults,
+                name, api, instance_lists, max_shows, defaults,
                 build_sonarr_import_list, prefix, state, dry_run,
             )
             total_added += added

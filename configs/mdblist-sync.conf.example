@@ -88,6 +88,13 @@ SONARR_SEARCH_ON_ADD="true"
 # SONARR_QUALITY_PROFILE="HD-1080p"
 SONARR_QUALITY_PROFILE=""
 
+# Per-instance overrides for quality profile and root folder
+# Use SONARR_<SUFFIX>_QUALITY_PROFILE where <SUFFIX> is the part after "sonarr-"
+# (e.g., sonarr-anime -> SONARR_ANIME_*, sonarr-4k -> SONARR_4K_*)
+# SONARR_ANIME_QUALITY_PROFILE="[Anime] Remux-1080p"
+# SONARR_4K_QUALITY_PROFILE="Ultra-HD"
+# SONARR_ANIME_ROOT_FOLDER="/mnt/media/anime"
+
 # Root folder path (leave empty to auto-detect)
 # SONARR_ROOT_FOLDER="/mnt/media/tv"
 SONARR_ROOT_FOLDER=""
