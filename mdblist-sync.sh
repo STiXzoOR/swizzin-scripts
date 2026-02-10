@@ -10,10 +10,11 @@ set -euo pipefail
 # ==============================================================================
 
 SCRIPT_SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/mdblist-sync.py"
-SCRIPT_DST="/opt/swizzin-extras/mdblist-sync.py"
+SCRIPT_DST="/usr/local/bin/mdblist-sync"
 CONFIG_EXAMPLE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/configs/mdblist-sync.conf.example"
 CONFIG_DST="/opt/swizzin-extras/mdblist-sync.conf"
 STATE_FILE="/opt/swizzin-extras/mdblist-sync.state.json"
+LEGACY_DST="/opt/swizzin-extras/mdblist-sync.py"
 SERVICE_NAME="mdblist-sync"
 LOG_FILE="/var/log/mdblist-sync.log"
 
@@ -70,6 +71,12 @@ _install() {
     cp "$SCRIPT_SRC" "$SCRIPT_DST"
     chmod +x "$SCRIPT_DST"
     echo_ok "Script deployed to $SCRIPT_DST"
+
+    # Clean up legacy location
+    if [[ -f "$LEGACY_DST" ]]; then
+        rm -f "$LEGACY_DST"
+        echo_info "Removed legacy script at $LEGACY_DST"
+    fi
 
     # Deploy config template
     if [[ ! -f "$CONFIG_DST" ]]; then
@@ -279,7 +286,7 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/python3 ${SCRIPT_DST}
+ExecStart=${SCRIPT_DST}
 Environment=MDBLIST_SYNC_CONFIG=${CONFIG_DST}
 Environment=MDBLIST_SYNC_STATE=${STATE_FILE}
 StandardOutput=append:${LOG_FILE}
@@ -311,7 +318,7 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/python3 ${SCRIPT_DST} --cleanup
+ExecStart=${SCRIPT_DST} --cleanup
 Environment=MDBLIST_SYNC_CONFIG=${CONFIG_DST}
 Environment=MDBLIST_SYNC_STATE=${STATE_FILE}
 StandardOutput=append:${LOG_FILE}
@@ -374,6 +381,7 @@ _remove() {
 
     # Remove script (keep config and state for re-install)
     rm -f "$SCRIPT_DST"
+    rm -f "$LEGACY_DST"
     echo_ok "Script removed"
 
     echo_info "Config preserved at: $CONFIG_DST"
@@ -397,7 +405,7 @@ _run() {
         exit 1
     fi
     MDBLIST_SYNC_CONFIG="$CONFIG_DST" MDBLIST_SYNC_STATE="$STATE_FILE" \
-        python3 "$SCRIPT_DST" "$@"
+        "$SCRIPT_DST" "$@"
 }
 
 # ==============================================================================
