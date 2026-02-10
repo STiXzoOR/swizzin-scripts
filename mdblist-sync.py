@@ -49,15 +49,15 @@ DEFAULTS = {
     # MDBList API key - REQUIRED
     "MDBLIST_API_KEY": "",
     # Discovery: minimum likes for a list to be considered
-    "MIN_LIKES": "50",
+    "MIN_LIKES": "20",
     # Discovery: minimum items in a list
-    "MIN_ITEMS": "10",
+    "MIN_ITEMS": "5",
     # Maximum number of lists to manage per app type (movie/show)
-    "MAX_LISTS_MOVIES": "15",
-    "MAX_LISTS_SHOWS": "15",
+    "MAX_LISTS_MOVIES": "20",
+    "MAX_LISTS_SHOWS": "20",
     # Search terms for discovering lists (comma-separated)
-    # Leave empty to only use top lists
-    "SEARCH_TERMS": "",
+    # Covers streaming platforms, genres, and popular categories
+    "SEARCH_TERMS": "netflix,disney,hbo,amazon prime,hulu,apple tv,paramount,peacock,crunchyroll,trending,top rated,imdb,anime,sci-fi,horror,thriller,documentary,romance,comedy,action,crime,new releases,best 2026,oscar,mystery,fantasy",
     # Specific list IDs to always include (comma-separated MDBList list IDs)
     "PINNED_LISTS": "",
     # Specific list IDs to never include (comma-separated MDBList list IDs)
@@ -587,8 +587,8 @@ def discover_lists(mdb: MDBListAPI, config: Dict[str, str]) -> Tuple[List[dict],
             log_debug(f"  Blocked list: {lst['name']} (id={list_id})")
             continue
 
-        likes = lst.get("likes", 0)
-        items = lst.get("items", 0)
+        likes = lst.get("likes") or 0
+        items = lst.get("items") or 0
         is_pinned = lst.get("_pinned", False)
 
         if not is_pinned and (likes < min_likes or items < min_items):
@@ -603,8 +603,8 @@ def discover_lists(mdb: MDBListAPI, config: Dict[str, str]) -> Tuple[List[dict],
             log_debug(f"  Skipping list '{lst.get('name', '?')}': unsupported mediatype '{mediatype}'")
 
     # Sort by likes descending
-    movie_lists.sort(key=lambda x: x.get("likes", 0), reverse=True)
-    show_lists.sort(key=lambda x: x.get("likes", 0), reverse=True)
+    movie_lists.sort(key=lambda x: x.get("likes") or 0, reverse=True)
+    show_lists.sort(key=lambda x: x.get("likes") or 0, reverse=True)
 
     log(f"Discovered {len(movie_lists)} movie lists, {len(show_lists)} show lists (after filters)")
     return movie_lists, show_lists
@@ -747,8 +747,8 @@ def sync_lists_to_instance(
                     "instance": instance_name,
                     "name": lst["name"],
                     "url": list_url,
-                    "likes": lst.get("likes", 0),
-                    "items": lst.get("items", 0),
+                    "likes": lst.get("likes") or 0,
+                    "items": lst.get("items") or 0,
                     "added_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                 }
             except Exception as e:
@@ -795,7 +795,7 @@ def cleanup_stale_lists(
         try:
             info = mdb.get_list_info(state_entry["mdblist_id"])
             if isinstance(info, list) and info:
-                current_likes = info[0].get("likes", 0)
+                current_likes = info[0].get("likes") or 0
             else:
                 current_likes = 0
         except Exception:

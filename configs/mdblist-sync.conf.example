@@ -16,23 +16,24 @@ MDBLIST_API_KEY=""
 # List Discovery Settings
 # ==============================================================================
 
-# Minimum number of Trakt likes for a list to be added (default: 50)
+# Minimum number of Trakt likes for a list to be added (default: 20)
 # Higher = more conservative, only well-known lists
 # Lower = more lists, potentially niche/low-quality
-MIN_LIKES=50
+MIN_LIKES=20
 
-# Minimum number of items in a list (default: 10)
-MIN_ITEMS=10
+# Minimum number of items in a list (default: 5)
+MIN_ITEMS=5
 
 # Maximum number of lists to manage per type
-# These are PER-INSTANCE limits (e.g., 15 movie lists in each Radarr instance)
-MAX_LISTS_MOVIES=15
-MAX_LISTS_SHOWS=15
+# These are PER-INSTANCE limits (e.g., 20 movie lists in each Radarr instance)
+MAX_LISTS_MOVIES=20
+MAX_LISTS_SHOWS=20
 
 # Search terms for discovering lists (comma-separated)
-# Leave empty to only use top lists. Examples:
-# SEARCH_TERMS="trending,popular,netflix,best 2026,sci-fi,horror,anime"
-SEARCH_TERMS=""
+# Default covers major streaming platforms, genres, and popular categories.
+# Set to empty to only use top lists, or customize with your own terms.
+# SEARCH_TERMS=""
+SEARCH_TERMS="netflix,disney,hbo,amazon prime,hulu,apple tv,paramount,peacock,crunchyroll,trending,top rated,imdb,anime,sci-fi,horror,thriller,documentary,romance,comedy,action,crime,new releases,best 2026,oscar,mystery,fantasy"
 
 # Specific MDBList list IDs to always include (comma-separated)
 # These bypass MIN_LIKES and MIN_ITEMS filters
