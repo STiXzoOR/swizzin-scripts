@@ -172,8 +172,15 @@ _add_restart_timestamp() {
 _notify_log_warn() { log_warn "$1"; }
 
 # shellcheck source=../lib/notifications.sh
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-. "${SCRIPT_DIR}/../lib/notifications.sh"
+_notifications_lib="/opt/swizzin-extras/lib/notifications.sh"
+[[ -f "$_notifications_lib" ]] || _notifications_lib="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/notifications.sh"
+if [[ ! -f "$_notifications_lib" ]]; then
+    echo "ERROR: notifications.sh not found (tried /opt/swizzin-extras/lib/ and repo-relative path)" >&2
+    echo "Re-run the watchdog installer to deploy the notifications library." >&2
+    exit 1
+fi
+. "$_notifications_lib"
+unset _notifications_lib
 NOTIFY_RATE_DIR="$STATE_DIR"
 
 # ==============================================================================
@@ -312,15 +319,17 @@ _run_watchdog() {
         log_error "Max restarts ($MAX_RESTARTS in ${window_minutes}min) reached, entering backoff"
         BACKOFF_UNTIL=$((now + COOLDOWN_WINDOW))
         _save_state
-        _should_notify "$SERVICE_NAME" \
-            && _notify "$APP_NAME Watchdog" "Max restarts ($MAX_RESTARTS in ${window_minutes}min) reached. Giving up until manual intervention." "error"
+        if _should_notify "$SERVICE_NAME"; then
+            _notify "$APP_NAME Watchdog" "Max restarts ($MAX_RESTARTS in ${window_minutes}min) reached. Giving up until manual intervention." "error"
+        fi
         return 1
     fi
 
     # Attempt restart
     local attempt=$((RESTART_COUNT + 1))
-    _should_notify "$SERVICE_NAME" \
-        && _notify "$APP_NAME Watchdog" "Service unhealthy, restarting (attempt $attempt/$MAX_RESTARTS)" "warning"
+    if _should_notify "$SERVICE_NAME"; then
+        _notify "$APP_NAME Watchdog" "Service unhealthy, restarting (attempt $attempt/$MAX_RESTARTS)" "warning"
+    fi
 
     if _restart_service; then
         _add_restart_timestamp

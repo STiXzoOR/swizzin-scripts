@@ -19,8 +19,22 @@
 # ==============================================================================
 
 # Internal warning logger - override _notify_log_warn before sourcing to customize
-_notify_log_warn() {
-    echo "[WARN] $1" >&2
+if ! declare -f _notify_log_warn &>/dev/null; then
+    _notify_log_warn() {
+        echo "[WARN] $1" >&2
+    }
+fi
+
+# Escape a string for safe embedding in a JSON value.
+# Handles: backslash, double-quote, newline, carriage return, tab.
+_json_escape() {
+    local s="$1"
+    s="${s//\\/\\\\}"
+    s="${s//\"/\\\"}"
+    s="${s//$'\n'/\\n}"
+    s="${s//$'\r'/\\r}"
+    s="${s//$'\t'/\\t}"
+    printf '%s' "$s"
 }
 
 _notify_discord() {
@@ -36,19 +50,12 @@ _notify_discord() {
         *) color=3447003 ;;        # blue
     esac
 
+    local safe_title safe_message
+    safe_title=$(_json_escape "$title")
+    safe_message=$(_json_escape "$message")
+
     local payload
-    payload=$(
-        cat <<EOF
-{
-    "embeds": [{
-        "title": "$title",
-        "description": "$message",
-        "color": $color,
-        "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-    }]
-}
-EOF
-    )
+    payload="{\"embeds\":[{\"title\":\"${safe_title}\",\"description\":\"${safe_message}\",\"color\":${color},\"timestamp\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}]}"
 
     curl -sf -H "Content-Type: application/json" \
         -d "$payload" \
@@ -87,9 +94,13 @@ _notify_notifiarr() {
         *) event="info" ;;
     esac
 
+    local safe_title safe_message
+    safe_title=$(_json_escape "$title")
+    safe_message=$(_json_escape "$message")
+
     curl -sf --config <(printf 'header = "x-api-key: %s"' "$NOTIFIARR_API_KEY") \
         -H "Content-Type: application/json" \
-        -d "{\"event\": \"$event\", \"title\": \"$title\", \"message\": \"$message\"}" \
+        -d "{\"event\":\"${event}\",\"title\":\"${safe_title}\",\"message\":\"${safe_message}\"}" \
         "https://notifiarr.com/api/v1/notification/passthrough" >/dev/null 2>&1 || _notify_log_warn "Notifiarr notification failed"
 }
 

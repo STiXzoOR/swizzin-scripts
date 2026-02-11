@@ -30,25 +30,10 @@ profiles_py="/opt/swizzin/core/custom/profiles.py"
 organizr_config="/opt/swizzin-extras/organizr-auth.conf"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PANEL_HELPER_CACHE="/opt/swizzin-extras/panel_helpers.sh"
 
 # ==============================================================================
 # Helper Functions
 # ==============================================================================
-
-_load_panel_helper() {
-    # Prefer local repo copy (no network dependency, no supply chain risk)
-    if [[ -f "${SCRIPT_DIR}/panel_helpers.sh" ]]; then
-        . "${SCRIPT_DIR}/panel_helpers.sh"
-        return
-    fi
-    # Fallback to cached copy from a previous repo-based run
-    if [[ -f "$PANEL_HELPER_CACHE" ]]; then
-        . "$PANEL_HELPER_CACHE"
-        return
-    fi
-    echo_info "panel_helpers.sh not found; skipping panel integration"
-}
 
 _get_owner() {
     if ! SEERR_OWNER="$(swizdb get "$app_name/owner" 2>/dev/null)"; then
@@ -547,7 +532,7 @@ _revert_subdomain() {
 # ==============================================================================
 
 _remove() {
-    local force="$1"
+    local force="${1:-}"
     if [ "$force" != "--force" ] && [ ! -f "/install/.${app_lockname}.lock" ]; then
         echo_error "${app_name^} is not installed (use --force to override)"
         exit 1
@@ -679,7 +664,7 @@ case "${1:-}" in
         esac
         ;;
     "--remove")
-        _remove "$2"
+        _remove "${2:-}"
         ;;
     "--register-panel")
         if [ ! -f "/install/.${app_lockname}.lock" ]; then

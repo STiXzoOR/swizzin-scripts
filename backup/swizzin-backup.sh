@@ -278,7 +278,10 @@ _generate_size_excludes() {
 _notify_log_warn() { log "WARNING: $1"; }
 
 # shellcheck source=../lib/notifications.sh
-. "$(dirname "${BASH_SOURCE[0]}")/../lib/notifications.sh"
+_notifications_lib="/usr/local/lib/swizzin/notifications.sh"
+[[ -f "$_notifications_lib" ]] || _notifications_lib="$(dirname "${BASH_SOURCE[0]}")/../lib/notifications.sh"
+. "$_notifications_lib"
+unset _notifications_lib
 
 #===============================================================================
 # SERVICE MANAGEMENT

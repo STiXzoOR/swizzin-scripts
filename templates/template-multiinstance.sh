@@ -519,7 +519,7 @@ case "${1:-}" in
         _list_instances
         ;;
     "--register-panel")
-        mapfile -t instances < <(_get_instances)
+        read -ra instances <<<"$(_get_instances)"
         if [[ ${#instances[@]} -eq 0 ]]; then
             echo_info "No ${app_pretty} instances installed"
             exit 0

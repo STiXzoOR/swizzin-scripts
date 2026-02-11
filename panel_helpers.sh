@@ -1,11 +1,11 @@
 #!/bin/bash
 set -euo pipefail
 # Swizzin panel helper
-# Defines: panel_register_app, ensures placeholder icon exists
+# Defines: panel_register_app, panel_unregister_app
 
 PLACEHOLDER_ICON_URL="https://raw.githubusercontent.com/swizzin/swizzin_dashboard/refs/heads/master/static/img/favicon/android-chrome-192x192.png"
 
-# Ensure placeholder icon is available
+# Ensure placeholder icon is available (called on demand, not at source-time)
 _ensure_placeholder_icon() {
     # Icons must be in Swizzin's static directory for panel to find them
     local icons_dir="/opt/swizzin/static/img/apps"
@@ -14,9 +14,6 @@ _ensure_placeholder_icon() {
         curl -fsSL "$PLACEHOLDER_ICON_URL" -o "$icons_dir/placeholder.png" >/dev/null 2>&1 || true
     fi
 }
-
-# Download placeholder on source
-_ensure_placeholder_icon
 
 panel_register_app() {
     local name="$1"         # e.g. "seerr"
@@ -37,6 +34,7 @@ panel_register_app() {
     [ ! -f "$profiles" ] && return 0
 
     mkdir -p "$icons_dir"
+    _ensure_placeholder_icon
 
     # Optional icon download
     if [ -n "$icon_url" ] && [ ! -f "$icons_dir/${img_name}.png" ]; then

@@ -166,6 +166,17 @@ _install_watchdog_engine() {
     cp "$WATCHDOG_ENGINE" "$WATCHDOG_DEST"
     chmod +x "$WATCHDOG_DEST"
 
+    # Deploy shared notifications library alongside watchdog
+    local notif_source="${SCRIPT_DIR}/../lib/notifications.sh"
+    if [[ -f "$notif_source" ]]; then
+        mkdir -p "$INSTALL_DIR/lib"
+        cp "$notif_source" "$INSTALL_DIR/lib/notifications.sh"
+        chmod 644 "$INSTALL_DIR/lib/notifications.sh"
+        echo_success "Notifications library installed: $INSTALL_DIR/lib/notifications.sh"
+    else
+        echo_warn "Notifications library not found: $notif_source"
+    fi
+
     echo_success "Watchdog engine installed: $WATCHDOG_DEST"
 }
 

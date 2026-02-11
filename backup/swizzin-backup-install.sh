@@ -25,6 +25,9 @@ readonly RESTORE_SCRIPT="/usr/local/bin/swizzin-restore.sh"
 readonly SERVICE_FILE="/etc/systemd/system/swizzin-backup.service"
 readonly TIMER_FILE="/etc/systemd/system/swizzin-backup.timer"
 readonly LOGROTATE_FILE="/etc/logrotate.d/swizzin-backup"
+readonly VERIFY_SERVICE_FILE="/etc/systemd/system/swizzin-backup-verify.service"
+readonly VERIFY_TIMER_FILE="/etc/systemd/system/swizzin-backup-verify.timer"
+readonly NOTIFICATIONS_LIB="/usr/local/lib/swizzin/notifications.sh"
 
 # State shared across setup steps
 REMOTE_USER=""
@@ -688,6 +691,8 @@ _deploy_files() {
         ["swizzin-excludes.txt"]="$EXCLUDES_TARGET"
         ["swizzin-backup.service"]="$SERVICE_FILE"
         ["swizzin-backup.timer"]="$TIMER_FILE"
+        ["swizzin-backup-verify.service"]="$VERIFY_SERVICE_FILE"
+        ["swizzin-backup-verify.timer"]="$VERIFY_TIMER_FILE"
         ["swizzin-backup-logrotate"]="$LOGROTATE_FILE"
     )
 
@@ -697,6 +702,8 @@ _deploy_files() {
         ["swizzin-excludes.txt"]="644"
         ["swizzin-backup.service"]="644"
         ["swizzin-backup.timer"]="644"
+        ["swizzin-backup-verify.service"]="644"
+        ["swizzin-backup-verify.timer"]="644"
         ["swizzin-backup-logrotate"]="644"
     )
 
@@ -709,7 +716,7 @@ _deploy_files() {
 
         if [[ ! -f "$source_path" ]]; then
             echo_error "Source file not found: $source_path"
-            (( failed++ ))
+            (( failed++ )) || true
             continue
         fi
 
@@ -718,6 +725,18 @@ _deploy_files() {
         chmod "$mode" "$target_path"
         echo_success "Deployed: $target_path"
     done
+
+    # Deploy shared notifications library
+    local notif_source="${script_dir}/../lib/notifications.sh"
+    if [[ -f "$notif_source" ]]; then
+        mkdir -p "$(dirname "$NOTIFICATIONS_LIB")"
+        cp "$notif_source" "$NOTIFICATIONS_LIB"
+        chmod 644 "$NOTIFICATIONS_LIB"
+        echo_success "Deployed: $NOTIFICATIONS_LIB"
+    else
+        echo_error "Source file not found: $notif_source"
+        (( failed++ )) || true
+    fi
 
     if (( failed > 0 )); then
         echo_error "$failed file(s) failed to deploy"
@@ -763,11 +782,15 @@ _enable_timer() {
 
     echo_progress_start "Enabling swizzin-backup.timer"
     systemctl enable --now swizzin-backup.timer >/dev/null 2>&1
-    echo_progress_done "Timer enabled"
+    echo_progress_done "Backup timer enabled"
+
+    echo_progress_start "Enabling swizzin-backup-verify.timer"
+    systemctl enable --now swizzin-backup-verify.timer >/dev/null 2>&1
+    echo_progress_done "Verify timer enabled (weekly)"
 
     echo ""
-    echo_info "Scheduled backup times:"
-    systemctl list-timers swizzin-backup.timer --no-pager 2>/dev/null || true
+    echo_info "Scheduled times:"
+    systemctl list-timers swizzin-backup.timer swizzin-backup-verify.timer --no-pager 2>/dev/null || true
 }
 
 # ==============================================================================
@@ -811,7 +834,8 @@ _show_summary() {
     echo "  URL: ${BORG_REPO_URL:-<not set>}"
     echo ""
     echo -e "${BOLD}Schedule:${NC}"
-    echo "  Daily at 4:00 AM (±30 min jitter)"
+    echo "  Backup:  Daily at 4:00 AM (±30 min jitter)"
+    echo "  Verify:  Weekly on Sunday at 4:00 AM (±30 min jitter)"
     echo ""
     echo -e "${BOLD}Quick commands:${NC}"
     echo "  swizzin-backup.sh              # Run backup"
@@ -962,11 +986,13 @@ _remove() {
         exit 0
     fi
 
-    # Stop and disable timer
-    echo_progress_start "Stopping timer"
+    # Stop and disable timers
+    echo_progress_start "Stopping timers"
     systemctl stop swizzin-backup.timer 2>/dev/null || true
     systemctl disable swizzin-backup.timer 2>/dev/null || true
-    echo_progress_done "Timer stopped and disabled"
+    systemctl stop swizzin-backup-verify.timer 2>/dev/null || true
+    systemctl disable swizzin-backup-verify.timer 2>/dev/null || true
+    echo_progress_done "Timers stopped and disabled"
 
     # Remove deployed files
     local files_to_remove=(
@@ -975,7 +1001,10 @@ _remove() {
         "$EXCLUDES_TARGET"
         "$SERVICE_FILE"
         "$TIMER_FILE"
+        "$VERIFY_SERVICE_FILE"
+        "$VERIFY_TIMER_FILE"
         "$LOGROTATE_FILE"
+        "$NOTIFICATIONS_LIB"
     )
 
     for f in "${files_to_remove[@]}"; do
@@ -984,6 +1013,9 @@ _remove() {
             echo_success "Removed: $f"
         fi
     done
+
+    # Clean up empty parent directory left by notifications library
+    rmdir "$(dirname "$NOTIFICATIONS_LIB")" 2>/dev/null || true
 
     systemctl daemon-reload 2>/dev/null || true
     echo_success "systemd reloaded"
