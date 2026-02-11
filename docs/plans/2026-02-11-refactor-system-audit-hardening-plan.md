@@ -632,11 +632,11 @@ trap '' PIPE
 
 **Implementation:**
 
-- [ ] Add trap template to all 5 templates first
-- [ ] Set `_cleanup_needed=true` at the start of the install flow
-- [ ] Set `_nginx_config_written`, `_systemd_unit_written` etc. as each step completes
-- [ ] Set `_cleanup_needed=false` at the very end (successful completion)
-- [ ] Propagate to all installer scripts (same grouping as 3.1)
+- [x] Add trap template to all 5 templates (binary, python, docker, subdomain, multiinstance)
+- [ ] Set `_cleanup_needed=true` at the start of the install flow (per-script follow-up)
+- [ ] Set `_nginx_config_written`, `_systemd_unit_written` etc. as each step completes (per-script follow-up)
+- [ ] Set `_cleanup_needed=false` at the very end (successful completion) (per-script follow-up)
+- [ ] Propagate to all installer scripts (per-script follow-up)
 
 #### 3.3 Config Overwrite Guards
 
