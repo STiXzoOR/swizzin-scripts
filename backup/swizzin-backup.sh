@@ -27,7 +27,7 @@
 # STiXzoOR custom apps:
 #   Multi-instance sonarr/radarr, zurg, decypharr, notifiarr, byparr,
 #   flaresolverr, huntarr, subgen, lingarr, cleanuparr, seerr, overseerr, jellyseerr,
-#   mdblist-sync
+#   mdblist-sync, mdblistarr
 #===============================================================================
 
 set -euo pipefail
@@ -158,6 +158,9 @@ declare -A SERVICE_TYPES=(
     ["lingarr"]="system"
     ["libretranslate"]="system"
 
+    # MDBList Integration
+    ["mdblistarr"]="system"
+
     # Real-Debrid
     ["zurg"]="system"
     ["rclone-zurg"]="system"
@@ -187,7 +190,7 @@ SERVICE_STOP_ORDER=(
     flood deluge deluged deluge-web qbittorrent rtorrent transmission
     nzbget sabnzbd
     # Utilities
-    filebrowser syncthing pyload netdata subgen lingarr libretranslate
+    filebrowser syncthing pyload netdata subgen lingarr libretranslate mdblistarr
     # Real-Debrid (stop last, start first)
     zurg decypharr
     # Never stop: rclone-zurg, organizr, nextcloud, nginx, panel
@@ -202,6 +205,7 @@ declare -A SERVICE_STOP_CRITICAL=(
     ["overseerr"]=1 ["jellyseerr"]=1 ["seerr"]=1 ["ombi"]=1
     ["tautulli"]=1
     ["jellyfin"]=1
+    ["mdblistarr"]=1
 )
 
 #===============================================================================

@@ -96,6 +96,7 @@ declare -A APP_PATHS=(
     ["flaresolverr"]="home/*/.config/FlareSolverr"
     ["subgen"]="home/*/.config/Subgen"
     ["lingarr"]="opt/lingarr/config"
+    ["mdblistarr"]="opt/mdblistarr/db"
     ["zurg"]="home/*/.config/zurg"
     ["mdblist-sync"]="opt/swizzin-extras"
 
@@ -133,6 +134,7 @@ declare -A SERVICE_TYPES=(
     ["decypharr"]="system" ["notifiarr"]="system" ["huntarr"]="system"
     ["cleanuparr"]="system" ["byparr"]="system" ["flaresolverr"]="system"
     ["subgen"]="system" ["lingarr"]="system" ["libretranslate"]="system"
+    ["mdblistarr"]="system"
     ["zurg"]="system" ["rclone-zurg"]="system"
     ["netdata"]="system" ["organizr"]="system" ["nextcloud"]="system"
 )

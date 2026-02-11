@@ -269,6 +269,10 @@ home/*/.cache/whisper/**
 # Keep config (SQLite DB at opt/lingarr/config/), exclude docker-compose.yml (recreated by installer)
 opt/lingarr/docker-compose.yml
 
+# === MDBLISTARR ===
+# Keep db (SQLite DB at opt/mdblistarr/db/), exclude docker-compose.yml (recreated by installer)
+opt/mdblistarr/docker-compose.yml
+
 # === CLEANUPARR ===
 opt/cleanuparr/logs
 opt/cleanuparr/logs/**
