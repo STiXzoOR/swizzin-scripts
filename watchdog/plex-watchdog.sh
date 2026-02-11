@@ -1,7 +1,7 @@
 #!/bin/bash
-# emby-watchdog.sh - Emby watchdog installer/manager
+# plex-watchdog.sh - Plex watchdog installer/manager
 # STiXzoOR 2026
-# Usage: emby-watchdog.sh [--install|--remove|--status|--reset]
+# Usage: plex-watchdog.sh [--install|--remove|--status|--reset]
 
 set -euo pipefail
 
@@ -12,24 +12,24 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WATCHDOG_ENGINE="$SCRIPT_DIR/watchdog.sh"
 GLOBAL_CONFIG_EXAMPLE="$SCRIPT_DIR/configs/watchdog.conf.example"
-SERVICE_CONFIG_EXAMPLE="$SCRIPT_DIR/configs/emby-watchdog.conf.example"
+SERVICE_CONFIG_EXAMPLE="$SCRIPT_DIR/configs/plex-watchdog.conf.example"
 
 INSTALL_DIR="/opt/swizzin-extras"
 WATCHDOG_DEST="$INSTALL_DIR/watchdog.sh"
 GLOBAL_CONFIG="$INSTALL_DIR/watchdog.conf"
 CONFIG_DIR="$INSTALL_DIR/watchdog.d"
-SERVICE_CONFIG="$CONFIG_DIR/emby.conf"
+SERVICE_CONFIG="$CONFIG_DIR/plex.conf"
 
 LOG_DIR="/var/log/watchdog"
 STATE_DIR="/var/lib/watchdog"
-LOG_FILE="$LOG_DIR/emby.log"
-STATE_FILE="$STATE_DIR/emby.state"
-LOCK_FILE="$STATE_DIR/emby.lock"
+LOG_FILE="$LOG_DIR/plex.log"
+STATE_FILE="$STATE_DIR/plex.state"
+LOCK_FILE="$STATE_DIR/plex.lock"
 
-CRON_FILE="/etc/cron.d/emby-watchdog"
-SERVICE_NAME="emby-server"
-APP_NAME="Emby"
-HEALTH_URL="http://127.0.0.1:8096/emby/System/Info/Public"
+CRON_FILE="/etc/cron.d/plex-watchdog"
+SERVICE_NAME="plexmediaserver"
+APP_NAME="Plex"
+HEALTH_URL="http://127.0.0.1:32400/identity"
 
 # ==============================================================================
 # Helper Functions
@@ -65,9 +65,9 @@ _check_root() {
     fi
 }
 
-_check_emby_installed() {
-    if [[ ! -f "/install/.emby.lock" ]]; then
-        echo_error "Emby is not installed. Install it first with: box install emby"
+_check_plex_installed() {
+    if [[ ! -f "/install/.plex.lock" ]]; then
+        echo_error "Plex is not installed. Install it first with: bash plex.sh"
         exit 1
     fi
 }
@@ -139,21 +139,21 @@ EOF
 
 _create_service_config() {
     if [[ -f "$SERVICE_CONFIG" ]]; then
-        echo_info "Emby watchdog config already exists, skipping"
+        echo_info "Plex watchdog config already exists, skipping"
         return
     fi
 
-    echo_info "Creating Emby watchdog config..."
+    echo_info "Creating Plex watchdog config..."
 
     mkdir -p "$CONFIG_DIR"
 
     cat > "$SERVICE_CONFIG" <<EOF
-# Emby watchdog configuration
+# Plex watchdog configuration
 
 SERVICE_NAME="$SERVICE_NAME"
 APP_NAME="$APP_NAME"
 HEALTH_URL="$HEALTH_URL"
-HEALTH_EXPECT="ServerName"
+HEALTH_EXPECT="MediaContainer"
 EOF
 
     echo_success "Service config created: $SERVICE_CONFIG"
@@ -184,7 +184,7 @@ _install_cron() {
     echo_info "Installing cron job..."
 
     cat > "$CRON_FILE" <<EOF
-# Emby watchdog - runs every 2 minutes
+# Plex watchdog - runs every 2 minutes
 */2 * * * * root $WATCHDOG_DEST $SERVICE_CONFIG >> $LOG_FILE 2>&1
 EOF
 
@@ -195,12 +195,12 @@ EOF
 _verify_setup() {
     echo_info "Verifying setup..."
 
-    # Check if Emby service exists
+    # Check if Plex service exists
     if ! systemctl list-unit-files | grep -q "$SERVICE_NAME"; then
         echo_warn "Service $SERVICE_NAME not found in systemd"
     fi
 
-    # Check if Emby is running
+    # Check if Plex is running
     if systemctl is-active --quiet "$SERVICE_NAME"; then
         echo_success "Service $SERVICE_NAME is running"
     else
@@ -216,10 +216,10 @@ _verify_setup() {
 }
 
 _install() {
-    echo_info "Installing Emby watchdog..."
+    echo_info "Installing Plex watchdog..."
     echo ""
 
-    _check_emby_installed
+    _check_plex_installed
     _check_watchdog_files
 
     _install_watchdog_engine
@@ -230,9 +230,9 @@ _install() {
     _verify_setup
 
     echo ""
-    echo_success "Emby watchdog installed successfully!"
+    echo_success "Plex watchdog installed successfully!"
     echo ""
-    echo_info "Watchdog will check Emby every 2 minutes"
+    echo_info "Watchdog will check Plex every 2 minutes"
     echo_info "Logs: $LOG_FILE"
     echo_info "Edit notifications: $GLOBAL_CONFIG"
     echo ""
@@ -243,7 +243,7 @@ _install() {
 # ==============================================================================
 
 _remove() {
-    echo_info "Removing Emby watchdog..."
+    echo_info "Removing Plex watchdog..."
 
     # Remove cron job
     if [[ -f "$CRON_FILE" ]]; then
@@ -282,7 +282,7 @@ _remove() {
     fi
 
     echo ""
-    echo_success "Emby watchdog removed"
+    echo_success "Plex watchdog removed"
 }
 
 # ==============================================================================
@@ -291,12 +291,12 @@ _remove() {
 
 _status() {
     echo ""
-    echo "Emby Watchdog Status"
+    echo "Plex Watchdog Status"
     echo "━━━━━━━━━━━━━━━━━━━━"
 
     # Check if installed
     if [[ ! -f "$SERVICE_CONFIG" ]]; then
-        echo_error "Emby watchdog is not installed"
+        echo_error "Plex watchdog is not installed"
         echo_info "Run: $0 --install"
         exit 1
     fi
@@ -374,7 +374,7 @@ _status() {
 # ==============================================================================
 
 _reset() {
-    echo_info "Resetting Emby watchdog state..."
+    echo_info "Resetting Plex watchdog state..."
 
     if [[ -f "$STATE_FILE" ]]; then
         cat > "$STATE_FILE" <<EOF
@@ -393,13 +393,13 @@ EOF
 # ==============================================================================
 
 _usage() {
-    echo "Emby Watchdog Manager"
+    echo "Plex Watchdog Manager"
     echo ""
     echo "Usage: $0 [OPTION]"
     echo ""
     echo "Options:"
-    echo "  --install   Install Emby watchdog"
-    echo "  --remove    Remove Emby watchdog"
+    echo "  --install   Install Plex watchdog"
+    echo "  --remove    Remove Plex watchdog"
     echo "  --status    Show current watchdog status"
     echo "  --reset     Clear backoff state, resume monitoring"
     echo "  -h, --help  Show this help message"
@@ -413,7 +413,7 @@ _usage() {
 
 _interactive() {
     echo ""
-    echo "Emby Watchdog Setup"
+    echo "Plex Watchdog Setup"
     echo "━━━━━━━━━━━━━━━━━━━"
     echo ""
 
@@ -436,10 +436,10 @@ _interactive() {
             *) echo_error "Invalid choice"; exit 1 ;;
         esac
     else
-        echo_info "Emby watchdog is not installed"
+        echo_info "Plex watchdog is not installed"
         echo ""
 
-        if ask "Install Emby watchdog?" Y; then
+        if ask "Install Plex watchdog?" Y; then
             _install
         fi
     fi

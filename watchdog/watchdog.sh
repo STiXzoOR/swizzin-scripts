@@ -11,7 +11,14 @@ set -euo pipefail
 
 GLOBAL_CONFIG="/opt/swizzin-extras/watchdog.conf"
 LOG_DIR="/var/log/watchdog"
-STATE_DIR="/var/run/watchdog"
+STATE_DIR="/var/lib/watchdog"
+
+# Migrate state from old /var/run/watchdog (volatile) to /var/lib/watchdog (persistent)
+if [[ -d "/var/run/watchdog" && ! -d "$STATE_DIR" ]]; then
+    mkdir -p "$STATE_DIR"
+    chmod 750 "$STATE_DIR"
+    cp /var/run/watchdog/*.state "$STATE_DIR/" 2>/dev/null || true
+fi
 
 # ==============================================================================
 # Logging
@@ -266,11 +273,18 @@ _check_process() {
 }
 
 _check_http() {
-    local response
-    response=$(curl -sf --max-time "$HEALTH_TIMEOUT" "$HEALTH_URL" 2>/dev/null) || return 1
+    local response http_code
+    http_code=$(curl -s -o /dev/null -w '%{http_code}' --max-time "$HEALTH_TIMEOUT" "$HEALTH_URL" 2>/dev/null) || return 1
 
-    # If HEALTH_EXPECT is set, verify it exists in response
+    # Validate HTTP response code (200-399 = success)
+    if [[ "$http_code" -lt 200 || "$http_code" -ge 400 ]]; then
+        log_warn "HTTP health check returned $http_code for $HEALTH_URL"
+        return 1
+    fi
+
+    # If HEALTH_EXPECT is set, verify it exists in response body
     if [[ -n "$HEALTH_EXPECT" ]]; then
+        response=$(curl -sf --max-time "$HEALTH_TIMEOUT" "$HEALTH_URL" 2>/dev/null) || return 1
         echo "$response" | grep -q "$HEALTH_EXPECT" || return 1
     fi
 

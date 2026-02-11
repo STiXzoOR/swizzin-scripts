@@ -1,29 +1,29 @@
-# /opt/swizzin/watchdog.d/emby.conf - Emby watchdog configuration
+# /opt/swizzin/watchdog.d/jellyfin.conf - Jellyfin watchdog configuration
 
 # ==============================================================================
 # Service Identification
 # ==============================================================================
 
 # systemd service name
-SERVICE_NAME="emby-server"
+SERVICE_NAME="jellyfin"
 
 # Display name for notifications
-APP_NAME="Emby"
+APP_NAME="Jellyfin"
 
 # ==============================================================================
 # Health Check
 # ==============================================================================
 
 # HTTP endpoint to check for health
-# This endpoint returns server info and doesn't require authentication
-HEALTH_URL="http://127.0.0.1:8096/emby/System/Info/Public"
+# Jellyfin /health returns "Healthy" (no auth required)
+HEALTH_URL="http://127.0.0.1:8096/health"
 
 # Timeout for HTTP health check in seconds (optional, uses global default)
 # HEALTH_TIMEOUT=10
 
 # String that must appear in the HTTP response (optional)
-# If set, the response body must contain this string to be considered healthy
-HEALTH_EXPECT="ServerName"
+# Jellyfin /health returns the string "Healthy"
+HEALTH_EXPECT="Healthy"
 
 # ==============================================================================
 # Cooldown Overrides (optional)
@@ -41,5 +41,5 @@ HEALTH_EXPECT="ServerName"
 # ==============================================================================
 # Uncomment to override auto-generated paths
 
-# LOG_FILE="/var/log/watchdog/emby.log"
-# STATE_FILE="/var/lib/watchdog/emby.state"
+# LOG_FILE="/var/log/watchdog/jellyfin.log"
+# STATE_FILE="/var/lib/watchdog/jellyfin.state"

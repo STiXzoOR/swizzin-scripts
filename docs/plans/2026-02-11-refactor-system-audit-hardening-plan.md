@@ -725,26 +725,26 @@ trap "rm -f '$tmp_file'" EXIT  # or add to cleanup function
 The watchdog engine (`watchdog/watchdog.sh`) is fully generic. Adding Plex and Jellyfin requires new wrapper scripts following the `emby-watchdog.sh` pattern.
 
 **New files:**
-- [ ] `watchdog/plex-watchdog.sh` -- copy `emby-watchdog.sh`, set:
+- [x] `watchdog/plex-watchdog.sh` -- copy `emby-watchdog.sh`, set:
   - `SERVICE_NAME="plexmediaserver"`
   - `APP_NAME="Plex"`
   - `HEALTH_URL="http://127.0.0.1:32400/identity"`
   - `HEALTH_EXPECT="MediaContainer"` (Plex returns XML with MediaContainer element)
   - `_check_plex_installed()` checking `/install/.plex.lock`
-- [ ] `watchdog/jellyfin-watchdog.sh` -- copy `emby-watchdog.sh`, set:
+- [x] `watchdog/jellyfin-watchdog.sh` -- copy `emby-watchdog.sh`, set:
   - `SERVICE_NAME="jellyfin"`
   - `APP_NAME="Jellyfin"`
   - `HEALTH_URL="http://127.0.0.1:8096/health"`
   - `HEALTH_EXPECT="Healthy"`
   - `_check_jellyfin_installed()` checking `/install/.jellyfin.lock`
-- [ ] `watchdog/configs/plex-watchdog.conf.example`
-- [ ] `watchdog/configs/jellyfin-watchdog.conf.example`
+- [x] `watchdog/configs/plex-watchdog.conf.example`
+- [x] `watchdog/configs/jellyfin-watchdog.conf.example`
 
 **Watchdog state persistence fix:**
-- [ ] `watchdog/watchdog.sh`: Change `STATE_DIR="/var/run/watchdog"` to `STATE_DIR="/var/lib/watchdog"` so state survives reboots
+- [x] `watchdog/watchdog.sh`: Change `STATE_DIR="/var/run/watchdog"` to `STATE_DIR="/var/lib/watchdog"` so state survives reboots
 
 **HTTP health check improvement:**
-- [ ] `watchdog/watchdog.sh`: Validate HTTP response code (200-399) in addition to body content check
+- [x] `watchdog/watchdog.sh`: Validate HTTP response code (200-399) in addition to body content check
 
 ### Research Insights (Phase 4.1)
 
