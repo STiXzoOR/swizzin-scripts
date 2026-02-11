@@ -205,8 +205,7 @@ _notify_pushover() {
     esac
 
     curl -sf \
-        --form-string "token=$PUSHOVER_TOKEN" \
-        --form-string "user=$PUSHOVER_USER" \
+        --config <(printf 'form = "token=%s"\nform = "user=%s"' "$PUSHOVER_TOKEN" "$PUSHOVER_USER") \
         --form-string "title=$title" \
         --form-string "message=$message" \
         --form-string "priority=$priority" \
@@ -225,7 +224,7 @@ _notify_notifiarr() {
         *)       event="info" ;;
     esac
 
-    curl -sf -H "x-api-key: $NOTIFIARR_API_KEY" \
+    curl -sf --config <(printf 'header = "x-api-key: %s"' "$NOTIFIARR_API_KEY") \
         -H "Content-Type: application/json" \
         -d "{\"event\": \"$event\", \"title\": \"$title\", \"message\": \"$message\"}" \
         "https://notifiarr.com/api/v1/notification/passthrough" >/dev/null 2>&1 || log_warn "Notifiarr notification failed"

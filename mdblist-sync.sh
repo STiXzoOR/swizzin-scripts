@@ -85,6 +85,7 @@ _install() {
             exit 1
         fi
         cp "$CONFIG_EXAMPLE" "$CONFIG_DST"
+        chmod 600 "$CONFIG_DST"
         echo_ok "Config template created"
     else
         echo_info "Config already exists, not overwriting: $CONFIG_DST"

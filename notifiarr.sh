@@ -437,6 +437,7 @@ bus_ids  = []
 CFG
 
 	chown -R "$user":"$user" "$app_configdir"
+	chmod 600 "$app_configdir/$app_name.conf"
 	echo_progress_done "Default config created"
 }
 

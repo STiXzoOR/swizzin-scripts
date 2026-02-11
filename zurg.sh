@@ -170,7 +170,7 @@ _get_github_token() {
 	# Test the token
 	echo_progress_start "Verifying GitHub access"
 	local test_response
-	test_response=$(curl -sL -H "Authorization: token $github_token" \
+	test_response=$(curl -sL --config <(printf 'header = "Authorization: token %s"' "$github_token") \
 		"https://api.github.com/repos/debridmediamanager/zurg" 2>&1)
 
 	if echo "$test_response" | grep -q '"id"'; then
@@ -286,6 +286,7 @@ _update_decypharr_config() {
 			| .qbittorrent.download_folder = $dl_folder
 		' "$decypharr_config" >"$tmp_config" 2>/dev/null && mv "$tmp_config" "$decypharr_config"
 		chown "$user":"$user" "$decypharr_config"
+		chmod 600 "$decypharr_config"
 	else
 		# Fallback: just log a warning
 		echo_warn "jq not installed - please manually update Decypharr config"
@@ -585,7 +586,7 @@ _install_zurg() {
 		else
 			# Use token - must use asset API URL, not browser_download_url for private repos
 			local release_json
-			release_json=$(curl -sL -H "Authorization: token $github_token" \
+			release_json=$(curl -sL --config <(printf 'header = "Authorization: token %s"' "$github_token") \
 				"https://api.github.com/$release_endpoint") || {
 				echo_error "Failed to query GitHub for release"
 				exit 1
@@ -635,8 +636,7 @@ _install_zurg() {
 			fi
 
 
-			if ! curl -H "Authorization: token $github_token" \
-				-H "Accept: application/octet-stream" \
+			if ! curl --config <(printf 'header = "Authorization: token %s"\nheader = "Accept: application/octet-stream"' "$github_token") \
 				"$latest" -L -o "/tmp/$app_name.zip" >>"$log" 2>&1; then
 				echo_error "Download failed, exiting"
 				exit 1
@@ -716,7 +716,7 @@ _install_zurg() {
 # Documentation: https://github.com/debridmediamanager/zurg
 
 zurg: v1
-token: ${RD_TOKEN}
+token: "${RD_TOKEN}"
 
 # Network & Server Configuration
 host: "127.0.0.1"
@@ -765,7 +765,7 @@ CFG
 # Documentation: https://github.com/debridmediamanager/zurg-testing
 
 zurg: v1
-token: ${RD_TOKEN}
+token: "${RD_TOKEN}"
 
 # Network & Server Configuration
 host: "127.0.0.1"
@@ -817,9 +817,11 @@ pacer_min_sleep = 0
 RCLONE
 
 		chown -R "$user":"$user" "$rclone_configdir"
+		chmod 600 "$rclone_configdir/rclone.conf"
 	fi
 
 	chown -R "$user":"$user" "$app_configdir"
+	chmod 600 "$app_configdir/config.yml"
 
 	# Create mount point
 	if [ ! -d "$app_mount_point" ]; then
@@ -1162,7 +1164,7 @@ _upgrade_binary_zurg() {
 		else
 			_verbose "Using token-based authentication"
 			local release_json
-			release_json=$(curl -sL -H "Authorization: token $github_token" \
+			release_json=$(curl -sL --config <(printf 'header = "Authorization: token %s"' "$github_token") \
 				"https://api.github.com/$release_endpoint") || {
 				echo_error "Failed to query GitHub for release"
 				exit 1
@@ -1203,8 +1205,7 @@ _upgrade_binary_zurg() {
 			fi
 
 			_verbose "Downloading asset from: $latest"
-			if ! curl -H "Authorization: token $github_token" \
-				-H "Accept: application/octet-stream" \
+			if ! curl --config <(printf 'header = "Authorization: token %s"\nheader = "Accept: application/octet-stream"' "$github_token") \
 				"$latest" -L -o "/tmp/$app_name.zip" >>"$log" 2>&1; then
 				echo_error "Download failed, exiting"
 				exit 1

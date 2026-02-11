@@ -331,7 +331,7 @@ _notify_notifiarr() {
         *)       event="info" ;;
     esac
 
-    curl -sf -H "x-api-key: $NOTIFIARR_API_KEY" \
+    curl -sf --config <(printf 'header = "x-api-key: %s"' "$NOTIFIARR_API_KEY") \
         -H "Content-Type: application/json" \
         -d "{\"event\": \"$event\", \"title\": \"$title\", \"message\": \"$message\"}" \
         "https://notifiarr.com/api/v1/notification/passthrough" >/dev/null 2>&1 || log "WARNING: Notifiarr notification failed"
