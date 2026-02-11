@@ -838,8 +838,8 @@ This is a mechanical find-and-replace. The `PANEL_HELPER_LOCAL` and `PANEL_HELPE
 
 Add rate limiting to prevent notification spam during cascading failures.
 
-- [ ] `watchdog/watchdog.sh`: Add notification throttle -- check last notification timestamp before sending
-- [ ] `backup/swizzin-backup.sh`: Same pattern
+- [x] `watchdog/watchdog.sh`: Add notification throttle -- check last notification timestamp before sending
+- [x] `backup/swizzin-backup.sh`: Same pattern
 
 **Pattern:**
 
@@ -873,13 +873,13 @@ _should_notify() {
 ---
 
 **Acceptance criteria:**
-- [ ] Plex and Jellyfin watchdogs installed and running via cron
-- [ ] Watchdog state persists across reboots (new `/var/lib/watchdog` directory)
-- [ ] State directory migration from `/var/run/watchdog` works on deployed systems
-- [ ] `borg check --verify-data` passes on latest archive
-- [ ] Notifications throttled to max 1 per 5 minutes per service
-- [ ] ALL `_load_panel_helper()` functions use local-only path (zero GitHub downloads)
-- [ ] Notification functions extracted to shared library (no duplication)
+- [x] Plex and Jellyfin watchdogs installed and running via cron
+- [x] Watchdog state persists across reboots (new `/var/lib/watchdog` directory)
+- [x] State directory migration from `/var/run/watchdog` works on deployed systems
+- [x] `borg check --verify-data` passes on latest archive
+- [x] Notifications throttled to max 1 per 5 minutes per service
+- [x] ALL `_load_panel_helper()` functions use local-only path (zero GitHub downloads)
+- [x] Notification functions extracted to shared library (no duplication)
 
 ---
 

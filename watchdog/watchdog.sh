@@ -165,104 +165,16 @@ _add_restart_timestamp() {
 }
 
 # ==============================================================================
-# Notifications
+# Notifications (shared library)
 # ==============================================================================
 
-_notify_discord() {
-    local title="$1"
-    local message="$2"
-    local level="$3"
+# Override log warn before sourcing shared notifications
+_notify_log_warn() { log_warn "$1"; }
 
-    local color
-    case "$level" in
-        info)    color=3066993 ;;   # green
-        warning) color=16776960 ;;  # yellow
-        error)   color=15158332 ;;  # red
-        *)       color=3447003 ;;   # blue
-    esac
-
-    local payload
-    payload=$(cat <<EOF
-{
-    "embeds": [{
-        "title": "$title",
-        "description": "$message",
-        "color": $color,
-        "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-    }]
-}
-EOF
-)
-
-    curl -sf -H "Content-Type: application/json" \
-        -d "$payload" \
-        "$DISCORD_WEBHOOK" >/dev/null 2>&1 || log_warn "Discord notification failed"
-}
-
-_notify_pushover() {
-    local title="$1"
-    local message="$2"
-    local level="$3"
-
-    local priority=0
-    case "$level" in
-        error)   priority=1 ;;
-        warning) priority=0 ;;
-        *)       priority=-1 ;;
-    esac
-
-    curl -sf \
-        --config <(printf 'form = "token=%s"\nform = "user=%s"' "$PUSHOVER_TOKEN" "$PUSHOVER_USER") \
-        --form-string "title=$title" \
-        --form-string "message=$message" \
-        --form-string "priority=$priority" \
-        "https://api.pushover.net/1/messages.json" >/dev/null 2>&1 || log_warn "Pushover notification failed"
-}
-
-_notify_notifiarr() {
-    local title="$1"
-    local message="$2"
-    local level="$3"
-
-    local event
-    case "$level" in
-        error)   event="error" ;;
-        warning) event="warning" ;;
-        *)       event="info" ;;
-    esac
-
-    curl -sf --config <(printf 'header = "x-api-key: %s"' "$NOTIFIARR_API_KEY") \
-        -H "Content-Type: application/json" \
-        -d "{\"event\": \"$event\", \"title\": \"$title\", \"message\": \"$message\"}" \
-        "https://notifiarr.com/api/v1/notification/passthrough" >/dev/null 2>&1 || log_warn "Notifiarr notification failed"
-}
-
-_notify_email() {
-    local title="$1"
-    local message="$2"
-    local level="$3"
-
-    if command -v sendmail &>/dev/null; then
-        echo -e "Subject: [$level] $title\n\n$message" | sendmail "$EMAIL_TO" 2>/dev/null || log_warn "Email notification failed"
-    elif command -v mail &>/dev/null; then
-        echo "$message" | mail -s "[$level] $title" "$EMAIL_TO" 2>/dev/null || log_warn "Email notification failed"
-    else
-        log_warn "No mail command available for email notification"
-    fi
-}
-
-_notify() {
-    local title="$1"
-    local message="$2"
-    local level="$3"
-
-    [[ -n "${DISCORD_WEBHOOK:-}" ]]   && _notify_discord "$title" "$message" "$level"
-    [[ -n "${PUSHOVER_USER:-}" && -n "${PUSHOVER_TOKEN:-}" ]] && _notify_pushover "$title" "$message" "$level"
-    [[ -n "${NOTIFIARR_API_KEY:-}" ]] && _notify_notifiarr "$title" "$message" "$level"
-    [[ -n "${EMAIL_TO:-}" ]]          && _notify_email "$title" "$message" "$level"
-
-    return 0
-}
+# shellcheck source=../lib/notifications.sh
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "${SCRIPT_DIR}/../lib/notifications.sh"
+NOTIFY_RATE_DIR="$STATE_DIR"
 
 # ==============================================================================
 # Health Checks
@@ -400,13 +312,15 @@ _run_watchdog() {
         log_error "Max restarts ($MAX_RESTARTS in ${window_minutes}min) reached, entering backoff"
         BACKOFF_UNTIL=$((now + COOLDOWN_WINDOW))
         _save_state
-        _notify "$APP_NAME Watchdog" "Max restarts ($MAX_RESTARTS in ${window_minutes}min) reached. Giving up until manual intervention." "error"
+        _should_notify "$SERVICE_NAME" && \
+            _notify "$APP_NAME Watchdog" "Max restarts ($MAX_RESTARTS in ${window_minutes}min) reached. Giving up until manual intervention." "error"
         return 1
     fi
 
     # Attempt restart
     local attempt=$((RESTART_COUNT + 1))
-    _notify "$APP_NAME Watchdog" "Service unhealthy, restarting (attempt $attempt/$MAX_RESTARTS)" "warning"
+    _should_notify "$SERVICE_NAME" && \
+        _notify "$APP_NAME Watchdog" "Service unhealthy, restarting (attempt $attempt/$MAX_RESTARTS)" "warning"
 
     if _restart_service; then
         _add_restart_timestamp
