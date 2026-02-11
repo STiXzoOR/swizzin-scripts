@@ -474,15 +474,26 @@ def discover_instances(config: Dict[str, str]) -> Tuple[List[Tuple[str, ArrAPI]]
 # Import List Defaults
 # =============================================================================
 
-def get_radarr_defaults(api: ArrAPI, config: Dict[str, str]) -> Optional[dict]:
-    """Get quality profile and root folder for Radarr import lists."""
-    profile_name = config["RADARR_QUALITY_PROFILE"]
-    root_path = config["RADARR_ROOT_FOLDER"]
+def get_radarr_defaults(api: ArrAPI, config: Dict[str, str], instance_name: str = "") -> Optional[dict]:
+    """Get quality profile and root folder for Radarr import lists.
+    Supports per-instance overrides via RADARR_<SUFFIX>_QUALITY_PROFILE and
+    RADARR_<SUFFIX>_ROOT_FOLDER (e.g., RADARR_4K_QUALITY_PROFILE).
+    """
+    # Check for instance-specific config (e.g., radarr-4k -> RADARR_4K_*)
+    suffix = instance_name.replace("radarr-", "").replace("radarr", "").upper()
+    if suffix:
+        profile_name = config.get(f"RADARR_{suffix}_QUALITY_PROFILE", "") or config["RADARR_QUALITY_PROFILE"]
+        root_path = config.get(f"RADARR_{suffix}_ROOT_FOLDER", "") or config["RADARR_ROOT_FOLDER"]
+    else:
+        profile_name = config["RADARR_QUALITY_PROFILE"]
+        root_path = config["RADARR_ROOT_FOLDER"]
+
+    inst_label = instance_name or "Radarr"
 
     if not profile_name:
         profiles = api.get_quality_profiles()
         if not profiles:
-            log_error("No quality profiles found in Radarr")
+            log_error(f"No quality profiles found in {inst_label}")
             return None
         profile_id = profiles[0]["id"]
         log_debug(f"Auto-selected quality profile: {profiles[0]['name']} (id={profile_id})")
@@ -490,14 +501,15 @@ def get_radarr_defaults(api: ArrAPI, config: Dict[str, str]) -> Optional[dict]:
         profiles = api.get_quality_profiles()
         match = next((p for p in profiles if p["name"].lower() == profile_name.lower()), None)
         if not match:
-            log_error(f"Quality profile '{profile_name}' not found in Radarr")
+            available = ", ".join(p["name"] for p in profiles[:5])
+            log_error(f"Quality profile '{profile_name}' not found in {inst_label} (available: {available})")
             return None
         profile_id = match["id"]
 
     if not root_path:
         folders = api.get_root_folders()
         if not folders:
-            log_error("No root folders found in Radarr")
+            log_error(f"No root folders found in {inst_label}")
             return None
         root_path = folders[0]["path"]
         log_debug(f"Auto-selected root folder: {root_path}")
@@ -525,10 +537,12 @@ def get_sonarr_defaults(api: ArrAPI, config: Dict[str, str], instance_name: str 
         profile_name = config["SONARR_QUALITY_PROFILE"]
         root_path = config["SONARR_ROOT_FOLDER"]
 
+    inst_label = instance_name or "Sonarr"
+
     if not profile_name:
         profiles = api.get_quality_profiles()
         if not profiles:
-            log_error("No quality profiles found in Sonarr")
+            log_error(f"No quality profiles found in {inst_label}")
             return None
         profile_id = profiles[0]["id"]
         log_debug(f"Auto-selected quality profile: {profiles[0]['name']} (id={profile_id})")
@@ -536,14 +550,15 @@ def get_sonarr_defaults(api: ArrAPI, config: Dict[str, str], instance_name: str 
         profiles = api.get_quality_profiles()
         match = next((p for p in profiles if p["name"].lower() == profile_name.lower()), None)
         if not match:
-            log_error(f"Quality profile '{profile_name}' not found in Sonarr")
+            available = ", ".join(p["name"] for p in profiles[:5])
+            log_error(f"Quality profile '{profile_name}' not found in {inst_label} (available: {available})")
             return None
         profile_id = match["id"]
 
     if not root_path:
         folders = api.get_root_folders()
         if not folders:
-            log_error("No root folders found in Sonarr")
+            log_error(f"No root folders found in {inst_label}")
             return None
         root_path = folders[0]["path"]
         log_debug(f"Auto-selected root folder: {root_path}")
@@ -1048,7 +1063,7 @@ def main():
                 log(f"  Skipping {name}: syncs from another instance")
                 continue
 
-            defaults = get_radarr_defaults(api, config)
+            defaults = get_radarr_defaults(api, config, name)
             if not defaults:
                 log_warn(f"Skipping {name}: could not determine defaults")
                 continue

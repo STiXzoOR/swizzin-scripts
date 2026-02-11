@@ -63,6 +63,10 @@ RADARR_SEARCH_ON_ADD="true"
 # RADARR_QUALITY_PROFILE="HD-1080p"
 RADARR_QUALITY_PROFILE=""
 
+# Per-instance overrides (e.g., radarr-4k -> RADARR_4K_*)
+# RADARR_4K_QUALITY_PROFILE="Ultra-HD"
+# RADARR_4K_ROOT_FOLDER="/mnt/media/movies-4k"
+
 # Root folder path (leave empty to auto-detect first folder)
 # RADARR_ROOT_FOLDER="/mnt/media/movies"
 RADARR_ROOT_FOLDER=""
