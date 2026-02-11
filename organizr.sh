@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 # organizr - Extended Organizr installer with subdomain and SSO support
 # STiXzoOR 2025
 # Usage: bash organizr.sh [--subdomain [--revert]|--configure|--migrate|--register-panel|--remove]
@@ -121,7 +122,7 @@ _preflight() {
 
 	# For subdomain install/configure, prompt for domain and LE mode
 	# Skip for interactive (handles its own prompting), revert, and remove
-	case "$1" in
+	case "${1:-}" in
 	"--subdomain" | "--configure")
 		_prompt_domain
 		_prompt_le_mode
@@ -932,11 +933,11 @@ _interactive() {
 # Main
 # ==============================================================================
 
-_preflight "$1"
+_preflight "${1:-}"
 
-case "$1" in
+case "${1:-}" in
 "--subdomain")
-	case "$2" in
+	case "${2:-}" in
 	"--revert") _revert ;;
 	"") _install ;;
 	*) echo "Usage: $0 --subdomain [--revert]"; exit 1 ;;

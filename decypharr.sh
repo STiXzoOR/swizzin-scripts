@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 # decypharr installer
 # STiXzoOR 2025
 # Usage: bash decypharr.sh [--update [--full] [--verbose]|--remove [--force]] [--register-panel] [--fix-mounts]
@@ -673,7 +674,7 @@ for arg in "$@"; do
 done
 
 # Handle --update flag
-if [[ "$1" == "--update" ]]; then
+if [[ "${1:-}" == "--update" ]]; then
 	full_reinstall=false
 	for arg in "$@"; do
 		case "$arg" in
@@ -684,12 +685,12 @@ if [[ "$1" == "--update" ]]; then
 fi
 
 # Handle --remove flag
-if [ "$1" = "--remove" ]; then
-	_remove_decypharr "$2"
+if [ "${1:-}" = "--remove" ]; then
+	_remove_decypharr "${2:-}"
 fi
 
 # Handle --register-panel flag
-if [ "$1" = "--register-panel" ]; then
+if [ "${1:-}" = "--register-panel" ]; then
 	if [ ! -f "/install/.$app_lockname.lock" ]; then
 		echo_error "${app_name^} is not installed"
 		exit 1
@@ -715,7 +716,7 @@ if [ "$1" = "--register-panel" ]; then
 fi
 
 # Handle --fix-mounts flag (fix mount point permissions for existing installs)
-if [ "$1" = "--fix-mounts" ]; then
+if [ "${1:-}" = "--fix-mounts" ]; then
 	if [ ! -f "/install/.$app_lockname.lock" ]; then
 		echo_error "${app_name^} is not installed"
 		exit 1

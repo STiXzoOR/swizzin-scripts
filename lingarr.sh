@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 # lingarr installer
 # STiXzoOR 2025
 # Usage: bash lingarr.sh [--subdomain [--revert]|--update|--remove [--force]|--register-panel]
@@ -1043,9 +1044,9 @@ for arg in "$@"; do
 	esac
 done
 
-case "$1" in
+case "${1:-}" in
 "--subdomain")
-	case "$2" in
+	case "${2:-}" in
 	"--revert") _revert_subdomain ;;
 	"") _install_subdomain ;;
 	*) _usage ;;

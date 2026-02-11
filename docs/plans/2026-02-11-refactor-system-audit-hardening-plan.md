@@ -581,30 +581,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 **Implementation approach -- do templates first, then scripts in batches with verification gates:**
 
-- [ ] **Step 1: Update all 5 templates** (`template-binary.sh`, `template-python.sh`, `template-docker.sh`, `template-subdomain.sh`, `template-multiinstance.sh`):
-  - Add `set -euo pipefail` after the shebang
-  - Change `$1`/`$2` to `${1:-}`/`${2:-}` in `case` statements
-  - Test each template's CLI flows: `--install`, `--remove`, `--update`, no args
-  - Also fix `[ ]` to `[[ ]]` inconsistency in `template-subdomain.sh` (18 occurrences)
-
-- [ ] **Step 2: Update installer scripts** (group by complexity):
-
-  **Simple installers** (single binary, straightforward):
-  - `cleanuparr.sh`, `decypharr.sh`, `notifiarr.sh`, `huntarr.sh`, `byparr.sh`, `flaresolverr.sh`, `bazarr.sh`
-
-  **Medium complexity** (multi-instance or Docker):
-  - `sonarr.sh`, `radarr.sh`, `lingarr.sh`, `libretranslate.sh`, `subgen.sh`, `seerr.sh`
-
-  **Complex** (subdomain + extended installer):
-  - `plex.sh`, `emby.sh`, `jellyfin.sh`, `organizr.sh`, `panel.sh`, `plex-tunnel.sh`, `plex-tunnel-vps.sh`
-
-  **Utility scripts:**
-  - `dns-fix.sh`, `panel_helpers.sh`, `arr-symlink-import.sh`, `mdblistarr.sh`
-
-  > **Verification gate:** After each batch, test `--install`, `--remove`, and no-args for every script in the batch. Git commit after each batch for granular rollback.
-
-- [ ] **Step 3: Update optimization scripts** (`nginx-streaming.sh`, `optimize-streaming.sh`, `optimize-docker.sh`):
-  - Upgrade from `set -e` to `set -euo pipefail`
+- [x] **Step 1: Update all 5 templates** -- `set -euo pipefail` added, `${1:-}`/`${2:-}` fixed
+- [x] **Step 2: Update all 20 installer scripts** -- `set -euo pipefail` added, positional params fixed
+- [x] **Step 3: Update 4 optimization scripts** -- upgraded from `set -e` to `set -euo pipefail`
 
 #### 3.2 Add Trap Handlers
 

@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 # plex - Extended Plex installer with subdomain support
 # STiXzoOR 2025
 # Usage: bash plex.sh [--subdomain [--revert]|--remove [--force]|--register-panel]
@@ -649,16 +650,16 @@ _preflight() {
 
 _preflight
 
-case "$1" in
+case "${1:-}" in
 "--subdomain")
-	case "$2" in
+	case "${2:-}" in
 	"--revert") _revert_subdomain ;;
 	"") _install_subdomain ;;
 	*) _usage ;;
 	esac
 	;;
 "--remove")
-	_remove "$2"
+	_remove "${2:-}"
 	;;
 "--register-panel")
 	if [ ! -f "/install/.${app_lockname}.lock" ]; then

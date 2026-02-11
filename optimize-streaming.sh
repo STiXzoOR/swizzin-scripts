@@ -14,7 +14,7 @@
 # This script makes immediate changes and creates persistent configurations.
 # ==============================================================================
 
-set -e
+set -euo pipefail
 
 # ==============================================================================
 # Source Bootstrap Library (if available)

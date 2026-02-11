@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 # emby - Extended Emby installer with subdomain and Premiere support
 # STiXzoOR 2025
 # Usage: bash emby.sh [--subdomain [--revert]|--premiere [--revert]|--remove [--force]|--register-panel]
@@ -854,16 +855,16 @@ _preflight() {
 
 _preflight
 
-case "$1" in
+case "${1:-}" in
 "--subdomain")
-	case "$2" in
+	case "${2:-}" in
 	"--revert") _revert_subdomain ;;
 	"") _install_subdomain ;;
 	*) _usage ;;
 	esac
 	;;
 "--premiere")
-	case "$2" in
+	case "${2:-}" in
 	"--revert") _revert_premiere ;;
 	"") _install_premiere ;;
 	*) _usage ;;

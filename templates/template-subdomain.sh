@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 # ==============================================================================
 # EXTENDED INSTALLER TEMPLATE
 # ==============================================================================
@@ -521,9 +522,9 @@ _preflight() {
 
 _preflight
 
-case "$1" in
+case "${1:-}" in
 "--subdomain")
-	case "$2" in
+	case "${2:-}" in
 	"--revert") _revert_subdomain ;;
 	"") _install_subdomain ;;
 	*) _usage ;;

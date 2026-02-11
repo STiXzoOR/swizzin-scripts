@@ -12,7 +12,7 @@
 # Creates /etc/docker/daemon.json with optimized settings.
 # ==============================================================================
 
-set -e
+set -euo pipefail
 
 # ==============================================================================
 # Source Bootstrap Library (if available)

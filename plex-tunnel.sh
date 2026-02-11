@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 # plex-tunnel - Plex with VPN tunnel to bypass Hetzner IP bans
 # STiXzoOR 2025
 # Usage: bash plex-tunnel.sh [--gluetun|--wireguard] [--subdomain [--revert]|--status|--update|--remove [--force]|--migrate]
@@ -1376,7 +1377,7 @@ for arg in "$@"; do
 	esac
 done
 
-case "$1" in
+case "${1:-}" in
 "--gluetun")
 	_install_gluetun
 	;;
@@ -1384,7 +1385,7 @@ case "$1" in
 	_install_wireguard
 	;;
 "--subdomain")
-	case "$2" in
+	case "${2:-}" in
 	"--revert") _revert_subdomain ;;
 	"") _install_subdomain ;;
 	*) _usage ;;

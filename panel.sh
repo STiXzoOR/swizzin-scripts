@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 # panel - Extended Panel installer with subdomain support
 # STiXzoOR 2026
 # Usage: bash panel.sh [--subdomain [--revert]|--remove [--force]]
@@ -451,9 +452,9 @@ _preflight() {
 
 _preflight
 
-case "$1" in
+case "${1:-}" in
 "--subdomain")
-	case "$2" in
+	case "${2:-}" in
 	"--revert") _revert_subdomain ;;
 	"") _install_subdomain ;;
 	*) _usage ;;

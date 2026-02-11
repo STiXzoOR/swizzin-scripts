@@ -18,7 +18,7 @@
 # Requires existing Swizzin nginx installation.
 # ==============================================================================
 
-set -e
+set -euo pipefail
 
 # ==============================================================================
 # Source Bootstrap Library (if available)

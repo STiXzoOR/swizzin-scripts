@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 # Swizzin panel helper
 # Defines: panel_register_app, ensures placeholder icon exists
 

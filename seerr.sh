@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 # seerr - Extended Seerr installer with subdomain support
 # STiXzoOR 2025
 # Usage: bash seerr.sh [--subdomain [--revert]|--remove [--force]|--register-panel]
@@ -667,9 +668,9 @@ _preflight() {
 
 _preflight
 
-case "$1" in
+case "${1:-}" in
 "--subdomain")
-	case "$2" in
+	case "${2:-}" in
 	"--revert") _revert_subdomain ;;
 	"") _install_subdomain ;;
 	*) _usage ;;

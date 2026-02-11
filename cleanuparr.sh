@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 # cleanuparr installer
 # STiXzoOR 2025
 # Usage: bash cleanuparr.sh [--update [--full] [--verbose]|--remove [--force]] [--register-panel]
@@ -437,7 +438,7 @@ for arg in "$@"; do
 done
 
 # Handle --update flag
-if [[ "$1" == "--update" ]]; then
+if [[ "${1:-}" == "--update" ]]; then
 	full_reinstall=false
 	for arg in "$@"; do
 		case "$arg" in
@@ -448,12 +449,12 @@ if [[ "$1" == "--update" ]]; then
 fi
 
 # Handle --remove flag
-if [ "$1" = "--remove" ]; then
-	_remove_cleanuparr "$2"
+if [ "${1:-}" = "--remove" ]; then
+	_remove_cleanuparr "${2:-}"
 fi
 
 # Handle --register-panel flag
-if [ "$1" = "--register-panel" ]; then
+if [ "${1:-}" = "--register-panel" ]; then
 	if [ ! -f "/install/.$app_lockname.lock" ]; then
 		echo_error "${app_name^} is not installed"
 		exit 1

@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 # dns-fix.sh - DNS and IPv6 configuration helper
 # STiXzoOR 2025
 # Usage: bash dns-fix.sh [--revert|--status]
@@ -284,7 +285,7 @@ _install() {
 }
 
 # Main
-case "$1" in
+case "${1:-}" in
 "--revert")
 	_revert
 	;;

@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 # ==============================================================================
 # MULTI-INSTANCE MANAGER TEMPLATE
 # ==============================================================================
@@ -467,10 +468,10 @@ _add_interactive() {
 # ==============================================================================
 _preflight
 
-case "$1" in
+case "${1:-}" in
 "--add")
 	_ensure_base_installed
-	if [[ -n "$2" ]]; then
+	if [[ -n "${2:-}" ]]; then
 		_add_instance "$2"
 	else
 		echo -n "Enter instance name (alphanumeric, e.g., 4k, anime, kids): "
@@ -479,10 +480,10 @@ case "$1" in
 	fi
 	;;
 "--remove")
-	if [[ -n "$2" && "$2" != "--force" ]]; then
-		_remove_instance "$2" "$3"
+	if [[ -n "${2:-}" && "${2:-}" != "--force" ]]; then
+		_remove_instance "$2" "${3:-}"
 	else
-		_remove_interactive "$2"
+		_remove_interactive "${2:-}"
 	fi
 	;;
 "--list")

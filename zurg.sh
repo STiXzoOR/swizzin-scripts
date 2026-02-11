@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 # zurg installer
 # STiXzoOR 2025
 # Usage: bash zurg.sh [--remove [--force]] [--switch-version [free|paid]] [--update [--full] [--latest] [--verbose]] [--register-panel]
@@ -1285,12 +1286,12 @@ _upgrade_binary_zurg() {
 }
 
 # Handle --remove flag
-if [ "$1" = "--remove" ]; then
-	_remove_zurg "$2"
+if [ "${1:-}" = "--remove" ]; then
+	_remove_zurg "${2:-}"
 fi
 
 # Handle --register-panel flag
-if [ "$1" = "--register-panel" ]; then
+if [ "${1:-}" = "--register-panel" ]; then
 	if [ ! -f "/install/.$app_lockname.lock" ]; then
 		echo_error "${app_name^} is not installed"
 		exit 1
@@ -1325,7 +1326,7 @@ done
 
 # Handle --switch-version flag
 switch_mode="false"
-if [ "$1" = "--switch-version" ]; then
+if [ "${1:-}" = "--switch-version" ]; then
 	if [ ! -f "/install/.$app_lockname.lock" ]; then
 		echo_error "Zurg is not installed. Run without --switch-version to install."
 		exit 1
@@ -1338,9 +1339,9 @@ if [ "$1" = "--switch-version" ]; then
 	fi
 
 	# Determine target version
-	if [ -n "$2" ]; then
-		if [[ "$2" != "free" && "$2" != "paid" ]]; then
-			echo_error "Invalid version: $2. Use 'free' or 'paid'."
+	if [ -n "${2:-}" ]; then
+		if [[ "${2:-}" != "free" && "${2:-}" != "paid" ]]; then
+			echo_error "Invalid version: ${2:-}. Use 'free' or 'paid'."
 			exit 1
 		fi
 		target_version="$2"
@@ -1378,7 +1379,7 @@ if [ "$switch_mode" != "true" ] && [ -f "/install/.$app_lockname.lock" ]; then
 	_use_latest="${_use_latest,,}"  # lowercase
 
 	# Check if user wants to update/reinstall
-	if [ "$1" = "--update" ] || [ "${ZURG_UPGRADE:-}" = "true" ]; then
+	if [ "${1:-}" = "--update" ] || [ "${ZURG_UPGRADE:-}" = "true" ]; then
 		# Parse --full flag for full reinstall
 		full_reinstall=false
 		for arg in "$@"; do
