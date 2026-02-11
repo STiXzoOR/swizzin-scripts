@@ -184,6 +184,9 @@ _install_decypharr() {
 
 	echo_progress_start "Downloading release archive"
 
+	local _tmp_download
+	_tmp_download=$(mktemp /tmp/decypharr-XXXXXX.tar.gz)
+
 	case "$(_os_arch)" in
 	"amd64") arch='x86_64' ;;
 	"arm64") arch="arm64" ;;
@@ -200,18 +203,18 @@ _install_decypharr() {
 		exit 1
 	}
 
-	if ! curl "$latest" -L -o "/tmp/$app_name.tar.gz" >>"$log" 2>&1; then
+	if ! curl "$latest" -L -o "$_tmp_download" >>"$log" 2>&1; then
 		echo_error "Download failed, exiting"
 		exit 1
 	fi
 	echo_progress_done "Archive downloaded"
 
 	echo_progress_start "Extracting archive"
-	tar xfv "/tmp/$app_name.tar.gz" --directory /usr/bin/ >>"$log" 2>&1 || {
+	tar xfv "$_tmp_download" --directory /usr/bin/ >>"$log" 2>&1 || {
 		echo_error "Failed to extract"
 		exit 1
 	}
-	rm -rf "/tmp/$app_name.tar.gz"
+	rm -f "$_tmp_download"
 	echo_progress_done "Archive extracted"
 
 	chmod +x "$app_dir/$app_binary"
@@ -462,6 +465,9 @@ _update_decypharr() {
 
 	echo_progress_start "Downloading latest release"
 
+	local _tmp_download
+	_tmp_download=$(mktemp /tmp/decypharr-XXXXXX.tar.gz)
+
 	case "$(_os_arch)" in
 	"amd64") arch='x86_64' ;;
 	"arm64") arch='arm64' ;;
@@ -493,7 +499,7 @@ _update_decypharr() {
 	fi
 
 	_verbose "Downloading: ${latest}"
-	if ! curl -fsSL "$latest" -o "/tmp/${app_name}.tar.gz" >>"$log" 2>&1; then
+	if ! curl -fsSL "$latest" -o "$_tmp_download" >>"$log" 2>&1; then
 		echo_error "Download failed"
 		_rollback_decypharr
 		exit 1
@@ -501,13 +507,13 @@ _update_decypharr() {
 	echo_progress_done "Downloaded"
 
 	echo_progress_start "Installing update"
-	if ! tar xfv "/tmp/${app_name}.tar.gz" --directory /usr/bin/ >>"$log" 2>&1; then
+	if ! tar xfv "$_tmp_download" --directory /usr/bin/ >>"$log" 2>&1; then
 		echo_error "Extraction failed"
-		rm -f "/tmp/${app_name}.tar.gz"
+		rm -f "$_tmp_download"
 		_rollback_decypharr
 		exit 1
 	fi
-	rm -f "/tmp/${app_name}.tar.gz"
+	rm -f "$_tmp_download"
 	chmod +x "${app_dir}/${app_binary}"
 	echo_progress_done "Installed"
 

@@ -552,6 +552,10 @@ _install_zurg() {
 		is_array_response="true"
 	fi
 
+	local _tmp_download _tmp_extract
+	_tmp_download=$(mktemp /tmp/zurg-XXXXXX.zip)
+	_tmp_extract=$(mktemp -d /tmp/zurg-extract-XXXXXX)
+
 	echo_progress_start "Downloading $zurg_version release"
 
 	# Download release
@@ -583,7 +587,7 @@ _install_zurg() {
 			fi
 
 
-			if ! gh api "$latest" -H "Accept: application/octet-stream" >/tmp/$app_name.zip 2>>"$log"; then
+			if ! gh api "$latest" -H "Accept: application/octet-stream" >"$_tmp_download" 2>>"$log"; then
 				echo_error "Download failed, exiting"
 				exit 1
 			fi
@@ -641,7 +645,7 @@ _install_zurg() {
 
 
 			if ! curl --config <(printf 'header = "Authorization: token %s"\nheader = "Accept: application/octet-stream"' "$github_token") \
-				"$latest" -L -o "/tmp/$app_name.zip" >>"$log" 2>&1; then
+				"$latest" -L -o "$_tmp_download" >>"$log" 2>&1; then
 				echo_error "Download failed, exiting"
 				exit 1
 			fi
@@ -686,7 +690,7 @@ _install_zurg() {
 			exit 1
 		fi
 
-		if ! curl "$latest" -L -o "/tmp/$app_name.zip" >>"$log" 2>&1; then
+		if ! curl "$latest" -L -o "$_tmp_download" >>"$log" 2>&1; then
 			echo_error "Download failed, exiting"
 			exit 1
 		fi
@@ -695,12 +699,12 @@ _install_zurg() {
 
 	echo_progress_start "Extracting archive"
 
-	unzip -o "/tmp/$app_name.zip" -d "/tmp/$app_name" >>"$log" 2>&1 || {
+	unzip -o "$_tmp_download" -d "$_tmp_extract" >>"$log" 2>&1 || {
 		echo_error "Failed to extract"
 		exit 1
 	}
-	mv "/tmp/$app_name/$app_binary" "$app_dir/$app_binary"
-	rm -rf "/tmp/$app_name.zip" "/tmp/$app_name"
+	mv "$_tmp_extract/$app_binary" "$app_dir/$app_binary"
+	rm -rf "$_tmp_download" "$_tmp_extract"
 	chmod +x "$app_dir/$app_binary"
 	echo_progress_done "Archive extracted"
 
@@ -1132,6 +1136,10 @@ _upgrade_binary_zurg() {
 		is_array_response="true"
 	fi
 
+	local _tmp_download _tmp_extract
+	_tmp_download=$(mktemp /tmp/zurg-XXXXXX.zip)
+	_tmp_extract=$(mktemp -d /tmp/zurg-extract-XXXXXX)
+
 	_verbose "Querying GitHub API: $release_endpoint"
 	echo_progress_start "Downloading $zurg_version release"
 
@@ -1161,7 +1169,7 @@ _upgrade_binary_zurg() {
 			fi
 
 			_verbose "Downloading asset from: $latest"
-			if ! gh api "$latest" -H "Accept: application/octet-stream" >/tmp/$app_name.zip 2>>"$log"; then
+			if ! gh api "$latest" -H "Accept: application/octet-stream" >"$_tmp_download" 2>>"$log"; then
 				echo_error "Download failed, exiting"
 				exit 1
 			fi
@@ -1210,7 +1218,7 @@ _upgrade_binary_zurg() {
 
 			_verbose "Downloading asset from: $latest"
 			if ! curl --config <(printf 'header = "Authorization: token %s"\nheader = "Accept: application/octet-stream"' "$github_token") \
-				"$latest" -L -o "/tmp/$app_name.zip" >>"$log" 2>&1; then
+				"$latest" -L -o "$_tmp_download" >>"$log" 2>&1; then
 				echo_error "Download failed, exiting"
 				exit 1
 			fi
@@ -1253,7 +1261,7 @@ _upgrade_binary_zurg() {
 		fi
 
 		_verbose "Downloading asset from: $latest"
-		if ! curl "$latest" -L -o "/tmp/$app_name.zip" >>"$log" 2>&1; then
+		if ! curl "$latest" -L -o "$_tmp_download" >>"$log" 2>&1; then
 			echo_error "Download failed, exiting"
 			exit 1
 		fi
@@ -1261,13 +1269,13 @@ _upgrade_binary_zurg() {
 	echo_progress_done "Archive downloaded"
 
 	echo_progress_start "Extracting and replacing binary"
-	_verbose "Extracting to /tmp/$app_name"
-	unzip -o "/tmp/$app_name.zip" -d "/tmp/$app_name" >>"$log" 2>&1 || {
+	_verbose "Extracting to $_tmp_extract"
+	unzip -o "$_tmp_download" -d "$_tmp_extract" >>"$log" 2>&1 || {
 		echo_error "Failed to extract"
 		exit 1
 	}
-	mv "/tmp/$app_name/$app_binary" "$app_dir/$app_binary"
-	rm -rf "/tmp/$app_name.zip" "/tmp/$app_name"
+	mv "$_tmp_extract/$app_binary" "$app_dir/$app_binary"
+	rm -rf "$_tmp_download" "$_tmp_extract"
 	chmod +x "$app_dir/$app_binary"
 	echo_progress_done "Binary replaced"
 

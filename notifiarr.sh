@@ -109,6 +109,9 @@ _install_notifiarr() {
 
 	echo_progress_start "Downloading release archive"
 
+	local _tmp_download
+	_tmp_download=$(mktemp /tmp/notifiarr-XXXXXX.gz)
+
 	case "$(_os_arch)" in
 	"amd64") arch='amd64' ;;
 	"arm64") arch="arm64" ;;
@@ -123,18 +126,18 @@ _install_notifiarr() {
 		exit 1
 	}
 
-	if ! curl "$latest" -L -o "/tmp/$app_name.gz" >>"$log" 2>&1; then
+	if ! curl "$latest" -L -o "$_tmp_download" >>"$log" 2>&1; then
 		echo_error "Download failed, exiting"
 		exit 1
 	fi
 	echo_progress_done "Archive downloaded"
 
 	echo_progress_start "Extracting archive"
-	if ! gunzip -c "/tmp/$app_name.gz" >"$app_dir/$app_binary" 2>>"$log"; then
+	if ! gunzip -c "$_tmp_download" >"$app_dir/$app_binary" 2>>"$log"; then
 		echo_error "Failed to extract"
 		exit 1
 	fi
-	rm -rf "/tmp/$app_name.gz"
+	rm -f "$_tmp_download"
 	echo_progress_done "Archive extracted"
 
 	chmod +x "$app_dir/$app_binary"
@@ -532,6 +535,9 @@ _update_notifiarr() {
 
 	echo_progress_start "Downloading latest release"
 
+	local _tmp_download
+	_tmp_download=$(mktemp /tmp/notifiarr-XXXXXX.gz)
+
 	case "$(_os_arch)" in
 	"amd64") arch='amd64' ;;
 	"arm64") arch='arm64' ;;
@@ -562,7 +568,7 @@ _update_notifiarr() {
 	fi
 
 	_verbose "Downloading: ${latest}"
-	if ! curl -fsSL "$latest" -o "/tmp/${app_name}.gz" >>"$log" 2>&1; then
+	if ! curl -fsSL "$latest" -o "$_tmp_download" >>"$log" 2>&1; then
 		echo_error "Download failed"
 		_rollback_notifiarr
 		exit 1
@@ -570,13 +576,13 @@ _update_notifiarr() {
 	echo_progress_done "Downloaded"
 
 	echo_progress_start "Installing update"
-	if ! gunzip -c "/tmp/${app_name}.gz" >"${app_dir}/${app_binary}" 2>>"$log"; then
+	if ! gunzip -c "$_tmp_download" >"${app_dir}/${app_binary}" 2>>"$log"; then
 		echo_error "Extraction failed"
-		rm -f "/tmp/${app_name}.gz"
+		rm -f "$_tmp_download"
 		_rollback_notifiarr
 		exit 1
 	fi
-	rm -f "/tmp/${app_name}.gz"
+	rm -f "$_tmp_download"
 	chmod +x "${app_dir}/${app_binary}"
 	echo_progress_done "Installed"
 

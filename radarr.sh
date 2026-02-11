@@ -150,25 +150,29 @@ _add_instance() {
 	chown -R "${user}:${user}" "$config_dir"
 	echo_progress_done
 
-	# Create config.xml
-	echo_progress_start "Generating configuration"
-	cat >"${config_dir}/config.xml" <<-EOSC
-		<Config>
-		  <LogLevel>info</LogLevel>
-		  <UpdateMechanism>BuiltIn</UpdateMechanism>
-		  <Branch>${app_branch}</Branch>
-		  <BindAddress>127.0.0.1</BindAddress>
-		  <Port>${instance_port}</Port>
-		  <SslPort>6969</SslPort>
-		  <EnableSsl>False</EnableSsl>
-		  <LaunchBrowser>False</LaunchBrowser>
-		  <AuthenticationMethod>None</AuthenticationMethod>
-		  <UrlBase>${instance_name}</UrlBase>
-		  <UpdateAutomatically>False</UpdateAutomatically>
-		</Config>
-	EOSC
+	# Create config.xml (skip if user has existing config)
+	if [[ ! -f "${config_dir}/config.xml" ]]; then
+		echo_progress_start "Generating configuration"
+		cat >"${config_dir}/config.xml" <<-EOSC
+			<Config>
+			  <LogLevel>info</LogLevel>
+			  <UpdateMechanism>BuiltIn</UpdateMechanism>
+			  <Branch>${app_branch}</Branch>
+			  <BindAddress>127.0.0.1</BindAddress>
+			  <Port>${instance_port}</Port>
+			  <SslPort>6969</SslPort>
+			  <EnableSsl>False</EnableSsl>
+			  <LaunchBrowser>False</LaunchBrowser>
+			  <AuthenticationMethod>None</AuthenticationMethod>
+			  <UrlBase>${instance_name}</UrlBase>
+			  <UpdateAutomatically>False</UpdateAutomatically>
+			</Config>
+		EOSC
+		echo_progress_done
+	else
+		echo_info "Existing config.xml found, preserving user customizations"
+	fi
 	chown "${user}:${user}" "${config_dir}/config.xml"
-	echo_progress_done
 
 	# Create systemd service
 	echo_progress_start "Installing systemd service"

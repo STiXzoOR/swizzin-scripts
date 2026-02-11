@@ -11,6 +11,8 @@ set -euo pipefail
 
 # shellcheck source=lib/nginx-utils.sh
 . "$(dirname "${BASH_SOURCE[0]}")/lib/nginx-utils.sh" 2>/dev/null || true
+# shellcheck source=lib/utils.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/utils.sh" 2>/dev/null || true
 
 # Log to Swizzin.log
 export log=/root/logs/swizzin.log
@@ -269,7 +271,8 @@ _backup_file() {
 
 _set_plex_pref() {
 	local key="$1"
-	local value="$2"
+	local value
+	value=$(_sed_escape_value "$2")
 	if grep -q "${key}=" "$plex_prefs"; then
 		sed -i "s|${key}=\"[^\"]*\"|${key}=\"${value}\"|" "$plex_prefs"
 	else

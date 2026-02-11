@@ -155,36 +155,40 @@ _add_instance() {
 	chown -R "${user}:${user}" "$config_dir"
 	echo_progress_done
 
-	# Create config.yaml (Bazarr's current config format)
-	echo_progress_start "Generating configuration"
-	cat >"${config_dir}/config/config.yaml" <<-EOSC
-		general:
-		  ip: 127.0.0.1
-		  port: ${instance_port}
-		  base_url: /${instance_name}
-		  single_language: false
-		  use_embedded_subs: true
-		  debug: false
+	# Create config.yaml (skip if user has existing config)
+	if [[ ! -f "${config_dir}/config/config.yaml" ]]; then
+		echo_progress_start "Generating configuration"
+		cat >"${config_dir}/config/config.yaml" <<-EOSC
+			general:
+			  ip: 127.0.0.1
+			  port: ${instance_port}
+			  base_url: /${instance_name}
+			  single_language: false
+			  use_embedded_subs: true
+			  debug: false
 
-		sonarr:
-		  ip: 127.0.0.1
-		  port: 8989
-		  base_url: /sonarr
-		  apikey: ''
+			sonarr:
+			  ip: 127.0.0.1
+			  port: 8989
+			  base_url: /sonarr
+			  apikey: ''
 
-		radarr:
-		  ip: 127.0.0.1
-		  port: 7878
-		  base_url: /radarr
-		  apikey: ''
+			radarr:
+			  ip: 127.0.0.1
+			  port: 7878
+			  base_url: /radarr
+			  apikey: ''
 
-		auth:
-		  type: None
-		  username: ''
-		  password: ''
-	EOSC
+			auth:
+			  type: None
+			  username: ''
+			  password: ''
+		EOSC
+		echo_progress_done
+	else
+		echo_info "Existing config.yaml found, preserving user customizations"
+	fi
 	chown "${user}:${user}" "${config_dir}/config/config.yaml"
-	echo_progress_done
 
 	# Create systemd service
 	echo_progress_start "Installing systemd service"

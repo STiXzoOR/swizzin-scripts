@@ -642,8 +642,8 @@ trap '' PIPE
 
 Prevent re-run from destroying user customizations.
 
-- [ ] `radarr.sh`, `sonarr.sh`, `bazarr.sh`: Wrap config file generation in `if [[ ! -f "$config_file" ]]; then`
-- [ ] All templates: Add the same guard pattern
+- [x] `radarr.sh`, `sonarr.sh`, `bazarr.sh`: Wrap config file generation in `if [[ ! -f "$config_file" ]]; then`
+- [x] All templates: Add the same guard pattern
 
 **Pattern (from `mdblist-sync.sh:82-91`, already correct):**
 
@@ -706,13 +706,13 @@ trap "rm -f '$tmp_file'" EXIT  # or add to cleanup function
 ---
 
 **Acceptance criteria:**
-- [ ] `_reload_nginx` helper exists and is sourced by all nginx-touching scripts (do FIRST)
-- [ ] Every script can run with no args without crashing (`set -u` safe)
-- [ ] Every script's `--remove` path still works (cleanup functions don't interfere)
-- [ ] `nginx -t` is called before every reload
-- [ ] Config files are not overwritten if they already exist
-- [ ] No predictable `/tmp` file paths in any script
-- [ ] No unsanitized user input in sed patterns
+- [x] `_reload_nginx` helper exists and is sourced by all nginx-touching scripts (do FIRST)
+- [x] Every script can run with no args without crashing (`set -u` safe)
+- [x] Every script's `--remove` path still works (cleanup functions don't interfere)
+- [x] `nginx -t` is called before every reload
+- [x] Config files are not overwritten if they already exist
+- [x] No predictable `/tmp` file paths in any script
+- [x] No unsanitized user input in sed patterns
 
 ---
 

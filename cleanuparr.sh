@@ -79,6 +79,10 @@ _install_cleanuparr() {
 
 	echo_progress_start "Downloading release archive"
 
+	local _tmp_download _tmp_extract
+	_tmp_download=$(mktemp /tmp/cleanuparr-XXXXXX.zip)
+	_tmp_extract=$(mktemp -d /tmp/cleanuparr-extract-XXXXXX)
+
 	case "$(_os_arch)" in
 	"amd64") arch='linux-amd64' ;;
 	"arm64") arch="linux-arm64" ;;
@@ -93,7 +97,7 @@ _install_cleanuparr() {
 		exit 1
 	}
 
-	if ! curl "$latest" -L -o "/tmp/$app_name.zip" >>"$log" 2>&1; then
+	if ! curl "$latest" -L -o "$_tmp_download" >>"$log" 2>&1; then
 		echo_error "Download failed, exiting"
 		exit 1
 	fi
@@ -101,23 +105,21 @@ _install_cleanuparr() {
 
 	echo_progress_start "Extracting archive"
 	# Extract to temp location first (zip contains versioned subfolder)
-	rm -rf "/tmp/$app_name-extract"
-	mkdir -p "/tmp/$app_name-extract"
-	unzip -o "/tmp/$app_name.zip" -d "/tmp/$app_name-extract" >>"$log" 2>&1 || {
+	unzip -o "$_tmp_download" -d "$_tmp_extract" >>"$log" 2>&1 || {
 		echo_error "Failed to extract"
 		exit 1
 	}
-	rm -f "/tmp/$app_name.zip"
+	rm -f "$_tmp_download"
 
 	# Move contents from versioned subfolder to app_dir
-	extracted_folder=$(find "/tmp/$app_name-extract" -maxdepth 1 -type d -name "Cleanuparr-*" | head -1)
+	extracted_folder=$(find "$_tmp_extract" -maxdepth 1 -type d -name "Cleanuparr-*" | head -1)
 	if [ -z "$extracted_folder" ]; then
 		echo_error "Could not find extracted folder"
 		exit 1
 	fi
 	# Move all files from extracted folder to app_dir (preserve config if exists)
 	mv "$extracted_folder"/* "$app_dir/" >>"$log" 2>&1
-	rm -rf "/tmp/$app_name-extract"
+	rm -rf "$_tmp_extract"
 	echo_progress_done "Archive extracted"
 
 	chmod +x "$app_dir/$app_binary"
@@ -222,6 +224,10 @@ _update_cleanuparr() {
 
 	echo_progress_start "Downloading latest release"
 
+	local _tmp_download _tmp_extract
+	_tmp_download=$(mktemp /tmp/cleanuparr-XXXXXX.zip)
+	_tmp_extract=$(mktemp -d /tmp/cleanuparr-extract-XXXXXX)
+
 	case "$(_os_arch)" in
 	"amd64") arch='linux-amd64' ;;
 	"arm64") arch='linux-arm64' ;;
@@ -252,7 +258,7 @@ _update_cleanuparr() {
 	fi
 
 	_verbose "Downloading: ${latest}"
-	if ! curl -fsSL "$latest" -o "/tmp/${app_name}.zip" >>"$log" 2>&1; then
+	if ! curl -fsSL "$latest" -o "$_tmp_download" >>"$log" 2>&1; then
 		echo_error "Download failed"
 		_rollback_cleanuparr
 		exit 1
@@ -261,28 +267,26 @@ _update_cleanuparr() {
 
 	echo_progress_start "Installing update"
 	# Extract to temp location first (zip contains versioned subfolder)
-	rm -rf "/tmp/${app_name}-extract"
-	mkdir -p "/tmp/${app_name}-extract"
-	if ! unzip -o "/tmp/${app_name}.zip" -d "/tmp/${app_name}-extract" >>"$log" 2>&1; then
+	if ! unzip -o "$_tmp_download" -d "$_tmp_extract" >>"$log" 2>&1; then
 		echo_error "Extraction failed"
-		rm -f "/tmp/${app_name}.zip"
-		rm -rf "/tmp/${app_name}-extract"
+		rm -f "$_tmp_download"
+		rm -rf "$_tmp_extract"
 		_rollback_cleanuparr
 		exit 1
 	fi
-	rm -f "/tmp/${app_name}.zip"
+	rm -f "$_tmp_download"
 
 	# Move contents from versioned subfolder to app_dir
-	extracted_folder=$(find "/tmp/${app_name}-extract" -maxdepth 1 -type d -name "Cleanuparr-*" | head -1)
+	extracted_folder=$(find "$_tmp_extract" -maxdepth 1 -type d -name "Cleanuparr-*" | head -1)
 	if [[ -z "$extracted_folder" ]]; then
 		echo_error "Could not find extracted folder"
-		rm -rf "/tmp/${app_name}-extract"
+		rm -rf "$_tmp_extract"
 		_rollback_cleanuparr
 		exit 1
 	fi
 	# Move binary from extracted folder (preserve config)
 	mv "$extracted_folder/${app_binary}" "${app_dir}/${app_binary}" >>"$log" 2>&1
-	rm -rf "/tmp/${app_name}-extract"
+	rm -rf "$_tmp_extract"
 	chmod +x "${app_dir}/${app_binary}"
 	chown "${user}:${user}" "${app_dir}/${app_binary}"
 	echo_progress_done "Installed"

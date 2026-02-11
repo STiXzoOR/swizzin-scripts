@@ -11,6 +11,8 @@ set -euo pipefail
 
 # shellcheck source=lib/nginx-utils.sh
 . "$(dirname "${BASH_SOURCE[0]}")/lib/nginx-utils.sh" 2>/dev/null || true
+# shellcheck source=lib/utils.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/utils.sh" 2>/dev/null || true
 
 PANEL_HELPER_LOCAL="/opt/swizzin-extras/panel_helpers.sh"
 PANEL_HELPER_URL="https://raw.githubusercontent.com/STiXzoOR/swizzin-scripts/main/panel_helpers.sh"
@@ -461,21 +463,24 @@ _configure_lingarr() {
 
 	echo_progress_start "Configuring Lingarr to use local LibreTranslate"
 
+	local escaped_url
+	escaped_url=$(_sed_escape_value "$libretranslate_url")
+
 	# Check if LIBRE_TRANSLATE_URL is already in the compose file
 	if grep -q "LIBRE_TRANSLATE_URL" "$lingarr_compose"; then
 		# Update existing entry
-		sed -i "s|LIBRE_TRANSLATE_URL=.*|LIBRE_TRANSLATE_URL=${libretranslate_url}|" "$lingarr_compose"
+		sed -i "s|LIBRE_TRANSLATE_URL=.*|LIBRE_TRANSLATE_URL=${escaped_url}|" "$lingarr_compose"
 	else
 		# Add LIBRE_TRANSLATE_URL before the volumes: line (after environment vars)
 		if grep -q "^    volumes:" "$lingarr_compose"; then
-			sed -i "/^    volumes:/i\\      - LIBRE_TRANSLATE_URL=${libretranslate_url}" "$lingarr_compose"
+			sed -i "/^    volumes:/i\\      - LIBRE_TRANSLATE_URL=${escaped_url}" "$lingarr_compose"
 		elif grep -q "^    environment:" "$lingarr_compose"; then
 			# No volumes section, append after environment section
 			# Find last env var line and append after it
 			local last_env_line
 			last_env_line=$(grep -n "^      - " "$lingarr_compose" | tail -1 | cut -d: -f1)
 			if [[ -n "$last_env_line" ]]; then
-				sed -i "${last_env_line}a\\      - LIBRE_TRANSLATE_URL=${libretranslate_url}" "$lingarr_compose"
+				sed -i "${last_env_line}a\\      - LIBRE_TRANSLATE_URL=${escaped_url}" "$lingarr_compose"
 			fi
 		fi
 	fi

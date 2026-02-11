@@ -200,15 +200,19 @@ _install_myapp() {
 	}
 	echo_progress_done "Dependencies installed"
 
-	# CUSTOMIZE: Create environment config file
-	echo_progress_start "Creating environment config"
-	cat >"${app_configdir}/env.conf" <<-EOF
-		# ${app_pretty} environment configuration
-		HOST=127.0.0.1
-		PORT=${app_port}
-	EOF
+	# CUSTOMIZE: Create environment config file (skip if user has existing config)
+	if [[ ! -f "${app_configdir}/env.conf" ]]; then
+		echo_progress_start "Creating environment config"
+		cat >"${app_configdir}/env.conf" <<-EOF
+			# ${app_pretty} environment configuration
+			HOST=127.0.0.1
+			PORT=${app_port}
+		EOF
+		echo_progress_done "Environment config created"
+	else
+		echo_info "Existing env.conf found, preserving user customizations"
+	fi
 	chown -R "${user}:${user}" "$app_configdir"
-	echo_progress_done "Environment config created"
 }
 
 # ==============================================================================

@@ -102,6 +102,9 @@ _install_flaresolverr() {
 
 	echo_progress_start "Downloading FlareSolverr"
 
+	local _tmp_download
+	_tmp_download=$(mktemp /tmp/flaresolverr-XXXXXX.tar.gz)
+
 	# Get latest release URL
 	local github_repo="FlareSolverr/FlareSolverr"
 	latest=$(curl -sL "https://api.github.com/repos/${github_repo}/releases/latest" |
@@ -118,7 +121,7 @@ _install_flaresolverr() {
 		exit 1
 	fi
 
-	if ! curl -fsSL "$latest" -o "/tmp/${app_name}.tar.gz" >>"$log" 2>&1; then
+	if ! curl -fsSL "$latest" -o "$_tmp_download" >>"$log" 2>&1; then
 		echo_error "Download failed"
 		exit 1
 	fi
@@ -133,11 +136,11 @@ _install_flaresolverr() {
 
 	# Create directory and extract
 	mkdir -p "$app_dir"
-	tar xf "/tmp/${app_name}.tar.gz" --strip-components=1 -C "$app_dir" >>"$log" 2>&1 || {
+	tar xf "$_tmp_download" --strip-components=1 -C "$app_dir" >>"$log" 2>&1 || {
 		echo_error "Failed to extract"
 		exit 1
 	}
-	rm -f "/tmp/${app_name}.tar.gz"
+	rm -f "$_tmp_download"
 	chown -R "${user}:${user}" "$app_dir"
 	chmod +x "${app_dir}/${app_binary}"
 	echo_progress_done "Extracted"
@@ -259,6 +262,9 @@ _update_flaresolverr() {
 
 	echo_progress_start "Downloading latest release"
 
+	local _tmp_download
+	_tmp_download=$(mktemp /tmp/flaresolverr-XXXXXX.tar.gz)
+
 	# Check architecture - FlareSolverr only supports x64
 	case "$(_os_arch)" in
 	"amd64") arch='linux_x64' ;;
@@ -289,7 +295,7 @@ _update_flaresolverr() {
 	fi
 
 	_verbose "Downloading: ${latest}"
-	if ! curl -fsSL "$latest" -o "/tmp/${app_name}.tar.gz" >>"$log" 2>&1; then
+	if ! curl -fsSL "$latest" -o "$_tmp_download" >>"$log" 2>&1; then
 		echo_error "Download failed"
 		_rollback_flaresolverr
 		exit 1
@@ -300,13 +306,13 @@ _update_flaresolverr() {
 	# Remove old installation but preserve config
 	rm -rf "$app_dir"
 	mkdir -p "$app_dir"
-	if ! tar xf "/tmp/${app_name}.tar.gz" --strip-components=1 -C "$app_dir" >>"$log" 2>&1; then
+	if ! tar xf "$_tmp_download" --strip-components=1 -C "$app_dir" >>"$log" 2>&1; then
 		echo_error "Extraction failed"
-		rm -f "/tmp/${app_name}.tar.gz"
+		rm -f "$_tmp_download"
 		_rollback_flaresolverr
 		exit 1
 	fi
-	rm -f "/tmp/${app_name}.tar.gz"
+	rm -f "$_tmp_download"
 	chown -R "${user}:${user}" "$app_dir"
 	chmod +x "${app_dir}/${app_binary}"
 	echo_progress_done "Installed"

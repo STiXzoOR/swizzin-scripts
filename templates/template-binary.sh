@@ -158,6 +158,9 @@ _install_myapp() {
 
 	echo_progress_start "Downloading release archive"
 
+	local _tmp_download
+	_tmp_download=$(mktemp "/tmp/${app_name}-XXXXXX.tar.gz")
+
 	# CUSTOMIZE: Map architecture names to what the release uses
 	case "$(_os_arch)" in
 	"amd64") arch='x86_64' ;;
@@ -180,31 +183,35 @@ _install_myapp() {
 		exit 1
 	}
 
-	if ! curl -fsSL "$latest" -o "/tmp/${app_name}.tar.gz" >>"$log" 2>&1; then
+	if ! curl -fsSL "$latest" -o "$_tmp_download" >>"$log" 2>&1; then
 		echo_error "Download failed"
 		exit 1
 	fi
 	echo_progress_done "Archive downloaded"
 
 	echo_progress_start "Extracting archive"
-	tar xf "/tmp/${app_name}.tar.gz" --directory "${app_dir}/" >>"$log" 2>&1 || {
+	tar xf "$_tmp_download" --directory "${app_dir}/" >>"$log" 2>&1 || {
 		echo_error "Failed to extract"
 		exit 1
 	}
-	rm -f "/tmp/${app_name}.tar.gz"
+	rm -f "$_tmp_download"
 	chmod +x "${app_dir}/${app_binary}"
 	echo_progress_done "Archive extracted"
 
-	# CUSTOMIZE: Create default config file
-	echo_progress_start "Creating default config"
-	cat >"${app_configdir}/config.json" <<-CFG
-		{
-		  "port": ${app_port},
-		  "url_base": "/${app_baseurl}/"
-		}
-	CFG
+	# CUSTOMIZE: Create default config file (skip if user has existing config)
+	if [[ ! -f "${app_configdir}/config.json" ]]; then
+		echo_progress_start "Creating default config"
+		cat >"${app_configdir}/config.json" <<-CFG
+			{
+			  "port": ${app_port},
+			  "url_base": "/${app_baseurl}/"
+			}
+		CFG
+		echo_progress_done "Default config created"
+	else
+		echo_info "Existing config.json found, preserving user customizations"
+	fi
 	chown -R "${user}:${user}" "$app_configdir"
-	echo_progress_done "Default config created"
 }
 
 # ==============================================================================
@@ -303,6 +310,9 @@ _update_myapp() {
 	# Download new binary
 	echo_progress_start "Downloading latest release"
 
+	local _tmp_download
+	_tmp_download=$(mktemp "/tmp/${app_name}-XXXXXX.tar.gz")
+
 	# CUSTOMIZE: Map architecture names to what the release uses
 	case "$(_os_arch)" in
 	"amd64") arch='x86_64' ;;
@@ -330,7 +340,7 @@ _update_myapp() {
 	}
 
 	_verbose "Downloading: ${latest}"
-	if ! curl -fsSL "$latest" -o "/tmp/${app_name}.tar.gz" >>"$log" 2>&1; then
+	if ! curl -fsSL "$latest" -o "$_tmp_download" >>"$log" 2>&1; then
 		echo_error "Download failed"
 		_rollback_myapp
 		exit 1
@@ -339,12 +349,12 @@ _update_myapp() {
 
 	# Extract and replace binary
 	echo_progress_start "Installing new binary"
-	tar xf "/tmp/${app_name}.tar.gz" --directory "${app_dir}/" >>"$log" 2>&1 || {
+	tar xf "$_tmp_download" --directory "${app_dir}/" >>"$log" 2>&1 || {
 		echo_error "Failed to extract"
 		_rollback_myapp
 		exit 1
 	}
-	rm -f "/tmp/${app_name}.tar.gz"
+	rm -f "$_tmp_download"
 	chmod +x "${app_dir}/${app_binary}"
 	echo_progress_done "Binary installed"
 

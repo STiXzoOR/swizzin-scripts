@@ -272,23 +272,26 @@ _install_app() {
 
 	echo_progress_start "Downloading and extracting Seerr source code"
 
+	local _tmp_download
+	_tmp_download=$(mktemp /tmp/seerr-XXXXXX.tar.gz)
+
 	local dlurl
 	dlurl="$(curl -sS https://api.github.com/repos/seerr-team/seerr/releases/latest | jq -r .tarball_url)" || {
 		echo_error "Failed to query GitHub for latest Seerr release"
 		exit 1
 	}
 
-	if ! curl -sL "$dlurl" -o "/tmp/$app_name.tar.gz" >>"$log" 2>&1; then
+	if ! curl -sL "$dlurl" -o "$_tmp_download" >>"$log" 2>&1; then
 		echo_error "Download failed"
 		exit 1
 	fi
 
 	mkdir -p "$app_dir"
-	tar --strip-components=1 -C "$app_dir" -xzvf "/tmp/$app_name.tar.gz" >>"$log" 2>&1 || {
+	tar --strip-components=1 -C "$app_dir" -xzvf "$_tmp_download" >>"$log" 2>&1 || {
 		echo_error "Failed to extract Seerr archive"
 		exit 1
 	}
-	rm -f "/tmp/$app_name.tar.gz"
+	rm -f "$_tmp_download"
 	chown -R "$user":"$user" "$app_dir"
 	echo_progress_done "Seerr source code extracted to $app_dir"
 

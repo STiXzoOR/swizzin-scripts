@@ -27,6 +27,9 @@ echo_ok()    { echo -e "\033[0;32m[OK]\033[0m $*"; }
 echo_warn()  { echo -e "\033[0;33m[WARN]\033[0m $*"; }
 echo_error() { echo -e "\033[0;31m[ERROR]\033[0m $*" >&2; }
 
+# Escape a string for safe use in sed replacement (handles &, |, \)
+_sed_escape_value() { printf '%s' "$1" | sed 's/[&|\\]/\\&/g'; }
+
 # ==============================================================================
 # Install
 # ==============================================================================
@@ -96,9 +99,11 @@ _install() {
     echo_info "=== Configuration ==="
     echo ""
 
-    # Helper: set a config value
+    # Helper: set a config value (value is escaped for sed safety)
     _set_config() {
-        local key="$1" value="$2"
+        local key="$1"
+        local value
+        value=$(_sed_escape_value "$2")
         sed -i "s|^${key}=.*|${key}=\"${value}\"|" "$CONFIG_DST"
     }
 
