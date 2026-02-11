@@ -5,6 +5,6 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-ExecStart=/opt/swizzin-extras/swizzin-backup.sh --verify
+ExecStart=/usr/local/bin/swizzin-backup.sh --verify
 Nice=19
 IOSchedulingClass=idle
