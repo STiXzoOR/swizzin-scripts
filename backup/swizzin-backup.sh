@@ -26,7 +26,8 @@
 #
 # STiXzoOR custom apps:
 #   Multi-instance sonarr/radarr, zurg, decypharr, notifiarr, byparr,
-#   flaresolverr, huntarr, subgen, lingarr, cleanuparr, seerr, overseerr, jellyseerr
+#   flaresolverr, huntarr, subgen, lingarr, cleanuparr, seerr, overseerr, jellyseerr,
+#   mdblist-sync
 #===============================================================================
 
 set -euo pipefail
@@ -684,6 +685,11 @@ cmd_backup() {
     # Note: /mnt/symlinks is explicitly included (contains arr root folder symlinks)
     #===========================================================================
 
+    if [[ ! -f "$EXCLUDES_FILE" ]]; then
+        log "ERROR: Excludes file not found: $EXCLUDES_FILE"
+        exit 1
+    fi
+
     log "Phase 1/3: Creating backup archive..."
     local phase1_start
     phase1_start=$(date +%s)
@@ -888,7 +894,7 @@ case "${1:-}" in
         echo "  --list       List archives"
         echo "  --info       Show repository info"
         echo "  --check      Run borg check"
-        echo "  --services   List discovered services"
+        echo "  --services   List discovered services (includes multi-instance)"
         echo "  --help       Show this help"
         ;;
     "")

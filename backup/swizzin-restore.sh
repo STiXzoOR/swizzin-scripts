@@ -45,7 +45,7 @@ declare -A APP_PATHS=(
     ["radarr"]="home/*/.config/Radarr"
     ["lidarr"]="home/*/.config/Lidarr"
     ["prowlarr"]="home/*/.config/Prowlarr"
-    ["bazarr"]="opt/bazarr/data"
+    ["bazarr"]="home/*/.config/bazarr"
 
     # Automation
     ["autobrr"]="home/*/.config/autobrr"
@@ -97,6 +97,7 @@ declare -A APP_PATHS=(
     ["subgen"]="home/*/.config/Subgen"
     ["lingarr"]="opt/lingarr/config"
     ["zurg"]="home/*/.config/zurg"
+    ["mdblist-sync"]="opt/swizzin-extras"
 
     # Additional
     ["wireguard"]="etc/wireguard"
@@ -131,7 +132,9 @@ declare -A SERVICE_TYPES=(
     ["overseerr"]="system" ["jellyseerr"]="system" ["seerr"]="system"
     ["decypharr"]="system" ["notifiarr"]="system" ["huntarr"]="system"
     ["cleanuparr"]="system" ["byparr"]="system" ["flaresolverr"]="system"
-    ["subgen"]="system" ["lingarr"]="system" ["zurg"]="system"
+    ["subgen"]="system" ["lingarr"]="system" ["libretranslate"]="system"
+    ["zurg"]="system" ["rclone-zurg"]="system"
+    ["netdata"]="system" ["organizr"]="system" ["nextcloud"]="system"
 )
 
 declare -A SERVICE_NAME_MAP=(
