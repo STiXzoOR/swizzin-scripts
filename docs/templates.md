@@ -42,6 +42,12 @@ Each template marks customization points with `# CUSTOMIZE:` comments:
 
 All templates include:
 
+- `set -euo pipefail` strict error handling
+- Cleanup trap handler (`trap cleanup EXIT`)
+- Config overwrite guards (won't clobber existing configs on re-run)
+- `mktemp` for temporary files (no predictable `/tmp` paths)
+- Validated nginx reload via `_reload_nginx()` from `lib/nginx-utils.sh`
+- Local-first panel helper loading (no GitHub download)
 - Detailed header with usage
 - Standard function structure
 - Inline documentation

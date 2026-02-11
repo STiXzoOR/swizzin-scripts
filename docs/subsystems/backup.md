@@ -6,15 +6,17 @@ BorgBackup-based backup system supporting any SSH-accessible borg server (Hetzne
 
 ```
 backup/
-├── swizzin-backup-install.sh   # Interactive setup wizard
-├── swizzin-backup.sh           # Main backup script
-├── swizzin-restore.sh          # Interactive restore
-├── swizzin-backup.conf         # Configuration template
-├── swizzin-excludes.txt        # Exclusion patterns
-├── swizzin-backup.service      # Systemd service unit
-├── swizzin-backup.timer        # Systemd timer (daily at 4 AM)
-├── swizzin-backup-logrotate    # Log rotation config
-└── README.md                   # Setup documentation
+├── swizzin-backup-install.sh      # Interactive setup wizard
+├── swizzin-backup.sh              # Main backup script
+├── swizzin-restore.sh             # Interactive restore
+├── swizzin-backup.conf            # Configuration template
+├── swizzin-excludes.txt           # Exclusion patterns
+├── swizzin-backup.service         # Systemd service unit
+├── swizzin-backup.timer           # Systemd timer (daily at 4 AM)
+├── swizzin-backup-verify.service  # Verification service unit
+├── swizzin-backup-verify.timer    # Weekly verification (Sunday 4 AM)
+├── swizzin-backup-logrotate       # Log rotation config
+└── README.md                      # Setup documentation
 ```
 
 ## Runtime Files (on server)
@@ -47,10 +49,17 @@ swizzin-backup.sh               # Run full backup
 swizzin-backup.sh --dry-run     # Show what would be backed up
 swizzin-backup.sh --list        # List archives
 swizzin-backup.sh --services    # List discovered services
+swizzin-backup.sh --verify      # Verify repository integrity (borg check --verify-data)
 swizzin-restore.sh              # Interactive restore
 swizzin-restore.sh --app sonarr # Restore single app
 swizzin-restore.sh --mount      # FUSE mount for browsing
 ```
+
+## Automated Verification
+
+The `swizzin-backup-verify.timer` runs weekly (Sunday 4 AM) to verify repository integrity using `borg check --verify-data`. The verification service runs at low priority (`Nice=19`, `IOSchedulingClass=idle`) to minimize impact on the system.
+
+Notifications use the shared `lib/notifications.sh` library with rate limiting.
 
 ## Adding New App Support
 

@@ -4,15 +4,18 @@
 
 Each installer script follows this sequence:
 
-1. Source Swizzin utilities from `/etc/swizzin/sources/functions/utils`
-2. Load the panel helper (locally or fetched from GitHub)
-3. Define app variables (port, paths, config directory)
-4. Execute installation functions:
+1. `set -euo pipefail` for strict error handling
+2. Source Swizzin utilities from `/etc/swizzin/sources/functions/utils`
+3. Source shared libraries (`lib/utils.sh`, `lib/nginx-utils.sh`)
+4. Load the panel helper (local repo copy, cache fallback)
+5. Define app variables (port, paths, config directory)
+6. Register cleanup trap handler (`trap cleanup EXIT`)
+7. Execute installation functions:
    - `_install_<app>()` - Download, extract, configure
    - `_systemd_<app>()` - Create and enable systemd service
    - `_nginx_<app>()` - Configure reverse proxy (if nginx installed)
-5. Register with Swizzin panel via `panel_register_app()`
-6. Create lock file at `/install/.<appname>.lock`
+8. Register with Swizzin panel via `panel_register_app()`
+9. Create lock file at `/install/.<appname>.lock`
 
 ## Binary Placement
 
@@ -44,6 +47,34 @@ Each installer script follows this sequence:
 | `sonarr.sh`         | Multi-instance Sonarr manager                               |
 | `radarr.sh`         | Multi-instance Radarr manager                               |
 | `panel_helpers.sh`  | Shared panel registration utility                           |
+
+## Shared Libraries
+
+| Library              | Location            | Purpose                                          |
+| -------------------- | ------------------- | ------------------------------------------------ |
+| `lib/nginx-utils.sh` | Sourced by scripts  | `_reload_nginx()` - validated nginx reload       |
+| `lib/utils.sh`       | Sourced by scripts  | `_sed_escape_value()` - safe sed replacement     |
+| `lib/notifications.sh` | Sourced by watchdog/backup | Shared notification channels + rate limiting |
+
+### lib/nginx-utils.sh
+
+Provides `_reload_nginx()` which runs `nginx -t` before reloading. All scripts use this instead of bare `systemctl reload nginx`.
+
+### lib/utils.sh
+
+Provides `_sed_escape_value()` to escape `&`, `|`, `\` characters in sed replacement strings, preventing injection when substituting user-controlled values.
+
+### lib/notifications.sh
+
+Shared notification library used by the watchdog and backup systems. Supports Discord, Pushover, Notifiarr, and email. Includes `_should_notify()` rate limiter (default: 1 notification per 5 minutes per service).
+
+Scripts override `_notify_log_warn()` before sourcing to use their own log format:
+
+```bash
+_notify_log_warn() { log_warn "$1"; }
+. "${SCRIPT_DIR}/../lib/notifications.sh"
+NOTIFY_RATE_DIR="$STATE_DIR"
+```
 
 ## Function Naming
 
@@ -82,6 +113,9 @@ Most installers use `port 10000 12000` to find an available port.
 | Panel registration | `/opt/swizzin/core/custom/profiles.py` |
 | Lock files         | `/install/.<appname>.lock`             |
 | Logs               | `/root/logs/swizzin.log`               |
+| Shared libraries   | `lib/nginx-utils.sh`, `lib/utils.sh`, `lib/notifications.sh` |
+| Watchdog state     | `/var/lib/watchdog/`                   |
+| Notification rate  | `/var/lib/watchdog/<service>.notify_ts` |
 
 ## Python Apps (uv-based)
 

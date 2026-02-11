@@ -22,10 +22,18 @@ Swizzin installer scripts - bash installation scripts for integrating applicatio
 
 ## Subsystems
 
-- [Backup System](docs/subsystems/backup.md) - BorgBackup
+- [Backup System](docs/subsystems/backup.md) - BorgBackup with `--verify` and weekly integrity checks
 - [Update System](docs/subsystems/update-system.md) - `--update` flag with rollback
-- [Watchdog](docs/subsystems/watchdog.md) - Service health monitoring
+- [Watchdog](docs/subsystems/watchdog.md) - Health monitoring for Emby, Plex, Jellyfin
 - [App Info Tool](docs/subsystems/app-info.md) - swizzin-app-info utility
+
+## Shared Libraries
+
+| Library | Purpose |
+| --- | --- |
+| `lib/nginx-utils.sh` | Validated nginx reload (`_reload_nginx`) |
+| `lib/utils.sh` | Sed escape for safe substitution (`_sed_escape_value`) |
+| `lib/notifications.sh` | Discord/Pushover/Notifiarr/email notifications + rate limiting |
 
 ## Testing
 

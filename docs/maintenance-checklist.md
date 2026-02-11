@@ -68,7 +68,20 @@ Add to:
 - Files overview in [docs/architecture.md](architecture.md)
 - App-specific documentation if complex enough to warrant its own section
 
-## 6. Update Testing
+## 6. Shared Libraries
+
+If the new script uses nginx, source `lib/nginx-utils.sh` for validated reload:
+
+```bash
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "${SCRIPT_DIR}/lib/nginx-utils.sh"
+```
+
+If the script uses `sed` with user-supplied values, source `lib/utils.sh` for `_sed_escape_value()`.
+
+If adding a new watchdog, the notification functions are in `lib/notifications.sh` (shared by all watchdog and backup scripts).
+
+## 7. Update Testing
 
 When implementing `--update` for a new script:
 
