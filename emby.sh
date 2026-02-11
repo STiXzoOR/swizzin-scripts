@@ -294,6 +294,8 @@ server {
     include snippets/ssl-params.conf;
 
     client_max_body_size 0;
+    proxy_redirect off;
+    proxy_buffering off;
 
     # Streaming timeouts (1 hour for long-running streams)
     proxy_read_timeout 3600;

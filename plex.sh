@@ -419,6 +419,10 @@ server {
         proxy_set_header X-Plex-Provides \$http_x_plex_provides;
         proxy_set_header X-Plex-Device-Vendor \$http_x_plex_device_vendor;
         proxy_set_header X-Plex-Model \$http_x_plex_model;
+
+        # Range request support for seeking in media files
+        proxy_set_header Range \$http_range;
+        proxy_set_header If-Range \$http_if_range;
     }
 
     location /library/streams/ {

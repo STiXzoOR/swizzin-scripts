@@ -413,21 +413,7 @@ Without this, workers inherit system default fd limit (often 1024), hitting limi
 
 The Emby nginx config is missing features that Plex and Jellyfin have. Bring Emby to parity.
 
-- [ ] `emby.sh`: Add to the subdomain/subfolder nginx config:
-  - `proxy_buffering off;` -- required for live streaming
-  - `proxy_http_version 1.1;` -- **CRITICAL: required for keepalive to work**
-  - `proxy_set_header Connection "";` -- **CRITICAL: required for keepalive to work**
-  - Streaming timeouts: `proxy_read_timeout 3600s; proxy_send_timeout 3600s;` (currently inherits 240s from proxy.conf)
-  - `client_max_body_size 0;` -- unlimited upload (currently 40m from proxy.conf)
-  - WebSocket support:
-    ```nginx
-    location /embywebsocket {
-        proxy_pass http://emby_backend;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-    }
-    ```
+- [x] `emby.sh`: Added `proxy_buffering off`, `proxy_redirect off` at server level; keepalive already from Phase 2.1
 
 ### Research Insights (Phase 2.2)
 
@@ -437,7 +423,7 @@ The Emby nginx config is missing features that Plex and Jellyfin have. Bring Emb
 
 #### 2.3 Plex Range Header Fix
 
-- [ ] `plex.sh`: Add Range request headers to the main `location /` block (currently only in `/library/streams/`):
+- [x] `plex.sh`: Add Range request headers to the main `location /` block (currently only in `/library/streams/`):
   ```nginx
   proxy_set_header Range $http_range;
   proxy_set_header If-Range $http_if_range;
