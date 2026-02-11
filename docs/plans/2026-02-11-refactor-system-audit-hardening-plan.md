@@ -234,8 +234,8 @@ curl -I https://plex.example.com | grep -E "X-Content-Type|Referrer-Policy|Permi
 
 Update `optimize-streaming.sh` to write a complete `/etc/sysctl.d/99-streaming.conf` instead of just `ip_local_port_range`. The bootstrap `tuning.sh` already has most of these parameters -- this change brings the standalone optimizer to parity.
 
-- [ ] `optimize-streaming.sh`: Replace the sysctl configuration section to include all parameters from the audit report (tcp_tw_reuse, tcp_fin_timeout, tcp_keepalive_time, conntrack_max, UDP buffers, RPS entries)
-- [ ] Ensure no conflict with `bootstrap/lib/tuning.sh` -- the optimizer should be additive/idempotent
+- [x] `optimize-streaming.sh`: Replace the sysctl configuration section to write full config to `99-streaming-optimizer.conf`
+- [x] Ensure no conflict with `bootstrap/lib/tuning.sh` -- uses separate sysctl file (alphabetical precedence)
 
 **Parameters to add to `optimize-streaming.sh`:**
 
@@ -273,10 +273,10 @@ Both `optimize-streaming.sh` and `bootstrap/lib/tuning.sh` write to the same fil
 **Resolution strategy:** Have `optimize-streaming.sh` write to a SEPARATE file `/etc/sysctl.d/99-streaming-optimizer.conf` so both coexist. Sysctl files are loaded alphabetically; the optimizer file takes precedence on overlapping keys. The optimizer should ONLY write parameters where it intentionally differs from bootstrap.
 
 **Additional files requiring updates for the rename:**
-- [ ] `bootstrap/lib/restore.sh:127` -- add `rm -f /etc/sysctl.d/99-streaming-optimizer.conf` alongside existing cleanup
-- [ ] `bootstrap/bootstrap.sh:245` -- update status check to also detect `99-streaming-optimizer.conf`
-- [ ] `optimize-streaming.sh:341` -- update its own status check to use new filename
-- [ ] Add migration logic in optimizer: if old entries exist in `99-streaming.conf`, don't duplicate
+- [x] `bootstrap/lib/restore.sh:127` -- add `rm -f /etc/sysctl.d/99-streaming-optimizer.conf` alongside existing cleanup
+- [x] `bootstrap/bootstrap.sh:245` -- update status check to also detect `99-streaming-optimizer.conf`
+- [x] `optimize-streaming.sh:341` -- update its own status check to use new filename
+- [x] Add migration logic in optimizer: if old entries exist in `99-streaming.conf`, don't duplicate
 
 **Current behavior note:** The optimizer currently APPENDS (`>>`) only `ip_local_port_range`. The plan changes this to a full file write (`cat >`), which is a semantic change requiring the separate filename.
 

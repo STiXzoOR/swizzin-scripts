@@ -242,7 +242,7 @@ show_status() {
     fi
 
     # Kernel tuning
-    if [[ -f /etc/sysctl.d/99-streaming.conf ]]; then
+    if [[ -f /etc/sysctl.d/99-streaming.conf ]] || [[ -f /etc/sysctl.d/99-streaming-optimizer.conf ]]; then
         echo -e "  ${GREEN}✓${NC} Kernel tuning applied"
     else
         echo -e "  ${YELLOW}○${NC} Kernel tuning not applied"

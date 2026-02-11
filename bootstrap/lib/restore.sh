@@ -125,6 +125,7 @@ restore_tuning() {
 
     # Remove custom configs
     rm -f /etc/sysctl.d/99-streaming.conf
+    rm -f /etc/sysctl.d/99-streaming-optimizer.conf
     rm -f /etc/security/limits.d/99-streaming.conf
     rm -f /etc/systemd/system.conf.d/99-limits.conf
     rm -f /etc/systemd/user.conf.d/99-limits.conf
