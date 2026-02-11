@@ -1,13 +1,17 @@
 #!/bin/bash
 # ==============================================================================
-# NGINX STREAMING OPTIMIZATION SCRIPT
+# NGINX STREAMING & SECURITY HARDENING SCRIPT
 # ==============================================================================
-# Extends existing Swizzin nginx installation with streaming-optimized settings:
+# Extends existing Swizzin nginx installation with streaming-optimized settings
+# and security hardening:
 # - worker_connections: 768 -> 4096
 # - multi_accept: enabled
 # - SSL session cache: 10m -> 50m
 # - Proxy buffers: 32 4k -> 64 8k
 # - Creates streaming.conf snippet with extended timeouts
+# - TLS hardening: removes TLSv1/TLSv1.1, server_tokens off
+# - Security headers: HSTS, X-Content-Type-Options, Referrer-Policy, Permissions-Policy
+# - OCSP stapling and cipher suite preference
 #
 # Usage: sudo bash nginx-streaming.sh [--install|--remove|--status]
 #
@@ -198,7 +202,85 @@ EOF
         echo_warn "proxy.conf not found, skipping proxy buffers update"
     fi
 
-    # 6. Test and reload nginx
+    # 6. TLS hardening -- remove legacy protocols
+    echo_info "Applying TLS hardening..."
+    if grep -q 'ssl_protocols.*TLSv1[^.]' /etc/nginx/nginx.conf; then
+        sed -i 's/ssl_protocols.*TLSv1[^.]*TLSv1\.1\s*/ssl_protocols /' /etc/nginx/nginx.conf
+        # Clean up in case only TLSv1 was listed (without TLSv1.1)
+        sed -i 's/ssl_protocols\s\+TLSv1\s\+/ssl_protocols /' /etc/nginx/nginx.conf
+        echo_success "Removed TLSv1/TLSv1.1 from ssl_protocols"
+    elif grep -q 'ssl_protocols' /etc/nginx/nginx.conf; then
+        echo_info "ssl_protocols already excludes TLSv1/TLSv1.1"
+    fi
+
+    # 7. server_tokens off
+    if grep -q '#.*server_tokens off' /etc/nginx/nginx.conf; then
+        sed -i 's/#\s*server_tokens off/server_tokens off/' /etc/nginx/nginx.conf
+        echo_success "Enabled server_tokens off"
+    elif ! grep -q 'server_tokens off' /etc/nginx/nginx.conf; then
+        sed -i '/http {/a\    server_tokens off;' /etc/nginx/nginx.conf
+        echo_success "Added server_tokens off"
+    else
+        echo_info "server_tokens already off"
+    fi
+
+    # 8. Security headers + HSTS + OCSP + cipher suite in ssl-params.conf
+    if [[ -f /etc/nginx/snippets/ssl-params.conf ]]; then
+        # HSTS
+        if grep -q '#.*Strict-Transport-Security' /etc/nginx/snippets/ssl-params.conf; then
+            sed -i 's/#.*add_header Strict-Transport-Security.*/add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;/' /etc/nginx/snippets/ssl-params.conf
+            echo_success "Enabled HSTS"
+        elif ! grep -q 'Strict-Transport-Security' /etc/nginx/snippets/ssl-params.conf; then
+            echo 'add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;' >> /etc/nginx/snippets/ssl-params.conf
+            echo_success "Added HSTS"
+        else
+            echo_info "HSTS already enabled"
+        fi
+
+        # Security headers (safe at server level -- included via snippet, same level as per-vhost CSP)
+        if ! grep -q 'X-Content-Type-Options' /etc/nginx/snippets/ssl-params.conf; then
+            cat >> /etc/nginx/snippets/ssl-params.conf <<'SECHEADERS'
+
+# Security headers (added by nginx-streaming.sh)
+add_header X-Content-Type-Options "nosniff" always;
+add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
+SECHEADERS
+            echo_success "Added security headers (X-Content-Type-Options, Referrer-Policy, Permissions-Policy)"
+        else
+            echo_info "Security headers already present"
+        fi
+
+        # OCSP Stapling
+        if ! grep -q 'ssl_stapling on' /etc/nginx/snippets/ssl-params.conf; then
+            cat >> /etc/nginx/snippets/ssl-params.conf <<'OCSP'
+
+# OCSP Stapling (added by nginx-streaming.sh)
+ssl_stapling on;
+ssl_stapling_verify on;
+resolver 1.1.1.1 8.8.8.8 valid=300s;
+resolver_timeout 5s;
+OCSP
+            echo_success "Added OCSP stapling"
+        else
+            echo_info "OCSP stapling already configured"
+        fi
+
+        # Cipher suite preference
+        if ! grep -q 'ssl_prefer_server_ciphers' /etc/nginx/snippets/ssl-params.conf; then
+            cat >> /etc/nginx/snippets/ssl-params.conf <<'CIPHERS'
+
+# Cipher suite (added by nginx-streaming.sh)
+ssl_prefer_server_ciphers on;
+ssl_ciphers 'ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384';
+CIPHERS
+            echo_success "Added cipher suite preference"
+        else
+            echo_info "Cipher suite already configured"
+        fi
+    fi
+
+    # 9. Test and reload nginx
     echo_info "Testing nginx configuration..."
     if nginx -t 2>&1; then
         systemctl reload nginx
@@ -263,10 +345,29 @@ remove_streaming_nginx() {
         echo_success "Removed streaming configuration snippet"
     fi
 
-    # 6. Remove lock file
+    # 6. Revert TLS hardening -- re-enable server_tokens (comment it out)
+    if grep -q '^[[:space:]]*server_tokens off' /etc/nginx/nginx.conf; then
+        sed -i 's/^\([[:space:]]*\)server_tokens off/\1# server_tokens off/' /etc/nginx/nginx.conf
+        echo_success "Reverted server_tokens"
+    fi
+
+    # 7. Revert ssl-params.conf additions (security headers, HSTS, OCSP, ciphers)
+    if [[ -f /etc/nginx/snippets/ssl-params.conf ]]; then
+        # Remove blocks added by this script (identified by comment markers)
+        sed -i '/# Security headers (added by nginx-streaming.sh)/,/Permissions-Policy/d' /etc/nginx/snippets/ssl-params.conf
+        sed -i '/# OCSP Stapling (added by nginx-streaming.sh)/,/resolver_timeout/d' /etc/nginx/snippets/ssl-params.conf
+        sed -i '/# Cipher suite (added by nginx-streaming.sh)/,/ssl_ciphers/d' /etc/nginx/snippets/ssl-params.conf
+        # Revert HSTS (comment it out)
+        if grep -q '^add_header Strict-Transport-Security' /etc/nginx/snippets/ssl-params.conf; then
+            sed -i 's/^add_header Strict-Transport-Security/# add_header Strict-Transport-Security/' /etc/nginx/snippets/ssl-params.conf
+        fi
+        echo_success "Reverted ssl-params.conf additions"
+    fi
+
+    # 8. Remove lock file
     rm -f "$LOCK_FILE"
 
-    # 7. Test and reload nginx
+    # 9. Test and reload nginx
     echo_info "Testing nginx configuration..."
     if nginx -t 2>&1; then
         systemctl reload nginx
@@ -332,6 +433,37 @@ show_status() {
     fi
 
     echo ""
+    echo "Security Hardening:"
+
+    # server_tokens
+    if grep -q '^[[:space:]]*server_tokens off' /etc/nginx/nginx.conf 2>/dev/null; then
+        echo "  server_tokens: off (hardened)"
+    else
+        echo "  server_tokens: on (default)"
+    fi
+
+    # HSTS
+    if grep -q '^add_header Strict-Transport-Security' /etc/nginx/snippets/ssl-params.conf 2>/dev/null; then
+        echo "  HSTS: enabled"
+    else
+        echo "  HSTS: disabled"
+    fi
+
+    # Security headers
+    if grep -q 'X-Content-Type-Options' /etc/nginx/snippets/ssl-params.conf 2>/dev/null; then
+        echo "  Security headers: present"
+    else
+        echo "  Security headers: not present"
+    fi
+
+    # OCSP
+    if grep -q 'ssl_stapling on' /etc/nginx/snippets/ssl-params.conf 2>/dev/null; then
+        echo "  OCSP stapling: enabled"
+    else
+        echo "  OCSP stapling: disabled"
+    fi
+
+    echo ""
     echo "Backups: $BACKUP_DIR"
 
     if [[ -d "$BACKUP_DIR" ]]; then
@@ -362,6 +494,13 @@ show_help() {
     echo "  - SSL session cache: 10m -> 50m"
     echo "  - Proxy buffers: 32 4k -> 64 8k"
     echo "  - Extended proxy timeouts (1 hour)"
+    echo ""
+    echo "Security hardening:"
+    echo "  - TLS: removes TLSv1/TLSv1.1, server_tokens off"
+    echo "  - HSTS with preload"
+    echo "  - Security headers (X-Content-Type-Options, Referrer-Policy, Permissions-Policy)"
+    echo "  - OCSP stapling with Cloudflare+Google resolvers"
+    echo "  - Cipher suite preference (ECDHE-ECDSA/RSA with AES-GCM)"
     echo ""
     echo "Requires existing Swizzin nginx installation."
 }
