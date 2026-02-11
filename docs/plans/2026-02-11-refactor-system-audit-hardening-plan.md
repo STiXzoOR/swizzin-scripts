@@ -780,8 +780,8 @@ fi
 
 #### 4.2 Backup Restore Testing Automation
 
-- [ ] `backup/swizzin-backup.sh`: Add `--verify` flag that runs `borg check --verify-data` on the latest archive
-- [ ] Create weekly cron job template for `borg check`
+- [x] `backup/swizzin-backup.sh`: Add `--verify` flag that runs `borg check --verify-data` on the latest archive
+- [x] Create weekly cron job template for `borg check`
 
 #### 4.3 Panel Helper Supply Chain Fix
 

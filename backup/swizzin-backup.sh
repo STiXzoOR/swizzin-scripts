@@ -12,6 +12,7 @@
 #   swizzin-backup.sh --list       List archives
 #   swizzin-backup.sh --info       Show repo info
 #   swizzin-backup.sh --check      Run borg check
+#   swizzin-backup.sh --verify     Run borg check --verify-data (full integrity)
 #   swizzin-backup.sh --services   List discovered services (no backup)
 #
 # Official Swizzin apps supported:
@@ -589,6 +590,20 @@ cmd_check() {
     borg check --show-rc
 }
 
+cmd_verify() {
+    log "Starting full data verification (this may take a long time)..."
+    borg check --verify-data --show-rc 2>&1 | tee -a "$LOGFILE"
+    local rc=${PIPESTATUS[0]}
+    if [[ $rc -eq 0 ]]; then
+        log "Verification passed: repository and data integrity OK"
+    elif [[ $rc -eq 1 ]]; then
+        log "WARNING: Verification completed with warnings (rc=$rc)"
+    else
+        log "ERROR: Verification failed (rc=$rc)"
+    fi
+    return $rc
+}
+
 cmd_services() {
     echo "=== Standard services ==="
     for app in "${SERVICE_STOP_ORDER[@]}"; do
@@ -886,6 +901,9 @@ case "${1:-}" in
     --check)
         cmd_check
         ;;
+    --verify)
+        cmd_verify
+        ;;
     --services)
         cmd_services
         ;;
@@ -898,6 +916,7 @@ case "${1:-}" in
         echo "  --list       List archives"
         echo "  --info       Show repository info"
         echo "  --check      Run borg check"
+        echo "  --verify     Run borg check --verify-data (slow, full integrity)"
         echo "  --services   List discovered services (includes multi-instance)"
         echo "  --help       Show this help"
         ;;
