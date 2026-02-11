@@ -358,9 +358,9 @@ server {
 ```
 
 **Files to modify:**
-- [ ] `plex.sh`: `_install_subdomain()` and `_nginx_plex()` -- add upstream block, change `proxy_pass` to use upstream name, add `proxy_http_version 1.1` and `proxy_set_header Connection ""`
-- [ ] `emby.sh`: Same pattern for both subdomain and subfolder configs
-- [ ] `jellyfin.sh`: Same pattern
+- [x] `plex.sh`: Added upstream block with keepalive 32, map for WebSocket/keepalive compat, upstream cleanup on remove
+- [x] `emby.sh`: Same pattern with upstream-emby.conf
+- [x] `jellyfin.sh`: Same pattern with upstream-jellyfin.conf
 - [ ] `mdblistarr.sh`: Has 4 nginx reload calls -- needs upstream pattern too
 - [ ] `plex-tunnel-vps.sh`: Also needs upstream pattern
 

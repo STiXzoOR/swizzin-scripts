@@ -331,6 +331,24 @@ _create_subdomain_vhost() {
 
 	echo_progress_start "Creating subdomain nginx vhost"
 
+	# Create shared map for WebSocket + keepalive compatibility
+	if [[ ! -f /etc/nginx/conf.d/map-connection-upgrade.conf ]]; then
+		cat > /etc/nginx/conf.d/map-connection-upgrade.conf <<'MAPCONF'
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      '';
+}
+MAPCONF
+	fi
+
+	# Create upstream block with keepalive for connection pooling
+	cat > /etc/nginx/conf.d/upstream-plex.conf <<UPSTREAM
+upstream plex_backend {
+    server 127.0.0.1:${app_port};
+    keepalive 32;
+}
+UPSTREAM
+
 	if [ -f "$subfolder_conf" ]; then
 		_backup_file "$subfolder_conf"
 		rm -f "$subfolder_conf"
@@ -382,11 +400,12 @@ server {
 
     location / {
         include snippets/proxy.conf;
-        proxy_pass http://127.0.0.1:${app_port}/;
+        proxy_pass http://plex_backend/;
+        proxy_http_version 1.1;
 
-        # WebSocket support for Plex Together, sync notifications
+        # WebSocket support with keepalive compatibility
         proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection "upgrade";
+        proxy_set_header Connection \$connection_upgrade;
 
         proxy_set_header X-Plex-Client-Identifier \$http_x_plex_client_identifier;
         proxy_set_header X-Plex-Device \$http_x_plex_device;
@@ -403,10 +422,10 @@ server {
     }
 
     location /library/streams/ {
-        proxy_pass http://127.0.0.1:${app_port};
+        proxy_pass http://plex_backend;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection "upgrade";
+        proxy_set_header Connection \$connection_upgrade;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
@@ -499,6 +518,7 @@ _revert_subdomain() {
 
 	[ -L "$subdomain_enabled" ] && rm -f "$subdomain_enabled"
 	[ -f "$subdomain_vhost" ] && rm -f "$subdomain_vhost"
+	rm -f /etc/nginx/conf.d/upstream-plex.conf
 
 	if [ -f "$backup_dir/${app_name}.conf.bak" ]; then
 		cp "$backup_dir/${app_name}.conf.bak" "$subfolder_conf"
@@ -534,6 +554,7 @@ _remove() {
 	if [ -f "$subdomain_vhost" ]; then
 		rm -f "$subdomain_enabled"
 		rm -f "$subdomain_vhost"
+		rm -f /etc/nginx/conf.d/upstream-plex.conf
 		_remove_panel_meta
 	fi
 

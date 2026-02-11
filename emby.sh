@@ -242,6 +242,24 @@ _create_subdomain_vhost() {
 		rm -f "$subfolder_conf"
 	fi
 
+	# Create shared map for WebSocket + keepalive compatibility
+	if [[ ! -f /etc/nginx/conf.d/map-connection-upgrade.conf ]]; then
+		cat > /etc/nginx/conf.d/map-connection-upgrade.conf <<'MAPCONF'
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      '';
+}
+MAPCONF
+	fi
+
+	# Create upstream block with keepalive for connection pooling
+	cat > /etc/nginx/conf.d/upstream-emby.conf <<UPSTREAM
+upstream emby_backend {
+    server 127.0.0.1:${app_port};
+    keepalive 32;
+}
+UPSTREAM
+
 	local csp_header=""
 	if [ -n "$organizr_domain" ]; then
 		csp_header="add_header Content-Security-Policy \"frame-ancestors 'self' https://$organizr_domain\";"
@@ -286,11 +304,12 @@ server {
 
     location / {
         include snippets/proxy.conf;
-        proxy_pass http://127.0.0.1:${app_port}/;
+        proxy_pass http://emby_backend/;
+        proxy_http_version 1.1;
 
-        # WebSocket support
+        # WebSocket support with keepalive compatibility
         proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection \$http_connection;
+        proxy_set_header Connection \$connection_upgrade;
 
         proxy_set_header Range \$http_range;
         proxy_set_header If-Range \$http_if_range;
@@ -298,10 +317,10 @@ server {
 
     # WebSocket endpoint for real-time updates
     location /embywebsocket {
-        proxy_pass http://127.0.0.1:${app_port};
+        proxy_pass http://emby_backend;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection "upgrade";
+        proxy_set_header Connection \$connection_upgrade;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
@@ -586,6 +605,7 @@ _revert_subdomain() {
 
 	[ -L "$subdomain_enabled" ] && rm -f "$subdomain_enabled"
 	[ -f "$subdomain_vhost" ] && rm -f "$subdomain_vhost"
+	rm -f /etc/nginx/conf.d/upstream-emby.conf
 
 	if [ -f "$backup_dir/${app_name}.conf.bak" ]; then
 		cp "$backup_dir/${app_name}.conf.bak" "$subfolder_conf"
@@ -733,6 +753,7 @@ _remove() {
 	if [ -f "$subdomain_vhost" ]; then
 		rm -f "$subdomain_enabled"
 		rm -f "$subdomain_vhost"
+		rm -f /etc/nginx/conf.d/upstream-emby.conf
 		_remove_panel_meta
 	fi
 

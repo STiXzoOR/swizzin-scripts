@@ -420,6 +420,24 @@ _create_subdomain_vhost() {
 		rm -f "$subfolder_conf"
 	fi
 
+	# Create shared map for WebSocket + keepalive compatibility
+	if [[ ! -f /etc/nginx/conf.d/map-connection-upgrade.conf ]]; then
+		cat > /etc/nginx/conf.d/map-connection-upgrade.conf <<'MAPCONF'
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      '';
+}
+MAPCONF
+	fi
+
+	# Create upstream block with keepalive for connection pooling
+	cat > /etc/nginx/conf.d/upstream-jellyfin.conf <<UPSTREAM
+upstream jellyfin_backend {
+    server 127.0.0.1:${app_port};
+    keepalive 32;
+}
+UPSTREAM
+
 	local csp_header=""
 	if [ -n "$organizr_domain" ]; then
 		csp_header="add_header Content-Security-Policy \"frame-ancestors 'self' https://$organizr_domain\";"
@@ -463,7 +481,7 @@ server {
     ${csp_header}
 
     location / {
-        proxy_pass ${app_protocol}://127.0.0.1:${app_port};
+        proxy_pass http://jellyfin_backend;
         proxy_pass_request_headers on;
         proxy_set_header Host \$proxy_host;
         proxy_http_version 1.1;
@@ -473,7 +491,7 @@ server {
         proxy_set_header X-Forwarded-Protocol \$scheme;
         proxy_set_header X-Forwarded-Host \$http_host;
         proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection \$http_connection;
+        proxy_set_header Connection \$connection_upgrade;
         proxy_set_header X-Forwarded-Ssl on;
         proxy_redirect off;
         proxy_buffering off;
@@ -595,6 +613,7 @@ _revert_subdomain() {
 
 	[ -L "$subdomain_enabled" ] && rm -f "$subdomain_enabled"
 	[ -f "$subdomain_vhost" ] && rm -f "$subdomain_vhost"
+	rm -f /etc/nginx/conf.d/upstream-jellyfin.conf
 
 	if [ -f "$backup_dir/${app_name}.conf.bak" ]; then
 		cp "$backup_dir/${app_name}.conf.bak" "$subfolder_conf"
@@ -629,6 +648,7 @@ _remove() {
 	if [ -f "$subdomain_vhost" ]; then
 		rm -f "$subdomain_enabled"
 		rm -f "$subdomain_vhost"
+		rm -f /etc/nginx/conf.d/upstream-jellyfin.conf
 		_remove_panel_meta
 	fi
 
