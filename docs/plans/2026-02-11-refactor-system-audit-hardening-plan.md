@@ -799,11 +799,11 @@ fi
 
 **Recommended hybrid approach -- prefer local repo, fallback to cache, remove GitHub download:**
 
-- [ ] **Add `SCRIPT_DIR`** to all 19 scripts that use `_load_panel_helper()` (they currently lack it):
+- [x] **Add `SCRIPT_DIR`** to all 20 scripts that use `_load_panel_helper()` (they previously lacked it):
   ```bash
   SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
   ```
-- [ ] **Replace `_load_panel_helper()` with this secure version:**
+- [x] **Replace `_load_panel_helper()` with this secure version:**
   ```bash
   PANEL_HELPER_CACHE="/opt/swizzin-extras/panel_helpers.sh"
 
@@ -824,8 +824,8 @@ fi
       echo_info "panel_helpers.sh not found; skipping panel integration"
   }
   ```
-- [ ] **Remove `PANEL_HELPER_URL`** variable entirely from all scripts
-- [ ] **Remove ALL `curl` download logic** from every `_load_panel_helper()`
+- [x] **Remove `PANEL_HELPER_URL`** variable entirely from all scripts
+- [x] **Remove ALL `curl` download logic** from every `_load_panel_helper()`
 
 **Files requiring this change (19 scripts):**
 16 production scripts (`bazarr.sh`, `byparr.sh`, `cleanuparr.sh`, `decypharr.sh`, `flaresolverr.sh`, `huntarr.sh`, `libretranslate.sh`, `lingarr.sh`, `mdblistarr.sh`, `notifiarr.sh`, `plex-tunnel.sh`, `radarr.sh`, `seerr.sh`, `sonarr.sh`, `subgen.sh`, `zurg.sh`) + 3 templates (`template-binary.sh`, `template-docker.sh`, `template-multiinstance.sh`).

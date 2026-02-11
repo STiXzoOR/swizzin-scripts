@@ -29,26 +29,25 @@ subdomain_enabled="/etc/nginx/sites-enabled/${app_name}"
 profiles_py="/opt/swizzin/core/custom/profiles.py"
 organizr_config="/opt/swizzin-extras/organizr-auth.conf"
 
-PANEL_HELPER_LOCAL="/opt/swizzin-extras/panel_helpers.sh"
-PANEL_HELPER_URL="https://raw.githubusercontent.com/STiXzoOR/swizzin-scripts/main/panel_helpers.sh"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PANEL_HELPER_CACHE="/opt/swizzin-extras/panel_helpers.sh"
 
 # ==============================================================================
 # Helper Functions
 # ==============================================================================
 
 _load_panel_helper() {
-	if [ -f "$PANEL_HELPER_LOCAL" ]; then
-		. "$PANEL_HELPER_LOCAL"
+	# Prefer local repo copy (no network dependency, no supply chain risk)
+	if [[ -f "${SCRIPT_DIR}/panel_helpers.sh" ]]; then
+		. "${SCRIPT_DIR}/panel_helpers.sh"
 		return
 	fi
-
-	mkdir -p "$(dirname "$PANEL_HELPER_LOCAL")"
-	if curl -fsSL "$PANEL_HELPER_URL" -o "$PANEL_HELPER_LOCAL" >>"$log" 2>&1; then
-		chmod +x "$PANEL_HELPER_LOCAL" || true
-		. "$PANEL_HELPER_LOCAL"
-	else
-		echo_info "Could not fetch panel helper from $PANEL_HELPER_URL; skipping panel integration"
+	# Fallback to cached copy from a previous repo-based run
+	if [[ -f "$PANEL_HELPER_CACHE" ]]; then
+		. "$PANEL_HELPER_CACHE"
+		return
 	fi
+	echo_info "panel_helpers.sh not found; skipping panel integration"
 }
 
 _get_owner() {

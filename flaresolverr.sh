@@ -9,23 +9,21 @@
 . /etc/swizzin/sources/functions/utils
 
 # Panel Helper - Download and cache for panel integration
-PANEL_HELPER_LOCAL="/opt/swizzin-extras/panel_helpers.sh"
-PANEL_HELPER_URL="https://raw.githubusercontent.com/STiXzoOR/swizzin-scripts/main/panel_helpers.sh"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PANEL_HELPER_CACHE="/opt/swizzin-extras/panel_helpers.sh"
 
 _load_panel_helper() {
-	if [[ -f "$PANEL_HELPER_LOCAL" ]]; then
-		# shellcheck source=panel_helpers.sh
-		. "$PANEL_HELPER_LOCAL"
+	# Prefer local repo copy (no network dependency, no supply chain risk)
+	if [[ -f "${SCRIPT_DIR}/panel_helpers.sh" ]]; then
+		. "${SCRIPT_DIR}/panel_helpers.sh"
 		return
 	fi
-
-	mkdir -p "$(dirname "$PANEL_HELPER_LOCAL")"
-	if curl -fsSL "$PANEL_HELPER_URL" -o "$PANEL_HELPER_LOCAL" >>"$log" 2>&1; then
-		chmod +x "$PANEL_HELPER_LOCAL"
-		. "$PANEL_HELPER_LOCAL"
-	else
-		echo_info "Could not fetch panel helper; skipping panel integration"
+	# Fallback to cached copy from a previous repo-based run
+	if [[ -f "$PANEL_HELPER_CACHE" ]]; then
+		. "$PANEL_HELPER_CACHE"
+		return
 	fi
+	echo_info "panel_helpers.sh not found; skipping panel integration"
 }
 
 # Log to Swizzin.log
