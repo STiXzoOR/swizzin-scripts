@@ -52,7 +52,7 @@ DEFAULT_PROXY_BUFFERS="32 4k"
 # Optimized values
 OPTIMIZED_WORKER_CONNECTIONS=4096
 OPTIMIZED_SSL_CACHE="50m"
-OPTIMIZED_PROXY_BUFFERS="64 8k"
+OPTIMIZED_PROXY_BUFFERS="256 16k"
 
 # ==============================================================================
 # Root Check
@@ -131,10 +131,10 @@ proxy_read_timeout 3600;
 proxy_send_timeout 3600;
 proxy_connect_timeout 60;
 
-# Buffer tuning for high-bitrate streams
-proxy_buffer_size 8k;
-proxy_buffers 64 8k;
-proxy_busy_buffers_size 64k;
+# Buffer tuning for high-bitrate streams (4MB per connection for 4K HDR)
+proxy_buffer_size 16k;
+proxy_buffers 256 16k;
+proxy_busy_buffers_size 512k;
 
 # Client body settings for large uploads
 client_body_timeout 3600;
@@ -145,7 +145,15 @@ send_timeout 3600;
 EOF
     echo_success "Created $STREAMING_SNIPPET"
 
-    # 2. Update worker_connections in nginx.conf
+    # 2a. Set worker_rlimit_nofile (top-level directive, >= 2 * worker_connections)
+    if ! grep -q 'worker_rlimit_nofile' /etc/nginx/nginx.conf; then
+        sed -i '/^worker_processes/a worker_rlimit_nofile 65535;' /etc/nginx/nginx.conf
+        echo_success "Added worker_rlimit_nofile 65535"
+    else
+        echo_info "worker_rlimit_nofile already set"
+    fi
+
+    # 2b. Update worker_connections in nginx.conf
     if grep -q "worker_connections ${DEFAULT_WORKER_CONNECTIONS}" /etc/nginx/nginx.conf; then
         sed -i "s/worker_connections ${DEFAULT_WORKER_CONNECTIONS}/worker_connections ${OPTIMIZED_WORKER_CONNECTIONS}/" /etc/nginx/nginx.conf
         echo_success "Updated worker_connections to ${OPTIMIZED_WORKER_CONNECTIONS}"
@@ -311,7 +319,13 @@ remove_streaming_nginx() {
 
     echo_header "Reverting Nginx Streaming Optimizations"
 
-    # 1. Revert worker_connections
+    # 1. Remove worker_rlimit_nofile
+    if grep -q 'worker_rlimit_nofile' /etc/nginx/nginx.conf; then
+        sed -i '/worker_rlimit_nofile/d' /etc/nginx/nginx.conf
+        echo_success "Removed worker_rlimit_nofile"
+    fi
+
+    # 2. Revert worker_connections
     if grep -q "worker_connections ${OPTIMIZED_WORKER_CONNECTIONS}" /etc/nginx/nginx.conf; then
         sed -i "s/worker_connections ${OPTIMIZED_WORKER_CONNECTIONS}/worker_connections ${DEFAULT_WORKER_CONNECTIONS}/" /etc/nginx/nginx.conf
         echo_success "Reverted worker_connections to ${DEFAULT_WORKER_CONNECTIONS}"

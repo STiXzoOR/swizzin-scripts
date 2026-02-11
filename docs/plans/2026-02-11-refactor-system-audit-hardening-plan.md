@@ -297,7 +297,7 @@ Both `optimize-streaming.sh` and `bootstrap/lib/tuning.sh` write to the same fil
 
 #### 1.4 Proxy Buffer Increase
 
-- [ ] `nginx-streaming.sh`: Change `OPTIMIZED_PROXY_BUFFERS` from `"64 8k"` to `"256 16k"` (4MB per connection, needed for 4K HDR @ 50Mbps with jitter)
+- [x] `nginx-streaming.sh`: Change `OPTIMIZED_PROXY_BUFFERS` to `"256 16k"`, `proxy_busy_buffers_size` to `512k`, add `worker_rlimit_nofile 65535`
 
 ### Research Insights (Phase 1.4)
 
