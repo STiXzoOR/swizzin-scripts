@@ -248,12 +248,11 @@ _detect_swizzin_user() {
 
 _check_existing_setup() {
     local score=0
-    local total=8
+    local total=7
 
     command_exists borg && (( score++ ))
     [[ -f "$SSH_KEY" ]] && (( score++ ))
     [[ -f "$PASSPHRASE_FILE" ]] && (( score++ ))
-    [[ -f "$KEY_EXPORT" ]] && (( score++ ))
     [[ -f "$CONF_FILE" ]] && (( score++ ))
     [[ -f "$BACKUP_SCRIPT" ]] && (( score++ ))
     [[ -f "$SERVICE_FILE" ]] && (( score++ ))
@@ -512,6 +511,19 @@ _export_key() {
     if [[ -f "$KEY_EXPORT" ]]; then
         cat "$KEY_EXPORT"
         echo ""
+    fi
+
+    while true; do
+        if ask "I have saved the encryption key externally" N; then
+            break
+        fi
+        echo_warn "Please save the encryption key before continuing!"
+    done
+
+    # Auto-delete key export from disk after user confirms they saved it
+    if [[ -f "$KEY_EXPORT" ]]; then
+        rm -f "$KEY_EXPORT"
+        echo_success "Key export file deleted from disk (security measure)"
     fi
 }
 
@@ -828,7 +840,7 @@ _show_summary() {
     echo -e "${BOLD}Credentials:${NC}"
     echo "  SSH key:        $SSH_KEY"
     echo "  Passphrase:     $PASSPHRASE_FILE"
-    echo "  Key export:     $KEY_EXPORT"
+    echo "  Key export:     (deleted after display — saved externally)"
     echo ""
     echo -e "${BOLD}Repository:${NC}"
     echo "  URL: ${BORG_REPO_URL:-<not set>}"
@@ -896,11 +908,11 @@ _show_status() {
         echo -e "${RED}[MISSING]${NC} Repository (no config file)"
     fi
 
-    # Key export
+    # Key export (auto-deleted after setup — should be saved externally)
     if [[ -f "$KEY_EXPORT" ]]; then
-        echo -e "${GREEN}[OK]${NC}      Key exported ($KEY_EXPORT)"
+        echo -e "${YELLOW}[WARN]${NC}    Key export file still on disk ($KEY_EXPORT) — save externally and delete"
     else
-        echo -e "${RED}[MISSING]${NC} Key export ($KEY_EXPORT)"
+        echo -e "${GREEN}[OK]${NC}      Key export not on disk (saved externally)"
     fi
 
     # Configuration

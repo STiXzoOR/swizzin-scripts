@@ -102,8 +102,8 @@ chmod 640 /etc/swizzin-backup.conf
 - [x] `mdblist-sync.sh`: Add `chmod 600` after copying config
 - [x] `watchdog/watchdog.sh`: Hide Pushover token and Notifiarr API key from ps aux via `--config <(printf ...)`
 - [x] `backup/swizzin-backup.sh`: Hide Notifiarr API key from ps aux via `--config <(printf ...)`
-- [ ] `backup/swizzin-backup-install.sh`: Add `chmod 600` for passphrase file, auto-delete key export after display, `chmod 640` for config
-- [ ] `bootstrap/lib/hardening.sh`: Add `chmod 600` for SSH keys in the bootstrap flow
+- [x] `backup/swizzin-backup-install.sh`: Add `chmod 600` for passphrase file, auto-delete key export after display, `chmod 640` for config
+- [x] `bootstrap/lib/hardening.sh`: Add `chmod 600` for SSH keys in the bootstrap flow
 
 ### Research Insights (Phase 1.1)
 
@@ -361,8 +361,8 @@ server {
 - [x] `plex.sh`: Added upstream block with keepalive 32, map for WebSocket/keepalive compat, upstream cleanup on remove
 - [x] `emby.sh`: Same pattern with upstream-emby.conf
 - [x] `jellyfin.sh`: Same pattern with upstream-jellyfin.conf
-- [ ] `mdblistarr.sh`: Has 4 nginx reload calls -- needs upstream pattern too
-- [ ] `plex-tunnel-vps.sh`: Also needs upstream pattern
+- [x] `mdblistarr.sh`: Added upstream block with keepalive 32 for subdomain vhost, upstream cleanup on remove/revert
+- [x] `plex-tunnel-vps.sh`: N/A -- Docker/WireGuard script, no nginx
 
 **Edge case:** The upstream block must be outside the `server {}` block. Each media server's upstream name must be unique. Upstream blocks should be placed in a separate `/etc/nginx/conf.d/upstream-<app>.conf` file (preferred -- prevents duplication if both subfolder and subdomain are configured).
 
@@ -633,10 +633,10 @@ trap '' PIPE
 **Implementation:**
 
 - [x] Add trap template to all 5 templates (binary, python, docker, subdomain, multiinstance)
-- [ ] Set `_cleanup_needed=true` at the start of the install flow (per-script follow-up)
-- [ ] Set `_nginx_config_written`, `_systemd_unit_written` etc. as each step completes (per-script follow-up)
-- [ ] Set `_cleanup_needed=false` at the very end (successful completion) (per-script follow-up)
-- [ ] Propagate to all installer scripts (per-script follow-up)
+- [x] Set `_cleanup_needed=true` at the start of the install flow (all scripts)
+- [x] Set `_nginx_config_written`, `_systemd_unit_written` etc. as each step completes (all scripts)
+- [x] Set `_cleanup_needed=false` at the very end (successful completion) (all scripts)
+- [x] Propagate to all installer scripts (28 scripts have `trap cleanup EXIT`; seerr.sh and mdblistarr.sh were the last two)
 
 #### 3.3 Config Overwrite Guards
 

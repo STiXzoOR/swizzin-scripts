@@ -34,6 +34,35 @@ export log=/root/logs/swizzin.log
 touch "$log"
 
 # ==============================================================================
+# Cleanup Trap (rollback partial install on failure)
+# ==============================================================================
+_cleanup_needed=false
+_nginx_config_written=""
+_nginx_symlink_created=""
+_systemd_unit_written=""
+_lock_file_created=""
+
+cleanup() {
+    local exit_code=$?
+    if [[ "$_cleanup_needed" == "true" && $exit_code -ne 0 ]]; then
+        echo_error "Installation failed (exit $exit_code). Cleaning up..."
+        [[ -n "$_nginx_config_written" ]] && rm -f "$_nginx_config_written"
+        [[ -n "$_nginx_symlink_created" ]] && rm -f "$_nginx_symlink_created"
+        [[ -n "$_systemd_unit_written" ]] && {
+            systemctl stop "${_systemd_unit_written}" 2>/dev/null || true
+            systemctl disable "${_systemd_unit_written}" 2>/dev/null || true
+            rm -f "/etc/systemd/system/${_systemd_unit_written}"
+        }
+        [[ -n "$_lock_file_created" ]] && rm -f "$_lock_file_created"
+        _reload_nginx 2>/dev/null || true
+    fi
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+trap '' PIPE
+
+# ==============================================================================
 # Verbose Mode
 # ==============================================================================
 verbose=false
@@ -350,6 +379,7 @@ TimeoutStartSec=120
 WantedBy=multi-user.target
 EOF
 
+    _systemd_unit_written="$app_servicefile"
     systemctl -q daemon-reload
     systemctl enable -q "$app_servicefile"
     echo_progress_done "Systemd service installed and enabled"
@@ -401,6 +431,7 @@ _nginx_mdblistarr() {
 			}
 		NGX
 
+        _nginx_config_written="/etc/nginx/apps/$app_name.conf"
         _reload_nginx
         echo_progress_done "Nginx configured"
     else
@@ -493,6 +524,8 @@ _install_fresh() {
         return
     fi
 
+    _cleanup_needed=true
+
     # Set owner for install
     if [[ -n "$MDBLISTARR_OWNER" ]]; then
         echo_info "Setting ${app_name^} owner = $MDBLISTARR_OWNER"
@@ -520,6 +553,8 @@ _install_fresh() {
     fi
 
     touch "/install/.$app_lockname.lock"
+    _lock_file_created="/install/.$app_lockname.lock"
+    _cleanup_needed=false
     echo_success "${app_name^} installed"
 }
 
@@ -541,6 +576,14 @@ _create_subdomain_vhost() {
     if [ -n "$organizr_domain" ]; then
         csp_header="add_header Content-Security-Policy \"frame-ancestors 'self' https://$organizr_domain\";"
     fi
+
+    # Create upstream block with keepalive for connection pooling
+    cat >/etc/nginx/conf.d/upstream-${app_name}.conf <<UPSTREAM
+upstream ${app_name}_backend {
+    server 127.0.0.1:${app_port};
+    keepalive 32;
+}
+UPSTREAM
 
     cat >"$subdomain_vhost" <<VHOST
 server {
@@ -573,16 +616,16 @@ server {
     ${csp_header}
 
     location / {
-        proxy_pass http://127.0.0.1:${app_port};
+        proxy_pass http://${app_name}_backend;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Host \$host;
         proxy_set_header X-Forwarded-Proto \$scheme;
         proxy_redirect off;
-        proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection \$http_connection;
     }
 }
 VHOST
@@ -679,6 +722,7 @@ _revert_subdomain() {
 
     [ -L "$subdomain_enabled" ] && rm -f "$subdomain_enabled"
     [ -f "$subdomain_vhost" ] && rm -f "$subdomain_vhost"
+    rm -f "/etc/nginx/conf.d/upstream-${app_name}.conf"
 
     # Restore subfolder nginx config
     if [ -f "$backup_dir/$app_name.conf.bak" ]; then
@@ -828,11 +872,12 @@ _remove_mdblistarr() {
         echo_progress_done "Nginx configuration removed"
     fi
 
-    # Remove subdomain vhost if exists
+    # Remove subdomain vhost and upstream if exists
     if [ -f "$subdomain_vhost" ] || [ -L "$subdomain_enabled" ]; then
         echo_progress_start "Removing subdomain nginx configuration"
         rm -f "$subdomain_enabled"
         rm -f "$subdomain_vhost"
+        rm -f "/etc/nginx/conf.d/upstream-${app_name}.conf"
         echo_progress_done "Subdomain configuration removed"
     fi
 
@@ -895,7 +940,7 @@ case "${1:-}" in
         _update_mdblistarr
         ;;
     "--remove")
-        _remove_mdblistarr "$2"
+        _remove_mdblistarr "${2:-}"
         ;;
     "--register-panel")
         if [[ ! -f "/install/.$app_lockname.lock" ]]; then

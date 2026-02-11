@@ -15,6 +15,13 @@ set -euo pipefail
 export log=/root/logs/swizzin.log
 touch "$log"
 
+# ==============================================================================
+# Signal Traps
+# ==============================================================================
+trap 'exit 130' INT
+trap 'exit 143' TERM
+trap '' PIPE
+
 backup_dir="/opt/swizzin-extras/dns-backups"
 sysctl_conf="/etc/sysctl.d/99-disable-ipv6.conf"
 

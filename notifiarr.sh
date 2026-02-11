@@ -34,6 +34,35 @@ export log=/root/logs/swizzin.log
 touch $log
 
 # ==============================================================================
+# Cleanup Trap (rollback partial install on failure)
+# ==============================================================================
+_cleanup_needed=false
+_nginx_config_written=""
+_nginx_symlink_created=""
+_systemd_unit_written=""
+_lock_file_created=""
+
+cleanup() {
+    local exit_code=$?
+    if [[ "$_cleanup_needed" == "true" && $exit_code -ne 0 ]]; then
+        echo_error "Installation failed (exit $exit_code). Cleaning up..."
+        [[ -n "$_nginx_config_written" ]] && rm -f "$_nginx_config_written"
+        [[ -n "$_nginx_symlink_created" ]] && rm -f "$_nginx_symlink_created"
+        [[ -n "$_systemd_unit_written" ]] && {
+            systemctl stop "${_systemd_unit_written}" 2>/dev/null || true
+            systemctl disable "${_systemd_unit_written}" 2>/dev/null || true
+            rm -f "/etc/systemd/system/${_systemd_unit_written}"
+        }
+        [[ -n "$_lock_file_created" ]] && rm -f "$_lock_file_created"
+        _reload_nginx 2>/dev/null || true
+    fi
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+trap '' PIPE
+
+# ==============================================================================
 # Verbose Mode
 # ==============================================================================
 verbose=false

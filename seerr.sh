@@ -16,6 +16,35 @@ set -euo pipefail
 export log=/root/logs/swizzin.log
 touch "$log"
 
+# ==============================================================================
+# Cleanup Trap (rollback partial install on failure)
+# ==============================================================================
+_cleanup_needed=false
+_nginx_config_written=""
+_nginx_symlink_created=""
+_systemd_unit_written=""
+_lock_file_created=""
+
+cleanup() {
+    local exit_code=$?
+    if [[ "$_cleanup_needed" == "true" && $exit_code -ne 0 ]]; then
+        echo_error "Installation failed (exit $exit_code). Cleaning up..."
+        [[ -n "$_nginx_config_written" ]] && rm -f "$_nginx_config_written"
+        [[ -n "$_nginx_symlink_created" ]] && rm -f "$_nginx_symlink_created"
+        [[ -n "$_systemd_unit_written" ]] && {
+            systemctl stop "${_systemd_unit_written}" 2>/dev/null || true
+            systemctl disable "${_systemd_unit_written}" 2>/dev/null || true
+            rm -f "/etc/systemd/system/${_systemd_unit_written}"
+        }
+        [[ -n "$_lock_file_created" ]] && rm -f "$_lock_file_created"
+        _reload_nginx 2>/dev/null || true
+    fi
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+trap '' PIPE
+
 app_name="seerr"
 app_lockname="${app_name//-/}"
 fnm_install_url="https://fnm.vercel.app/install"
@@ -200,6 +229,7 @@ _install_app() {
         return
     fi
 
+    _cleanup_needed=true
     echo_info "Installing ${app_name^}..."
 
     # Get a port for the app
@@ -362,6 +392,7 @@ SystemCallFilter=~@privileged
 WantedBy=multi-user.target
 EOF
 
+    _systemd_unit_written="${app_name}.service"
     systemctl -q daemon-reload
     systemctl enable --now -q "${app_name}.service"
     sleep 1
@@ -369,6 +400,8 @@ EOF
     echo_info "${app_name^} is running on http://127.0.0.1:$app_port/"
 
     touch "/install/.${app_lockname}.lock"
+    _lock_file_created="/install/.${app_lockname}.lock"
+    _cleanup_needed=false
     echo_success "${app_name^} installed"
 }
 
@@ -430,7 +463,9 @@ server {
 }
 VHOST
 
+    _nginx_config_written="$subdomain_vhost"
     [ -L "$subdomain_enabled" ] || ln -s "$subdomain_vhost" "$subdomain_enabled"
+    _nginx_symlink_created="$subdomain_enabled"
 
     echo_progress_done "Subdomain vhost created"
 }

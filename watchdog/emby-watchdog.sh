@@ -32,6 +32,28 @@ APP_NAME="Emby"
 HEALTH_URL="http://127.0.0.1:8096/emby/System/Info/Public"
 
 # ==============================================================================
+# Cleanup Trap (rollback partial install on failure)
+# ==============================================================================
+_cleanup_needed=false
+_systemd_unit_written=""
+
+cleanup() {
+    local exit_code=$?
+    if [[ "$_cleanup_needed" == "true" && $exit_code -ne 0 ]]; then
+        echo_error "Installation failed (exit $exit_code). Cleaning up..."
+        [[ -n "$_systemd_unit_written" ]] && {
+            systemctl stop "${_systemd_unit_written}" 2>/dev/null || true
+            systemctl disable "${_systemd_unit_written}" 2>/dev/null || true
+            rm -f "/etc/systemd/system/${_systemd_unit_written}"
+        }
+    fi
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+trap '' PIPE
+
+# ==============================================================================
 # Helper Functions
 # ==============================================================================
 
