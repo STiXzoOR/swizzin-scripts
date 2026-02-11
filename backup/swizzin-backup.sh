@@ -38,11 +38,17 @@ set -euo pipefail
 #===============================================================================
 
 CONF_FILE="/etc/swizzin-backup.conf"
-[[ -f "$CONF_FILE" ]] || { echo "ERROR: Config not found: $CONF_FILE"; exit 1; }
+[[ -f "$CONF_FILE" ]] || {
+    echo "ERROR: Config not found: $CONF_FILE"
+    exit 1
+}
 # shellcheck source=/dev/null
 . "$CONF_FILE"
 
-[[ -z "${SWIZZIN_USER:-}" ]] && { echo "ERROR: SWIZZIN_USER not set in $CONF_FILE"; exit 1; }
+[[ -z "${SWIZZIN_USER:-}" ]] && {
+    echo "ERROR: SWIZZIN_USER not set in $CONF_FILE"
+    exit 1
+}
 
 # Export borg environment variables
 export BORG_REPO
@@ -94,7 +100,7 @@ declare -A SERVICE_TYPES=(
     ["lidarr"]="user"
     ["medusa"]="user"
     ["mylar"]="user"
-    ["ombi"]="system"           # ombi.service (from apt)
+    ["ombi"]="system" # ombi.service (from apt)
     ["sickchill"]="user"
     ["sickgear"]="user"
     ["sonarr"]="user"
@@ -104,11 +110,11 @@ declare -A SERVICE_TYPES=(
     # Media Servers
     ["airsonic"]="system"
     ["calibreweb"]="user"
-    ["emby"]="system"           # emby-server.service
-    ["jellyfin"]="system"       # jellyfin.service
+    ["emby"]="system"     # emby-server.service
+    ["jellyfin"]="system" # jellyfin.service
     ["mango"]="user"
     ["navidrome"]="user"
-    ["plex"]="system"           # plexmediaserver.service
+    ["plex"]="system" # plexmediaserver.service
     ["tautulli"]="user"
 
     # Torrent Clients
@@ -133,8 +139,8 @@ declare -A SERVICE_TYPES=(
     ["netdata"]="system"
     ["pyload"]="user"
     ["syncthing"]="user"
-    ["nextcloud"]="system"      # php-fpm based
-    ["organizr"]="system"       # php-fpm based
+    ["nextcloud"]="system" # php-fpm based
+    ["organizr"]="system"  # php-fpm based
 
     #=== STiXzoOR CUSTOM APPS ===
     # All custom apps use plain .service files (not @user templates)
@@ -220,7 +226,7 @@ log() {
 _format_duration() {
     local secs=$1
     if [[ $secs -ge 60 ]]; then
-        echo "$(( secs / 60 ))m $(( secs % 60 ))s"
+        echo "$((secs / 60))m $((secs % 60))s"
     else
         echo "${secs}s"
     fi
@@ -231,8 +237,8 @@ _progress_heartbeat() {
     local interval=$2
     while true; do
         sleep "$interval"
-        local elapsed=$(( $(date +%s) - start ))
-        log "  ... backup in progress ($(( elapsed / 60 ))m elapsed)"
+        local elapsed=$(($(date +%s) - start))
+        log "  ... backup in progress ($((elapsed / 60))m elapsed)"
     done
 }
 
@@ -245,7 +251,7 @@ _generate_size_excludes() {
     local limit_mb="$1"
     local out_file="$2"
 
-    : > "$out_file"
+    : >"$out_file"
     [[ "$limit_mb" -eq 0 ]] && return 0
     [[ ! -d /mnt/symlinks ]] && return 0
 
@@ -253,9 +259,9 @@ _generate_size_excludes() {
     while IFS= read -r filepath; do
         # Write both with and without leading / to match regardless of
         # how borg normalizes the path for explicit source directories
-        echo "pf:${filepath}" >> "$out_file"
-        echo "pf:${filepath#/}" >> "$out_file"
-        (( count++ )) || true
+        echo "pf:${filepath}" >>"$out_file"
+        echo "pf:${filepath#/}" >>"$out_file"
+        ((count++)) || true
     done < <(find /mnt/symlinks -type f -size +"${limit_mb}M" 2>/dev/null || true)
 
     if [[ "$count" -gt 0 ]]; then
@@ -286,15 +292,15 @@ get_service_name() {
     case "$type" in
         user)
             # Check if template unit exists; fall back to plain service
-            if [[ -f "/etc/systemd/system/${app}@.service" ]] || \
-               [[ -f "/lib/systemd/system/${app}@.service" ]]; then
+            if [[ -f "/etc/systemd/system/${app}@.service" ]] \
+                || [[ -f "/lib/systemd/system/${app}@.service" ]]; then
                 echo "${app}@${SWIZZIN_USER}"
             else
                 echo "$mapped_name"
             fi
             ;;
         system) echo "$mapped_name" ;;
-        *)      echo "$app" ;;
+        *) echo "$app" ;;
     esac
 }
 
@@ -305,9 +311,9 @@ discover_multi_instance_services() {
     # These are regular .service files (NOT @user templates)
     while IFS= read -r svc; do
         [[ -n "$svc" ]] && instances+=("$svc")
-    done < <(systemctl list-units --type=service --all --no-legend 2>/dev/null | \
-             grep -oE "(sonarr|radarr|bazarr)-[a-z0-9]+\.service" | \
-             sed 's/\.service$//')
+    done < <(systemctl list-units --type=service --all --no-legend 2>/dev/null \
+        | grep -oE "(sonarr|radarr|bazarr)-[a-z0-9]+\.service" \
+        | sed 's/\.service$//')
 
     # Also check lock files (underscore separator, convert to hyphen for service name)
     for lockfile in /install/.sonarr_*.lock /install/.radarr_*.lock /install/.bazarr_*.lock; do
@@ -316,6 +322,7 @@ discover_multi_instance_services() {
             lock_name=$(basename "$lockfile" .lock | sed 's/^\.//')
             # Convert underscore to hyphen: sonarr_4k -> sonarr-4k
             local svc="${lock_name/_/-}"
+            # shellcheck disable=SC2076
             if [[ ! " ${instances[*]:-} " =~ " ${svc} " ]]; then
                 instances+=("$svc")
             fi
@@ -386,7 +393,7 @@ stop_services() {
 
     sleep 5
     log "Stopped ${#stopped_services[@]} services"
-    printf '%s\n' "${stopped_services[@]}" > "$STOPPED_SERVICES_FILE"
+    printf '%s\n' "${stopped_services[@]}" >"$STOPPED_SERVICES_FILE"
 }
 
 start_services() {
@@ -394,18 +401,21 @@ start_services() {
     log "Restarting services..."
     log "=========================================="
 
-    [[ ! -f "$STOPPED_SERVICES_FILE" ]] && { log "WARNING: No stopped services list"; return; }
+    [[ ! -f "$STOPPED_SERVICES_FILE" ]] && {
+        log "WARNING: No stopped services list"
+        return
+    }
 
     # Read services into array and reverse for start order
     local services=()
     while IFS= read -r service; do
         [[ -z "$service" ]] && continue
         services+=("$service")
-    done < "$STOPPED_SERVICES_FILE"
+    done <"$STOPPED_SERVICES_FILE"
 
     local failed=()
     # Start in reverse order (infrastructure first, consumers last)
-    for ((i=${#services[@]}-1; i>=0; i--)); do
+    for ((i = ${#services[@]} - 1; i >= 0; i--)); do
         local service="${services[$i]}"
         log "  Starting: $service"
         systemctl start "$service" 2>/dev/null || failed+=("$service")
@@ -587,7 +597,8 @@ cmd_backup() {
 
     local start_time
     start_time=$(date +%s)
-    local archive_name="${HOSTNAME}-$(date +%Y-%m-%d_%H:%M)"
+    local archive_name
+    archive_name="${HOSTNAME}-$(date +%Y-%m-%d_%H:%M)"
 
     log "=========================================="
     log "Starting Borg backup to remote repository"
@@ -692,7 +703,7 @@ cmd_backup() {
     rm -f "$_size_excludes_file"
     _size_excludes_file=""
 
-    log "Phase 1/3: Archive created ($(_format_duration $(( $(date +%s) - phase1_start ))))"
+    log "Phase 1/3: Archive created ($(_format_duration $(($(date +%s) - phase1_start))))"
 
     start_services
 
@@ -704,7 +715,7 @@ cmd_backup() {
     local compact_exit=0
 
     if [[ $backup_exit -ge 128 ]]; then
-        log "Skipping prune and compact — backup was interrupted (signal $(( backup_exit - 128 )))"
+        log "Skipping prune and compact — backup was interrupted (signal $((backup_exit - 128)))"
     else
         log "Phase 2/3: Pruning old archives..."
         local phase2_start
@@ -720,7 +731,7 @@ cmd_backup() {
             2>&1 | tee -a "$LOGFILE"
         prune_exit=${PIPESTATUS[0]}
 
-        log "Phase 2/3: Prune complete ($(_format_duration $(( $(date +%s) - phase2_start ))))"
+        log "Phase 2/3: Prune complete ($(_format_duration $(($(date +%s) - phase2_start))))"
 
         log "Phase 3/3: Compacting repository..."
         local phase3_start
@@ -729,7 +740,7 @@ cmd_backup() {
         borg compact --show-rc 2>&1 | tee -a "$LOGFILE"
         compact_exit=${PIPESTATUS[0]}
 
-        log "Phase 3/3: Compact complete ($(_format_duration $(( $(date +%s) - phase3_start ))))"
+        log "Phase 3/3: Compact complete ($(_format_duration $(($(date +%s) - phase3_start))))"
     fi
 
     #===========================================================================
@@ -738,9 +749,9 @@ cmd_backup() {
 
     local end_time
     end_time=$(date +%s)
-    local duration=$(( end_time - start_time ))
-    local duration_min=$(( duration / 60 ))
-    local duration_sec=$(( duration % 60 ))
+    local duration=$((end_time - start_time))
+    local duration_min=$((duration / 60))
+    local duration_sec=$((duration % 60))
 
     global_exit=$((backup_exit > prune_exit ? backup_exit : prune_exit))
     global_exit=$((global_exit > compact_exit ? global_exit : compact_exit))
@@ -791,7 +802,10 @@ cmd_backup() {
 # MAIN
 #===============================================================================
 
-[[ $EUID -ne 0 ]] && { echo "Must run as root"; exit 1; }
+[[ $EUID -ne 0 ]] && {
+    echo "Must run as root"
+    exit 1
+}
 
 mkdir -p "$(dirname "$LOGFILE")"
 rotate_log
@@ -816,7 +830,7 @@ case "${1:-}" in
     --services)
         cmd_services
         ;;
-    --help|-h)
+    --help | -h)
         echo "Usage: $(basename "$0") [OPTION]"
         echo ""
         echo "Options:"
@@ -832,7 +846,10 @@ case "${1:-}" in
     "")
         # Default: run full backup with lock
         exec 200>"$LOCKFILE"
-        flock -n 200 || { log "ERROR: Another backup running"; exit 1; }
+        flock -n 200 || {
+            log "ERROR: Another backup running"
+            exit 1
+        }
         cmd_backup
         ;;
     *)

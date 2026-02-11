@@ -33,8 +33,8 @@ _log() {
     echo "[$timestamp] [$level] $message" | tee -a "$LOG_FILE"
 }
 
-log_info()  { _log "INFO" "$1"; }
-log_warn()  { _log "WARN" "$1"; }
+log_info() { _log "INFO" "$1"; }
+log_warn() { _log "WARN" "$1"; }
 log_error() { _log "ERROR" "$1"; }
 
 # ==============================================================================
@@ -103,7 +103,7 @@ _init_state() {
     mkdir -p "$LOG_DIR" "$STATE_DIR"
 
     if [[ ! -f "$STATE_FILE" ]]; then
-        cat > "$STATE_FILE" <<EOF
+        cat >"$STATE_FILE" <<EOF
 RESTART_COUNT=0
 RESTART_TIMESTAMPS=""
 BACKOFF_UNTIL=""
@@ -121,7 +121,7 @@ _load_state() {
 }
 
 _save_state() {
-    cat > "$STATE_FILE" <<EOF
+    cat >"$STATE_FILE" <<EOF
 RESTART_COUNT=$RESTART_COUNT
 RESTART_TIMESTAMPS="$RESTART_TIMESTAMPS"
 BACKOFF_UNTIL="$BACKOFF_UNTIL"
@@ -135,7 +135,7 @@ _purge_old_timestamps() {
     local new_timestamps=""
     local count=0
 
-    IFS=',' read -ra timestamps <<< "$RESTART_TIMESTAMPS"
+    IFS=',' read -ra timestamps <<<"$RESTART_TIMESTAMPS"
     for ts in "${timestamps[@]}"; do
         if [[ -n "$ts" && "$ts" -gt "$cutoff" ]]; then
             if [[ -n "$new_timestamps" ]]; then
@@ -312,15 +312,15 @@ _run_watchdog() {
         log_error "Max restarts ($MAX_RESTARTS in ${window_minutes}min) reached, entering backoff"
         BACKOFF_UNTIL=$((now + COOLDOWN_WINDOW))
         _save_state
-        _should_notify "$SERVICE_NAME" && \
-            _notify "$APP_NAME Watchdog" "Max restarts ($MAX_RESTARTS in ${window_minutes}min) reached. Giving up until manual intervention." "error"
+        _should_notify "$SERVICE_NAME" \
+            && _notify "$APP_NAME Watchdog" "Max restarts ($MAX_RESTARTS in ${window_minutes}min) reached. Giving up until manual intervention." "error"
         return 1
     fi
 
     # Attempt restart
     local attempt=$((RESTART_COUNT + 1))
-    _should_notify "$SERVICE_NAME" && \
-        _notify "$APP_NAME Watchdog" "Service unhealthy, restarting (attempt $attempt/$MAX_RESTARTS)" "warning"
+    _should_notify "$SERVICE_NAME" \
+        && _notify "$APP_NAME Watchdog" "Service unhealthy, restarting (attempt $attempt/$MAX_RESTARTS)" "warning"
 
     if _restart_service; then
         _add_restart_timestamp

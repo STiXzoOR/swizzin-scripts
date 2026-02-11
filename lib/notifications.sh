@@ -30,14 +30,15 @@ _notify_discord() {
 
     local color
     case "$level" in
-        info)    color=3066993 ;;   # green
-        warning) color=16776960 ;;  # yellow
-        error)   color=15158332 ;;  # red
-        *)       color=3447003 ;;   # blue
+        info) color=3066993 ;;     # green
+        warning) color=16776960 ;; # yellow
+        error) color=15158332 ;;   # red
+        *) color=3447003 ;;        # blue
     esac
 
     local payload
-    payload=$(cat <<EOF
+    payload=$(
+        cat <<EOF
 {
     "embeds": [{
         "title": "$title",
@@ -47,7 +48,7 @@ _notify_discord() {
     }]
 }
 EOF
-)
+    )
 
     curl -sf -H "Content-Type: application/json" \
         -d "$payload" \
@@ -61,9 +62,9 @@ _notify_pushover() {
 
     local priority=0
     case "$level" in
-        error)   priority=1 ;;
+        error) priority=1 ;;
         warning) priority=0 ;;
-        *)       priority=-1 ;;
+        *) priority=-1 ;;
     esac
 
     curl -sf \
@@ -81,9 +82,9 @@ _notify_notifiarr() {
 
     local event
     case "$level" in
-        error)   event="error" ;;
+        error) event="error" ;;
         warning) event="warning" ;;
-        *)       event="info" ;;
+        *) event="info" ;;
     esac
 
     curl -sf --config <(printf 'header = "x-api-key: %s"' "$NOTIFIARR_API_KEY") \
@@ -111,10 +112,10 @@ _notify() {
     local message="$2"
     local level="${3:-info}"
 
-    [[ -n "${DISCORD_WEBHOOK:-}" ]]                                  && _notify_discord "$title" "$message" "$level"
-    [[ -n "${PUSHOVER_USER:-}" && -n "${PUSHOVER_TOKEN:-}" ]]        && _notify_pushover "$title" "$message" "$level"
-    [[ -n "${NOTIFIARR_API_KEY:-}" ]]                                && _notify_notifiarr "$title" "$message" "$level"
-    [[ -n "${EMAIL_TO:-}" ]]                                         && _notify_email "$title" "$message" "$level"
+    [[ -n "${DISCORD_WEBHOOK:-}" ]] && _notify_discord "$title" "$message" "$level"
+    [[ -n "${PUSHOVER_USER:-}" && -n "${PUSHOVER_TOKEN:-}" ]] && _notify_pushover "$title" "$message" "$level"
+    [[ -n "${NOTIFIARR_API_KEY:-}" ]] && _notify_notifiarr "$title" "$message" "$level"
+    [[ -n "${EMAIL_TO:-}" ]] && _notify_email "$title" "$message" "$level"
 
     return 0
 }
@@ -125,20 +126,20 @@ _should_notify() {
     local service_name="${1:-default}"
     local rate_dir="${NOTIFY_RATE_DIR:-/var/lib/watchdog}"
     local rate_file="${rate_dir}/${service_name}.notify_ts"
-    local min_interval="${NOTIFY_MIN_INTERVAL:-300}"  # 5 minutes default
+    local min_interval="${NOTIFY_MIN_INTERVAL:-300}" # 5 minutes default
     local now
     now=$(date +%s)
 
     if [[ -f "$rate_file" ]]; then
         local last
         last=$(cat "$rate_file")
-        if (( now - last < min_interval )); then
-            _notify_log_warn "Notification throttled for $service_name (last sent $(( now - last ))s ago)"
+        if ((now - last < min_interval)); then
+            _notify_log_warn "Notification throttled for $service_name (last sent $((now - last))s ago)"
             return 1
         fi
     fi
 
     mkdir -p "$rate_dir"
-    echo "$now" > "$rate_file"
+    echo "$now" >"$rate_file"
     return 0
 }

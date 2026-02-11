@@ -24,11 +24,15 @@ if [[ -f "${SCRIPT_DIR}/bootstrap/lib/common.sh" ]]; then
     . "${SCRIPT_DIR}/bootstrap/lib/common.sh"
 else
     # Fallback logging functions
-    echo_info()    { echo "[INFO] $1"; }
+    echo_info() { echo "[INFO] $1"; }
     echo_success() { echo "[OK] $1"; }
-    echo_warn()    { echo "[WARN] $1"; }
-    echo_error()   { echo "[ERROR] $1"; }
-    echo_header()  { echo ""; echo "=== $1 ==="; echo ""; }
+    echo_warn() { echo "[WARN] $1"; }
+    echo_error() { echo "[ERROR] $1"; }
+    echo_header() {
+        echo ""
+        echo "=== $1 ==="
+        echo ""
+    }
 fi
 
 # ==============================================================================
@@ -113,10 +117,10 @@ install_docker_config() {
                     "Soft": 500000
                 }
             }
-        }' > "$DAEMON_JSON"
+        }' >"$DAEMON_JSON"
     else
         # Without jq, create a clean config
-        cat > "$DAEMON_JSON" <<'EOF'
+        cat >"$DAEMON_JSON" <<'EOF'
 {
     "log-driver": "json-file",
     "log-opts": {
@@ -296,13 +300,13 @@ show_help() {
 # Main
 # ==============================================================================
 case "${1:-}" in
-    --status|-s)
+    --status | -s)
         show_status
         ;;
-    --remove|-r)
+    --remove | -r)
         remove_docker_config
         ;;
-    --help|-h)
+    --help | -h)
         show_help
         ;;
     *)

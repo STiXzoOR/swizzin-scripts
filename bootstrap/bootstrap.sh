@@ -140,7 +140,7 @@ get_step_index() {
 save_step() {
     local step="$1"
     mkdir -p "$(dirname "$BOOTSTRAP_STATE")"
-    echo "$step" > "$BOOTSTRAP_STATE"
+    echo "$step" >"$BOOTSTRAP_STATE"
 }
 
 # Get last completed step
@@ -448,7 +448,7 @@ run_full_bootstrap() {
 
     # Mark as complete and clear state
     mkdir -p "$(dirname "$BOOTSTRAP_MARKER")"
-    date > "$BOOTSTRAP_MARKER"
+    date >"$BOOTSTRAP_MARKER"
     clear_step_state
 
     echo ""
@@ -520,7 +520,7 @@ restore_menu() {
 main() {
     # Parse arguments
     case "${1:-}" in
-        --help|-h)
+        --help | -h)
             show_help
             exit 0
             ;;
@@ -528,7 +528,7 @@ main() {
             show_status
             exit 0
             ;;
-        --full|"")
+        --full | "")
             require_root
             run_full_bootstrap
             ;;

@@ -22,9 +22,9 @@ LOG_FILE="/var/log/mdblist-sync.log"
 # Helpers
 # ==============================================================================
 
-echo_info()  { echo -e "\033[0;36m[INFO]\033[0m $*"; }
-echo_ok()    { echo -e "\033[0;32m[OK]\033[0m $*"; }
-echo_warn()  { echo -e "\033[0;33m[WARN]\033[0m $*"; }
+echo_info() { echo -e "\033[0;36m[INFO]\033[0m $*"; }
+echo_ok() { echo -e "\033[0;32m[OK]\033[0m $*"; }
+echo_warn() { echo -e "\033[0;33m[WARN]\033[0m $*"; }
 echo_error() { echo -e "\033[0;31m[ERROR]\033[0m $*" >&2; }
 
 # Escape a string for safe use in sed replacement (handles &, |, \)
@@ -162,7 +162,7 @@ _install() {
 
     # Try to auto-detect Radarr quality profiles and root folders
     _detect_arr_settings() {
-        local app_type="$1"  # radarr or sonarr
+        local app_type="$1" # radarr or sonarr
         local config_xml=""
 
         for user_dir in /home/*/; do
@@ -284,7 +284,7 @@ for f in data:
     echo_ok "Configuration saved to $CONFIG_DST"
 
     # Create systemd service
-    cat > "/etc/systemd/system/${SERVICE_NAME}.service" <<EOF
+    cat >"/etc/systemd/system/${SERVICE_NAME}.service" <<EOF
 [Unit]
 Description=MDBList Auto-Sync for Sonarr/Radarr
 After=network-online.target
@@ -301,7 +301,7 @@ EOF
     echo_ok "Systemd service created"
 
     # Create systemd timer (runs daily at 3:00 AM)
-    cat > "/etc/systemd/system/${SERVICE_NAME}.timer" <<EOF
+    cat >"/etc/systemd/system/${SERVICE_NAME}.timer" <<EOF
 [Unit]
 Description=MDBList Auto-Sync daily timer
 
@@ -316,7 +316,7 @@ EOF
     echo_ok "Systemd timer created (daily at 03:00 +/- 30min jitter)"
 
     # Create cleanup service + timer (runs weekly)
-    cat > "/etc/systemd/system/${SERVICE_NAME}-cleanup.service" <<EOF
+    cat >"/etc/systemd/system/${SERVICE_NAME}-cleanup.service" <<EOF
 [Unit]
 Description=MDBList Auto-Sync cleanup stale lists
 After=network-online.target
@@ -331,7 +331,7 @@ StandardOutput=append:${LOG_FILE}
 StandardError=append:${LOG_FILE}
 EOF
 
-    cat > "/etc/systemd/system/${SERVICE_NAME}-cleanup.timer" <<EOF
+    cat >"/etc/systemd/system/${SERVICE_NAME}-cleanup.timer" <<EOF
 [Unit]
 Description=MDBList Auto-Sync weekly cleanup timer
 

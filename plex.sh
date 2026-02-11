@@ -35,67 +35,67 @@ plex_prefs="/var/lib/plexmediaserver/Library/Application Support/Plex Media Serv
 # ==============================================================================
 
 _get_domain() {
-	local swizdb_domain
-	swizdb_domain=$(swizdb get "plex/domain" 2>/dev/null) || true
-	if [ -n "$swizdb_domain" ]; then
-		echo "$swizdb_domain"
-		return
-	fi
-	echo "${PLEX_DOMAIN:-}"
+    local swizdb_domain
+    swizdb_domain=$(swizdb get "plex/domain" 2>/dev/null) || true
+    if [ -n "$swizdb_domain" ]; then
+        echo "$swizdb_domain"
+        return
+    fi
+    echo "${PLEX_DOMAIN:-}"
 }
 
 _prompt_domain() {
-	if [ -n "$PLEX_DOMAIN" ]; then
-		echo_info "Using domain from PLEX_DOMAIN: $PLEX_DOMAIN"
-		app_domain="$PLEX_DOMAIN"
-		return
-	fi
+    if [ -n "$PLEX_DOMAIN" ]; then
+        echo_info "Using domain from PLEX_DOMAIN: $PLEX_DOMAIN"
+        app_domain="$PLEX_DOMAIN"
+        return
+    fi
 
-	local existing_domain
-	existing_domain=$(_get_domain)
+    local existing_domain
+    existing_domain=$(_get_domain)
 
-	if [ -n "$existing_domain" ]; then
-		echo_query "Enter domain for Plex" "[$existing_domain]"
-	else
-		echo_query "Enter domain for Plex" "(e.g., plex.example.com)"
-	fi
-	read -r input_domain </dev/tty
+    if [ -n "$existing_domain" ]; then
+        echo_query "Enter domain for Plex" "[$existing_domain]"
+    else
+        echo_query "Enter domain for Plex" "(e.g., plex.example.com)"
+    fi
+    read -r input_domain </dev/tty
 
-	if [ -z "$input_domain" ]; then
-		if [ -n "$existing_domain" ]; then
-			app_domain="$existing_domain"
-		else
-			echo_error "Domain is required"
-			exit 1
-		fi
-	else
-		if [[ ! "$input_domain" =~ \. ]]; then
-			echo_error "Invalid domain format (must contain at least one dot)"
-			exit 1
-		fi
-		if [[ "$input_domain" =~ [[:space:]] ]]; then
-			echo_error "Domain cannot contain spaces"
-			exit 1
-		fi
-		app_domain="$input_domain"
-	fi
+    if [ -z "$input_domain" ]; then
+        if [ -n "$existing_domain" ]; then
+            app_domain="$existing_domain"
+        else
+            echo_error "Domain is required"
+            exit 1
+        fi
+    else
+        if [[ ! "$input_domain" =~ \. ]]; then
+            echo_error "Invalid domain format (must contain at least one dot)"
+            exit 1
+        fi
+        if [[ "$input_domain" =~ [[:space:]] ]]; then
+            echo_error "Domain cannot contain spaces"
+            exit 1
+        fi
+        app_domain="$input_domain"
+    fi
 
-	echo_info "Using domain: $app_domain"
-	swizdb set "plex/domain" "$app_domain"
-	export PLEX_DOMAIN="$app_domain"
+    echo_info "Using domain: $app_domain"
+    swizdb set "plex/domain" "$app_domain"
+    export PLEX_DOMAIN="$app_domain"
 }
 
 _prompt_le_mode() {
-	if [ -n "$PLEX_LE_INTERACTIVE" ]; then
-		echo_info "Using LE mode from PLEX_LE_INTERACTIVE: $PLEX_LE_INTERACTIVE"
-		return
-	fi
+    if [ -n "$PLEX_LE_INTERACTIVE" ]; then
+        echo_info "Using LE mode from PLEX_LE_INTERACTIVE: $PLEX_LE_INTERACTIVE"
+        return
+    fi
 
-	if ask "Use interactive Let's Encrypt (for DNS challenges/wildcards)?" N; then
-		export PLEX_LE_INTERACTIVE="yes"
-	else
-		export PLEX_LE_INTERACTIVE="no"
-	fi
+    if ask "Use interactive Let's Encrypt (for DNS challenges/wildcards)?" N; then
+        export PLEX_LE_INTERACTIVE="yes"
+    else
+        export PLEX_LE_INTERACTIVE="no"
+    fi
 }
 
 # ==============================================================================
@@ -103,35 +103,35 @@ _prompt_le_mode() {
 # ==============================================================================
 
 _get_organizr_domain() {
-	if [ -f "$organizr_config" ] && grep -q "^ORGANIZR_DOMAIN=" "$organizr_config"; then
-		grep "^ORGANIZR_DOMAIN=" "$organizr_config" | cut -d'"' -f2
-	fi
+    if [ -f "$organizr_config" ] && grep -q "^ORGANIZR_DOMAIN=" "$organizr_config"; then
+        grep "^ORGANIZR_DOMAIN=" "$organizr_config" | cut -d'"' -f2
+    fi
 }
 
 _exclude_from_organizr() {
-	local modified=false
-	local apps_include="/etc/nginx/snippets/organizr-apps.conf"
+    local modified=false
+    local apps_include="/etc/nginx/snippets/organizr-apps.conf"
 
-	if [ -f "$organizr_config" ] && grep -q "^${app_name}:" "$organizr_config"; then
-		echo_progress_start "Removing ${app_name^} from Organizr protected apps"
-		sed -i "/^${app_name}:/d" "$organizr_config"
-		modified=true
-	fi
+    if [ -f "$organizr_config" ] && grep -q "^${app_name}:" "$organizr_config"; then
+        echo_progress_start "Removing ${app_name^} from Organizr protected apps"
+        sed -i "/^${app_name}:/d" "$organizr_config"
+        modified=true
+    fi
 
-	if [ -f "$apps_include" ] && grep -q "include /etc/nginx/apps/${app_name}.conf;" "$apps_include"; then
-		sed -i "\|include /etc/nginx/apps/${app_name}.conf;|d" "$apps_include"
-		modified=true
-	fi
+    if [ -f "$apps_include" ] && grep -q "include /etc/nginx/apps/${app_name}.conf;" "$apps_include"; then
+        sed -i "\|include /etc/nginx/apps/${app_name}.conf;|d" "$apps_include"
+        modified=true
+    fi
 
-	if [ "$modified" = true ]; then
-		echo_progress_done "Removed from Organizr"
-	fi
+    if [ "$modified" = true ]; then
+        echo_progress_done "Removed from Organizr"
+    fi
 }
 
 _include_in_organizr() {
-	if [ -f "$organizr_config" ] && ! grep -q "^${app_name}:" "$organizr_config"; then
-		echo_info "Note: ${app_name^} can be re-added to Organizr protection via: bash organizr.sh --configure"
-	fi
+    if [ -f "$organizr_config" ] && ! grep -q "^${app_name}:" "$organizr_config"; then
+        echo_info "Note: ${app_name^} can be re-added to Organizr protection via: bash organizr.sh --configure"
+    fi
 }
 
 # ==============================================================================
@@ -139,15 +139,15 @@ _include_in_organizr() {
 # ==============================================================================
 
 _get_install_state() {
-	if [ ! -f "/install/.${app_lockname}.lock" ]; then
-		echo "not_installed"
-	elif [ -f "$subdomain_vhost" ]; then
-		echo "subdomain"
-	elif [ -f "$subfolder_conf" ]; then
-		echo "subfolder"
-	else
-		echo "unknown"
-	fi
+    if [ ! -f "/install/.${app_lockname}.lock" ]; then
+        echo "not_installed"
+    elif [ -f "$subdomain_vhost" ]; then
+        echo "subdomain"
+    elif [ -f "$subfolder_conf" ]; then
+        echo "subfolder"
+    else
+        echo "unknown"
+    fi
 }
 
 # ==============================================================================
@@ -155,15 +155,15 @@ _get_install_state() {
 # ==============================================================================
 
 _install_app() {
-	if [ ! -f "/install/.${app_lockname}.lock" ]; then
-		echo_info "Installing ${app_name^} via box install ${app_name}..."
-		box install "$app_name" || {
-			echo_error "Failed to install ${app_name^}"
-			exit 1
-		}
-	else
-		echo_info "${app_name^} already installed"
-	fi
+    if [ ! -f "/install/.${app_lockname}.lock" ]; then
+        echo_info "Installing ${app_name^} via box install ${app_name}..."
+        box install "$app_name" || {
+            echo_error "Failed to install ${app_name^}"
+            exit 1
+        }
+    else
+        echo_info "${app_name^} already installed"
+    fi
 }
 
 # ==============================================================================
@@ -171,7 +171,7 @@ _install_app() {
 # ==============================================================================
 
 _create_subfolder_config() {
-	cat >"$subfolder_conf" <<-'NGX'
+    cat >"$subfolder_conf" <<-'NGX'
 		location /plex {
 		    return 301 $scheme://$host/plex/;
 		}
@@ -202,15 +202,15 @@ _create_subfolder_config() {
 }
 
 _nginx_subfolder() {
-	if [ -f "$subfolder_conf" ]; then
-		echo_info "nginx subfolder config already exists"
-		return
-	fi
+    if [ -f "$subfolder_conf" ]; then
+        echo_info "nginx subfolder config already exists"
+        return
+    fi
 
-	echo_progress_start "Creating nginx subfolder config"
-	_create_subfolder_config
-	_reload_nginx
-	echo_progress_done "nginx configured for /plex/"
+    echo_progress_start "Creating nginx subfolder config"
+    _create_subfolder_config
+    _reload_nginx
+    echo_progress_done "nginx configured for /plex/"
 }
 
 # ==============================================================================
@@ -218,35 +218,35 @@ _nginx_subfolder() {
 # ==============================================================================
 
 _request_certificate() {
-	local domain="$1"
-	local le_hostname="${PLEX_LE_HOSTNAME:-$domain}"
-	local cert_dir="/etc/nginx/ssl/$le_hostname"
-	local le_interactive="${PLEX_LE_INTERACTIVE:-no}"
+    local domain="$1"
+    local le_hostname="${PLEX_LE_HOSTNAME:-$domain}"
+    local cert_dir="/etc/nginx/ssl/$le_hostname"
+    local le_interactive="${PLEX_LE_INTERACTIVE:-no}"
 
-	if [ -d "$cert_dir" ]; then
-		echo_info "Let's Encrypt certificate already exists for $le_hostname"
-		return 0
-	fi
+    if [ -d "$cert_dir" ]; then
+        echo_info "Let's Encrypt certificate already exists for $le_hostname"
+        return 0
+    fi
 
-	echo_info "Requesting Let's Encrypt certificate for $le_hostname"
+    echo_info "Requesting Let's Encrypt certificate for $le_hostname"
 
-	if [ "$le_interactive" = "yes" ]; then
-		echo_info "Running Let's Encrypt in interactive mode..."
-		LE_HOSTNAME="$le_hostname" box install letsencrypt </dev/tty
-		local result=$?
-	else
-		LE_HOSTNAME="$le_hostname" LE_DEFAULTCONF=no LE_BOOL_CF=no \
-			box install letsencrypt >>"$log" 2>&1
-		local result=$?
-	fi
+    if [ "$le_interactive" = "yes" ]; then
+        echo_info "Running Let's Encrypt in interactive mode..."
+        LE_HOSTNAME="$le_hostname" box install letsencrypt </dev/tty
+        local result=$?
+    else
+        LE_HOSTNAME="$le_hostname" LE_DEFAULTCONF=no LE_BOOL_CF=no \
+            box install letsencrypt >>"$log" 2>&1
+        local result=$?
+    fi
 
-	if [ $result -ne 0 ]; then
-		echo_error "Failed to obtain Let's Encrypt certificate for $le_hostname"
-		echo_error "Check $log for details or run manually: LE_HOSTNAME=$le_hostname box install letsencrypt"
-		exit 1
-	fi
+    if [ $result -ne 0 ]; then
+        echo_error "Failed to obtain Let's Encrypt certificate for $le_hostname"
+        echo_error "Check $log for details or run manually: LE_HOSTNAME=$le_hostname box install letsencrypt"
+        exit 1
+    fi
 
-	echo_info "Let's Encrypt certificate issued for $le_hostname"
+    echo_info "Let's Encrypt certificate issued for $le_hostname"
 }
 
 # ==============================================================================
@@ -254,15 +254,15 @@ _request_certificate() {
 # ==============================================================================
 
 _ensure_backup_dir() {
-	[ -d "$backup_dir" ] || mkdir -p "$backup_dir"
+    [ -d "$backup_dir" ] || mkdir -p "$backup_dir"
 }
 
 _backup_file() {
-	local src="$1"
-	local name
-	name=$(basename "$src")
-	_ensure_backup_dir
-	[ -f "$src" ] && cp "$src" "$backup_dir/${name}.bak"
+    local src="$1"
+    local name
+    name=$(basename "$src")
+    _ensure_backup_dir
+    [ -f "$src" ] && cp "$src" "$backup_dir/${name}.bak"
 }
 
 # ==============================================================================
@@ -270,59 +270,59 @@ _backup_file() {
 # ==============================================================================
 
 _set_plex_pref() {
-	local key="$1"
-	local value
-	value=$(_sed_escape_value "$2")
-	if grep -q "${key}=" "$plex_prefs"; then
-		sed -i "s|${key}=\"[^\"]*\"|${key}=\"${value}\"|" "$plex_prefs"
-	else
-		sed -i "s|/>| ${key}=\"${value}\" />|" "$plex_prefs"
-	fi
+    local key="$1"
+    local value
+    value=$(_sed_escape_value "$2")
+    if grep -q "${key}=" "$plex_prefs"; then
+        sed -i "s|${key}=\"[^\"]*\"|${key}=\"${value}\"|" "$plex_prefs"
+    else
+        sed -i "s|/>| ${key}=\"${value}\" />|" "$plex_prefs"
+    fi
 }
 
 _remove_plex_pref() {
-	local key="$1"
-	if grep -q "${key}=" "$plex_prefs"; then
-		sed -i "s| ${key}=\"[^\"]*\"||" "$plex_prefs"
-	fi
+    local key="$1"
+    if grep -q "${key}=" "$plex_prefs"; then
+        sed -i "s| ${key}=\"[^\"]*\"||" "$plex_prefs"
+    fi
 }
 
 _configure_plex_preferences() {
-	local domain="$1"
-	local custom_url="https://${domain}:443"
+    local domain="$1"
+    local custom_url="https://${domain}:443"
 
-	if [ ! -f "$plex_prefs" ]; then
-		echo_error "Plex Preferences.xml not found at: $plex_prefs"
-		return 1
-	fi
+    if [ ! -f "$plex_prefs" ]; then
+        echo_error "Plex Preferences.xml not found at: $plex_prefs"
+        return 1
+    fi
 
-	echo_progress_start "Configuring Plex server preferences"
+    echo_progress_start "Configuring Plex server preferences"
 
-	# Stop Plex to safely edit preferences (Plex overwrites on shutdown)
-	systemctl stop plexmediaserver
+    # Stop Plex to safely edit preferences (Plex overwrites on shutdown)
+    systemctl stop plexmediaserver
 
-	_set_plex_pref "customConnections" "$custom_url"
-	_set_plex_pref "secureConnections" "1"
+    _set_plex_pref "customConnections" "$custom_url"
+    _set_plex_pref "secureConnections" "1"
 
-	systemctl start plexmediaserver
+    systemctl start plexmediaserver
 
-	echo_progress_done "Plex configured: customConnections=${custom_url}, secureConnections=Preferred"
+    echo_progress_done "Plex configured: customConnections=${custom_url}, secureConnections=Preferred"
 }
 
 _reset_plex_preferences() {
-	if [ ! -f "$plex_prefs" ]; then
-		return 0
-	fi
+    if [ ! -f "$plex_prefs" ]; then
+        return 0
+    fi
 
-	echo_progress_start "Resetting Plex server preferences"
+    echo_progress_start "Resetting Plex server preferences"
 
-	systemctl stop plexmediaserver
+    systemctl stop plexmediaserver
 
-	_remove_plex_pref "customConnections"
+    _remove_plex_pref "customConnections"
 
-	systemctl start plexmediaserver
+    systemctl start plexmediaserver
 
-	echo_progress_done "Plex preferences reset"
+    echo_progress_done "Plex preferences reset"
 }
 
 # ==============================================================================
@@ -330,43 +330,43 @@ _reset_plex_preferences() {
 # ==============================================================================
 
 _create_subdomain_vhost() {
-	local domain="$1"
-	local le_hostname="${2:-$domain}"
-	local cert_dir="/etc/nginx/ssl/$le_hostname"
-	local organizr_domain
-	organizr_domain=$(_get_organizr_domain)
+    local domain="$1"
+    local le_hostname="${2:-$domain}"
+    local cert_dir="/etc/nginx/ssl/$le_hostname"
+    local organizr_domain
+    organizr_domain=$(_get_organizr_domain)
 
-	echo_progress_start "Creating subdomain nginx vhost"
+    echo_progress_start "Creating subdomain nginx vhost"
 
-	# Create shared map for WebSocket + keepalive compatibility
-	if [[ ! -f /etc/nginx/conf.d/map-connection-upgrade.conf ]]; then
-		cat > /etc/nginx/conf.d/map-connection-upgrade.conf <<'MAPCONF'
+    # Create shared map for WebSocket + keepalive compatibility
+    if [[ ! -f /etc/nginx/conf.d/map-connection-upgrade.conf ]]; then
+        cat >/etc/nginx/conf.d/map-connection-upgrade.conf <<'MAPCONF'
 map $http_upgrade $connection_upgrade {
     default upgrade;
     ''      '';
 }
 MAPCONF
-	fi
+    fi
 
-	# Create upstream block with keepalive for connection pooling
-	cat > /etc/nginx/conf.d/upstream-plex.conf <<UPSTREAM
+    # Create upstream block with keepalive for connection pooling
+    cat >/etc/nginx/conf.d/upstream-plex.conf <<UPSTREAM
 upstream plex_backend {
     server 127.0.0.1:${app_port};
     keepalive 32;
 }
 UPSTREAM
 
-	if [ -f "$subfolder_conf" ]; then
-		_backup_file "$subfolder_conf"
-		rm -f "$subfolder_conf"
-	fi
+    if [ -f "$subfolder_conf" ]; then
+        _backup_file "$subfolder_conf"
+        rm -f "$subfolder_conf"
+    fi
 
-	local csp_header=""
-	if [ -n "$organizr_domain" ]; then
-		csp_header="add_header Content-Security-Policy \"frame-ancestors 'self' https://$organizr_domain\";"
-	fi
+    local csp_header=""
+    if [ -n "$organizr_domain" ]; then
+        csp_header="add_header Content-Security-Policy \"frame-ancestors 'self' https://$organizr_domain\";"
+    fi
 
-	cat >"$subdomain_vhost" <<VHOST
+    cat >"$subdomain_vhost" <<VHOST
 server {
     listen 80;
     listen [::]:80;
@@ -447,9 +447,9 @@ server {
 }
 VHOST
 
-	[ -L "$subdomain_enabled" ] || ln -s "$subdomain_vhost" "$subdomain_enabled"
+    [ -L "$subdomain_enabled" ] || ln -s "$subdomain_vhost" "$subdomain_enabled"
 
-	echo_progress_done "Subdomain vhost created"
+    echo_progress_done "Subdomain vhost created"
 }
 
 # ==============================================================================
@@ -457,32 +457,32 @@ VHOST
 # ==============================================================================
 
 _add_panel_meta() {
-	local domain="$1"
+    local domain="$1"
 
-	echo_progress_start "Adding panel meta urloverride"
+    echo_progress_start "Adding panel meta urloverride"
 
-	mkdir -p "$(dirname "$profiles_py")"
-	touch "$profiles_py"
+    mkdir -p "$(dirname "$profiles_py")"
+    touch "$profiles_py"
 
-	sed -i "/^class ${app_name}_meta(${app_name}_meta):/,/^class \|^$/d" "$profiles_py" 2>/dev/null || true
+    sed -i "/^class ${app_name}_meta(${app_name}_meta):/,/^class \|^$/d" "$profiles_py" 2>/dev/null || true
 
-	cat >>"$profiles_py" <<PYTHON
+    cat >>"$profiles_py" <<PYTHON
 
 class ${app_name}_meta(${app_name}_meta):
     baseurl = None
     urloverride = "https://${domain}"
 PYTHON
 
-	echo_progress_done "Panel meta updated"
+    echo_progress_done "Panel meta updated"
 }
 
 _remove_panel_meta() {
-	if [ -f "$profiles_py" ]; then
-		echo_progress_start "Removing panel meta urloverride"
-		sed -i "/^class ${app_name}_meta(${app_name}_meta):/,/^class \|^$/d" "$profiles_py" 2>/dev/null || true
-		sed -i -e :a -e '/^\n*$/{$d;N;ba' -e '}' "$profiles_py" 2>/dev/null || true
-		echo_progress_done "Panel meta removed"
-	fi
+    if [ -f "$profiles_py" ]; then
+        echo_progress_start "Removing panel meta urloverride"
+        sed -i "/^class ${app_name}_meta(${app_name}_meta):/,/^class \|^$/d" "$profiles_py" 2>/dev/null || true
+        sed -i -e :a -e '/^\n*$/{$d;N;ba' -e '}' "$profiles_py" 2>/dev/null || true
+        echo_progress_done "Panel meta removed"
+    fi
 }
 
 # ==============================================================================
@@ -490,62 +490,62 @@ _remove_panel_meta() {
 # ==============================================================================
 
 _install_subdomain() {
-	_prompt_domain
-	_prompt_le_mode
+    _prompt_domain
+    _prompt_le_mode
 
-	local domain
-	domain=$(_get_domain)
-	local le_hostname="${PLEX_LE_HOSTNAME:-$domain}"
-	local state
-	state=$(_get_install_state)
+    local domain
+    domain=$(_get_domain)
+    local le_hostname="${PLEX_LE_HOSTNAME:-$domain}"
+    local state
+    state=$(_get_install_state)
 
-	echo_info "${app_name^} Subdomain Setup"
-	echo_info "Domain: $domain"
-	[ "$le_hostname" != "$domain" ] && echo_info "LE Hostname: $le_hostname"
-	echo_info "Current state: $state"
+    echo_info "${app_name^} Subdomain Setup"
+    echo_info "Domain: $domain"
+    [ "$le_hostname" != "$domain" ] && echo_info "LE Hostname: $le_hostname"
+    echo_info "Current state: $state"
 
-	case "$state" in
-	"not_installed")
-		_install_app
-		;& # fallthrough
-	"subfolder" | "unknown")
-		_request_certificate "$domain"
-		_create_subdomain_vhost "$domain" "$le_hostname"
-		_add_panel_meta "$domain"
-		_exclude_from_organizr
-		_reload_nginx
-		_configure_plex_preferences "$domain"
-		echo_success "${app_name^} converted to subdomain mode"
-		echo_info "Access at: https://$domain"
-		;;
-	"subdomain")
-		echo_info "Already in subdomain mode"
-		;;
-	esac
+    case "$state" in
+        "not_installed")
+            _install_app
+            ;& # fallthrough
+        "subfolder" | "unknown")
+            _request_certificate "$domain"
+            _create_subdomain_vhost "$domain" "$le_hostname"
+            _add_panel_meta "$domain"
+            _exclude_from_organizr
+            _reload_nginx
+            _configure_plex_preferences "$domain"
+            echo_success "${app_name^} converted to subdomain mode"
+            echo_info "Access at: https://$domain"
+            ;;
+        "subdomain")
+            echo_info "Already in subdomain mode"
+            ;;
+    esac
 }
 
 _revert_subdomain() {
-	echo_info "Reverting ${app_name^} to subfolder mode..."
+    echo_info "Reverting ${app_name^} to subfolder mode..."
 
-	[ -L "$subdomain_enabled" ] && rm -f "$subdomain_enabled"
-	[ -f "$subdomain_vhost" ] && rm -f "$subdomain_vhost"
-	rm -f /etc/nginx/conf.d/upstream-plex.conf
+    [ -L "$subdomain_enabled" ] && rm -f "$subdomain_enabled"
+    [ -f "$subdomain_vhost" ] && rm -f "$subdomain_vhost"
+    rm -f /etc/nginx/conf.d/upstream-plex.conf
 
-	if [ -f "$backup_dir/${app_name}.conf.bak" ]; then
-		cp "$backup_dir/${app_name}.conf.bak" "$subfolder_conf"
-		echo_info "Restored subfolder nginx config"
-	else
-		echo_info "Recreating subfolder config..."
-		_create_subfolder_config
-	fi
+    if [ -f "$backup_dir/${app_name}.conf.bak" ]; then
+        cp "$backup_dir/${app_name}.conf.bak" "$subfolder_conf"
+        echo_info "Restored subfolder nginx config"
+    else
+        echo_info "Recreating subfolder config..."
+        _create_subfolder_config
+    fi
 
-	_remove_panel_meta
-	_include_in_organizr
-	_reset_plex_preferences
+    _remove_panel_meta
+    _include_in_organizr
+    _reset_plex_preferences
 
-	_reload_nginx
-	echo_success "${app_name^} reverted to subfolder mode"
-	echo_info "Access at: https://your-server/plex/"
+    _reload_nginx
+    echo_success "${app_name^} reverted to subfolder mode"
+    echo_info "Access at: https://your-server/plex/"
 }
 
 # ==============================================================================
@@ -553,41 +553,41 @@ _revert_subdomain() {
 # ==============================================================================
 
 _remove() {
-	local force="$1"
-	if [ "$force" != "--force" ] && [ ! -f "/install/.${app_lockname}.lock" ]; then
-		echo_error "${app_name^} is not installed (use --force to override)"
-		exit 1
-	fi
+    local force="$1"
+    if [ "$force" != "--force" ] && [ ! -f "/install/.${app_lockname}.lock" ]; then
+        echo_error "${app_name^} is not installed (use --force to override)"
+        exit 1
+    fi
 
-	echo_info "Removing ${app_name^}..."
+    echo_info "Removing ${app_name^}..."
 
-	# Remove subdomain vhost if exists
-	if [ -f "$subdomain_vhost" ]; then
-		rm -f "$subdomain_enabled"
-		rm -f "$subdomain_vhost"
-		rm -f /etc/nginx/conf.d/upstream-plex.conf
-		_remove_panel_meta
-	fi
+    # Remove subdomain vhost if exists
+    if [ -f "$subdomain_vhost" ]; then
+        rm -f "$subdomain_enabled"
+        rm -f "$subdomain_vhost"
+        rm -f /etc/nginx/conf.d/upstream-plex.conf
+        _remove_panel_meta
+    fi
 
-	# Remove subfolder config
-	rm -f "$subfolder_conf"
+    # Remove subfolder config
+    rm -f "$subfolder_conf"
 
-	# Remove backup dir
-	rm -rf "$backup_dir"
+    # Remove backup dir
+    rm -rf "$backup_dir"
 
-	# Reload nginx
-	_reload_nginx 2>/dev/null || true
+    # Reload nginx
+    _reload_nginx 2>/dev/null || true
 
-	# Remove app via box
-	echo_info "Removing ${app_name^} via box remove ${app_name}..."
-	box remove "$app_name"
+    # Remove app via box
+    echo_info "Removing ${app_name^} via box remove ${app_name}..."
+    box remove "$app_name"
 
-	# Remove swizdb entries
-	swizdb clear "plex/domain" 2>/dev/null || true
+    # Remove swizdb entries
+    swizdb clear "plex/domain" 2>/dev/null || true
 
-	echo_success "${app_name^} has been removed"
-	echo_info "Note: Let's Encrypt certificate was not removed"
-	exit 0
+    echo_success "${app_name^} has been removed"
+    echo_info "Note: Let's Encrypt certificate was not removed"
+    exit 0
 }
 
 # ==============================================================================
@@ -595,30 +595,30 @@ _remove() {
 # ==============================================================================
 
 _interactive() {
-	echo_info "${app_name^} Setup"
+    echo_info "${app_name^} Setup"
 
-	# Install Plex if needed
-	_install_app
+    # Install Plex if needed
+    _install_app
 
-	# Create subfolder config if not exists and not on subdomain
-	local state
-	state=$(_get_install_state)
+    # Create subfolder config if not exists and not on subdomain
+    local state
+    state=$(_get_install_state)
 
-	if [ "$state" = "unknown" ]; then
-		_nginx_subfolder
-		state="subfolder"
-	fi
+    if [ "$state" = "unknown" ]; then
+        _nginx_subfolder
+        state="subfolder"
+    fi
 
-	# Ask about subdomain
-	if [ "$state" != "subdomain" ]; then
-		if ask "Convert Plex to subdomain mode?" N; then
-			_install_subdomain
-		fi
-	else
-		echo_info "Subdomain already configured"
-	fi
+    # Ask about subdomain
+    if [ "$state" != "subdomain" ]; then
+        if ask "Convert Plex to subdomain mode?" N; then
+            _install_subdomain
+        fi
+    else
+        echo_info "Subdomain already configured"
+    fi
 
-	echo_success "${app_name^} setup complete"
+    echo_success "${app_name^} setup complete"
 }
 
 # ==============================================================================
@@ -626,14 +626,14 @@ _interactive() {
 # ==============================================================================
 
 _usage() {
-	echo "Usage: $0 [OPTIONS]"
-	echo ""
-	echo "  (no args)             Interactive setup"
-	echo "  --subdomain           Convert to subdomain mode"
-	echo "  --subdomain --revert  Revert to subfolder mode"
-	echo "  --remove [--force]    Complete removal"
-	echo "  --register-panel      Re-register with panel"
-	exit 1
+    echo "Usage: $0 [OPTIONS]"
+    echo ""
+    echo "  (no args)             Interactive setup"
+    echo "  --subdomain           Convert to subdomain mode"
+    echo "  --subdomain --revert  Revert to subfolder mode"
+    echo "  --remove [--force]    Complete removal"
+    echo "  --register-panel      Re-register with panel"
+    exit 1
 }
 
 # ==============================================================================
@@ -641,10 +641,10 @@ _usage() {
 # ==============================================================================
 
 _preflight() {
-	if [ ! -f /install/.nginx.lock ]; then
-		echo_error "nginx is not installed. Please install nginx first."
-		exit 1
-	fi
+    if [ ! -f /install/.nginx.lock ]; then
+        echo_error "nginx is not installed. Please install nginx first."
+        exit 1
+    fi
 }
 
 # ==============================================================================
@@ -654,38 +654,38 @@ _preflight() {
 _preflight
 
 case "${1:-}" in
-"--subdomain")
-	case "${2:-}" in
-	"--revert") _revert_subdomain ;;
-	"") _install_subdomain ;;
-	*) _usage ;;
-	esac
-	;;
-"--remove")
-	_remove "${2:-}"
-	;;
-"--register-panel")
-	if [ ! -f "/install/.${app_lockname}.lock" ]; then
-		echo_error "${app_name^} is not installed"
-		exit 1
-	fi
-	state=$(_get_install_state)
-	if [ "$state" = "subdomain" ]; then
-		domain=$(_get_domain)
-		if [ -n "$domain" ]; then
-			_add_panel_meta "$domain"
-		else
-			echo_error "No domain configured"
-			exit 1
-		fi
-	fi
-	systemctl restart panel 2>/dev/null || true
-	echo_success "Panel registration updated for ${app_name^}"
-	;;
-"")
-	_interactive
-	;;
-*)
-	_usage
-	;;
+    "--subdomain")
+        case "${2:-}" in
+            "--revert") _revert_subdomain ;;
+            "") _install_subdomain ;;
+            *) _usage ;;
+        esac
+        ;;
+    "--remove")
+        _remove "${2:-}"
+        ;;
+    "--register-panel")
+        if [ ! -f "/install/.${app_lockname}.lock" ]; then
+            echo_error "${app_name^} is not installed"
+            exit 1
+        fi
+        state=$(_get_install_state)
+        if [ "$state" = "subdomain" ]; then
+            domain=$(_get_domain)
+            if [ -n "$domain" ]; then
+                _add_panel_meta "$domain"
+            else
+                echo_error "No domain configured"
+                exit 1
+            fi
+        fi
+        systemctl restart panel 2>/dev/null || true
+        echo_success "Panel registration updated for ${app_name^}"
+        ;;
+    "")
+        _interactive
+        ;;
+    *)
+        _usage
+        ;;
 esac

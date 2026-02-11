@@ -35,8 +35,8 @@ HEALTH_URL="http://127.0.0.1:32400/identity"
 # Helper Functions
 # ==============================================================================
 
-echo_info()  { echo -e "\033[0;34m[INFO]\033[0m $1"; }
-echo_warn()  { echo -e "\033[0;33m[WARN]\033[0m $1"; }
+echo_info() { echo -e "\033[0;34m[INFO]\033[0m $1"; }
+echo_warn() { echo -e "\033[0;33m[WARN]\033[0m $1"; }
 echo_error() { echo -e "\033[0;31m[ERROR]\033[0m $1"; }
 echo_success() { echo -e "\033[0;32m[OK]\033[0m $1"; }
 
@@ -117,7 +117,7 @@ _create_global_config() {
 
     _prompt_notifications
 
-    cat > "$GLOBAL_CONFIG" <<EOF
+    cat >"$GLOBAL_CONFIG" <<EOF
 # /opt/swizzin-extras/watchdog.conf - Global watchdog configuration
 
 # Notifications
@@ -147,7 +147,7 @@ _create_service_config() {
 
     mkdir -p "$CONFIG_DIR"
 
-    cat > "$SERVICE_CONFIG" <<EOF
+    cat >"$SERVICE_CONFIG" <<EOF
 # Plex watchdog configuration
 
 SERVICE_NAME="$SERVICE_NAME"
@@ -183,7 +183,7 @@ _create_directories() {
 _install_cron() {
     echo_info "Installing cron job..."
 
-    cat > "$CRON_FILE" <<EOF
+    cat >"$CRON_FILE" <<EOF
 # Plex watchdog - runs every 2 minutes
 */2 * * * * root $WATCHDOG_DEST $SERVICE_CONFIG >> $LOG_FILE 2>&1
 EOF
@@ -327,7 +327,7 @@ _status() {
         # Count restarts in current window
         if [[ -n "${RESTART_TIMESTAMPS:-}" ]]; then
             local cutoff=$((now - 900))
-            IFS=',' read -ra timestamps <<< "$RESTART_TIMESTAMPS"
+            IFS=',' read -ra timestamps <<<"$RESTART_TIMESTAMPS"
             for ts in "${timestamps[@]}"; do
                 if [[ -n "$ts" && "$ts" -gt "$cutoff" ]]; then
                     ((window_restarts++)) || true
@@ -377,7 +377,7 @@ _reset() {
     echo_info "Resetting Plex watchdog state..."
 
     if [[ -f "$STATE_FILE" ]]; then
-        cat > "$STATE_FILE" <<EOF
+        cat >"$STATE_FILE" <<EOF
 RESTART_COUNT=0
 RESTART_TIMESTAMPS=""
 BACKOFF_UNTIL=""
@@ -433,7 +433,10 @@ _interactive() {
             2) _reset ;;
             3) _remove ;;
             4) exit 0 ;;
-            *) echo_error "Invalid choice"; exit 1 ;;
+            *)
+                echo_error "Invalid choice"
+                exit 1
+                ;;
         esac
     else
         echo_info "Plex watchdog is not installed"
@@ -464,7 +467,7 @@ case "${1:-}" in
     --reset)
         _reset
         ;;
-    -h|--help)
+    -h | --help)
         _usage
         ;;
     "")

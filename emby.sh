@@ -39,69 +39,69 @@ hosts_backup="/etc/hosts.emby-premiere.bak"
 
 # Get domain from swizdb or env
 _get_domain() {
-	local swizdb_domain
-	swizdb_domain=$(swizdb get "emby/domain" 2>/dev/null) || true
-	if [ -n "$swizdb_domain" ]; then
-		echo "$swizdb_domain"
-		return
-	fi
-	echo "${EMBY_DOMAIN:-}"
+    local swizdb_domain
+    swizdb_domain=$(swizdb get "emby/domain" 2>/dev/null) || true
+    if [ -n "$swizdb_domain" ]; then
+        echo "$swizdb_domain"
+        return
+    fi
+    echo "${EMBY_DOMAIN:-}"
 }
 
 # Prompt for domain interactively
 _prompt_domain() {
-	if [ -n "$EMBY_DOMAIN" ]; then
-		echo_info "Using domain from EMBY_DOMAIN: $EMBY_DOMAIN"
-		app_domain="$EMBY_DOMAIN"
-		return
-	fi
+    if [ -n "$EMBY_DOMAIN" ]; then
+        echo_info "Using domain from EMBY_DOMAIN: $EMBY_DOMAIN"
+        app_domain="$EMBY_DOMAIN"
+        return
+    fi
 
-	local existing_domain
-	existing_domain=$(_get_domain)
+    local existing_domain
+    existing_domain=$(_get_domain)
 
-	if [ -n "$existing_domain" ]; then
-		echo_query "Enter domain for Emby" "[$existing_domain]"
-	else
-		echo_query "Enter domain for Emby" "(e.g., emby.example.com)"
-	fi
-	read -r input_domain </dev/tty
+    if [ -n "$existing_domain" ]; then
+        echo_query "Enter domain for Emby" "[$existing_domain]"
+    else
+        echo_query "Enter domain for Emby" "(e.g., emby.example.com)"
+    fi
+    read -r input_domain </dev/tty
 
-	if [ -z "$input_domain" ]; then
-		if [ -n "$existing_domain" ]; then
-			app_domain="$existing_domain"
-		else
-			echo_error "Domain is required"
-			exit 1
-		fi
-	else
-		if [[ ! "$input_domain" =~ \. ]]; then
-			echo_error "Invalid domain format (must contain at least one dot)"
-			exit 1
-		fi
-		if [[ "$input_domain" =~ [[:space:]] ]]; then
-			echo_error "Domain cannot contain spaces"
-			exit 1
-		fi
-		app_domain="$input_domain"
-	fi
+    if [ -z "$input_domain" ]; then
+        if [ -n "$existing_domain" ]; then
+            app_domain="$existing_domain"
+        else
+            echo_error "Domain is required"
+            exit 1
+        fi
+    else
+        if [[ ! "$input_domain" =~ \. ]]; then
+            echo_error "Invalid domain format (must contain at least one dot)"
+            exit 1
+        fi
+        if [[ "$input_domain" =~ [[:space:]] ]]; then
+            echo_error "Domain cannot contain spaces"
+            exit 1
+        fi
+        app_domain="$input_domain"
+    fi
 
-	echo_info "Using domain: $app_domain"
-	swizdb set "emby/domain" "$app_domain"
-	export EMBY_DOMAIN="$app_domain"
+    echo_info "Using domain: $app_domain"
+    swizdb set "emby/domain" "$app_domain"
+    export EMBY_DOMAIN="$app_domain"
 }
 
 # Prompt for Let's Encrypt mode
 _prompt_le_mode() {
-	if [ -n "$EMBY_LE_INTERACTIVE" ]; then
-		echo_info "Using LE mode from EMBY_LE_INTERACTIVE: $EMBY_LE_INTERACTIVE"
-		return
-	fi
+    if [ -n "$EMBY_LE_INTERACTIVE" ]; then
+        echo_info "Using LE mode from EMBY_LE_INTERACTIVE: $EMBY_LE_INTERACTIVE"
+        return
+    fi
 
-	if ask "Use interactive Let's Encrypt (for DNS challenges/wildcards)?" N; then
-		export EMBY_LE_INTERACTIVE="yes"
-	else
-		export EMBY_LE_INTERACTIVE="no"
-	fi
+    if ask "Use interactive Let's Encrypt (for DNS challenges/wildcards)?" N; then
+        export EMBY_LE_INTERACTIVE="yes"
+    else
+        export EMBY_LE_INTERACTIVE="no"
+    fi
 }
 
 # ==============================================================================
@@ -109,35 +109,35 @@ _prompt_le_mode() {
 # ==============================================================================
 
 _get_organizr_domain() {
-	if [ -f "$organizr_config" ] && grep -q "^ORGANIZR_DOMAIN=" "$organizr_config"; then
-		grep "^ORGANIZR_DOMAIN=" "$organizr_config" | cut -d'"' -f2
-	fi
+    if [ -f "$organizr_config" ] && grep -q "^ORGANIZR_DOMAIN=" "$organizr_config"; then
+        grep "^ORGANIZR_DOMAIN=" "$organizr_config" | cut -d'"' -f2
+    fi
 }
 
 _exclude_from_organizr() {
-	local modified=false
-	local apps_include="/etc/nginx/snippets/organizr-apps.conf"
+    local modified=false
+    local apps_include="/etc/nginx/snippets/organizr-apps.conf"
 
-	if [ -f "$organizr_config" ] && grep -q "^${app_name}:" "$organizr_config"; then
-		echo_progress_start "Removing ${app_name^} from Organizr protected apps"
-		sed -i "/^${app_name}:/d" "$organizr_config"
-		modified=true
-	fi
+    if [ -f "$organizr_config" ] && grep -q "^${app_name}:" "$organizr_config"; then
+        echo_progress_start "Removing ${app_name^} from Organizr protected apps"
+        sed -i "/^${app_name}:/d" "$organizr_config"
+        modified=true
+    fi
 
-	if [ -f "$apps_include" ] && grep -q "include /etc/nginx/apps/${app_name}.conf;" "$apps_include"; then
-		sed -i "\|include /etc/nginx/apps/${app_name}.conf;|d" "$apps_include"
-		modified=true
-	fi
+    if [ -f "$apps_include" ] && grep -q "include /etc/nginx/apps/${app_name}.conf;" "$apps_include"; then
+        sed -i "\|include /etc/nginx/apps/${app_name}.conf;|d" "$apps_include"
+        modified=true
+    fi
 
-	if [ "$modified" = true ]; then
-		echo_progress_done "Removed from Organizr"
-	fi
+    if [ "$modified" = true ]; then
+        echo_progress_done "Removed from Organizr"
+    fi
 }
 
 _include_in_organizr() {
-	if [ -f "$organizr_config" ] && ! grep -q "^${app_name}:" "$organizr_config"; then
-		echo_info "Note: ${app_name^} can be re-added to Organizr protection via: bash organizr-subdomain.sh --configure"
-	fi
+    if [ -f "$organizr_config" ] && ! grep -q "^${app_name}:" "$organizr_config"; then
+        echo_info "Note: ${app_name^} can be re-added to Organizr protection via: bash organizr-subdomain.sh --configure"
+    fi
 }
 
 # ==============================================================================
@@ -145,19 +145,19 @@ _include_in_organizr() {
 # ==============================================================================
 
 _get_install_state() {
-	if [ ! -f "/install/.${app_lockname}.lock" ]; then
-		echo "not_installed"
-	elif [ -f "$subdomain_vhost" ]; then
-		echo "subdomain"
-	elif [ -f "$subfolder_conf" ]; then
-		echo "subfolder"
-	else
-		echo "unknown"
-	fi
+    if [ ! -f "/install/.${app_lockname}.lock" ]; then
+        echo "not_installed"
+    elif [ -f "$subdomain_vhost" ]; then
+        echo "subdomain"
+    elif [ -f "$subfolder_conf" ]; then
+        echo "subfolder"
+    else
+        echo "unknown"
+    fi
 }
 
 _is_premiere_enabled() {
-	[ "$(swizdb get 'emby/premiere' 2>/dev/null)" = "enabled" ]
+    [ "$(swizdb get 'emby/premiere' 2>/dev/null)" = "enabled" ]
 }
 
 # ==============================================================================
@@ -165,15 +165,15 @@ _is_premiere_enabled() {
 # ==============================================================================
 
 _install_app() {
-	if [ ! -f "/install/.${app_lockname}.lock" ]; then
-		echo_info "Installing ${app_name^} via box install ${app_name}..."
-		box install "$app_name" || {
-			echo_error "Failed to install ${app_name^}"
-			exit 1
-		}
-	else
-		echo_info "${app_name^} already installed"
-	fi
+    if [ ! -f "/install/.${app_lockname}.lock" ]; then
+        echo_info "Installing ${app_name^} via box install ${app_name}..."
+        box install "$app_name" || {
+            echo_error "Failed to install ${app_name^}"
+            exit 1
+        }
+    else
+        echo_info "${app_name^} already installed"
+    fi
 }
 
 # ==============================================================================
@@ -181,35 +181,35 @@ _install_app() {
 # ==============================================================================
 
 _request_certificate() {
-	local domain="$1"
-	local le_hostname="${EMBY_LE_HOSTNAME:-$domain}"
-	local cert_dir="/etc/nginx/ssl/$le_hostname"
-	local le_interactive="${EMBY_LE_INTERACTIVE:-no}"
+    local domain="$1"
+    local le_hostname="${EMBY_LE_HOSTNAME:-$domain}"
+    local cert_dir="/etc/nginx/ssl/$le_hostname"
+    local le_interactive="${EMBY_LE_INTERACTIVE:-no}"
 
-	if [ -d "$cert_dir" ]; then
-		echo_info "Let's Encrypt certificate already exists for $le_hostname"
-		return 0
-	fi
+    if [ -d "$cert_dir" ]; then
+        echo_info "Let's Encrypt certificate already exists for $le_hostname"
+        return 0
+    fi
 
-	echo_info "Requesting Let's Encrypt certificate for $le_hostname"
+    echo_info "Requesting Let's Encrypt certificate for $le_hostname"
 
-	if [ "$le_interactive" = "yes" ]; then
-		echo_info "Running Let's Encrypt in interactive mode..."
-		LE_HOSTNAME="$le_hostname" box install letsencrypt </dev/tty
-		local result=$?
-	else
-		LE_HOSTNAME="$le_hostname" LE_DEFAULTCONF=no LE_BOOL_CF=no \
-			box install letsencrypt >>"$log" 2>&1
-		local result=$?
-	fi
+    if [ "$le_interactive" = "yes" ]; then
+        echo_info "Running Let's Encrypt in interactive mode..."
+        LE_HOSTNAME="$le_hostname" box install letsencrypt </dev/tty
+        local result=$?
+    else
+        LE_HOSTNAME="$le_hostname" LE_DEFAULTCONF=no LE_BOOL_CF=no \
+            box install letsencrypt >>"$log" 2>&1
+        local result=$?
+    fi
 
-	if [ $result -ne 0 ]; then
-		echo_error "Failed to obtain Let's Encrypt certificate for $le_hostname"
-		echo_error "Check $log for details or run manually: LE_HOSTNAME=$le_hostname box install letsencrypt"
-		exit 1
-	fi
+    if [ $result -ne 0 ]; then
+        echo_error "Failed to obtain Let's Encrypt certificate for $le_hostname"
+        echo_error "Check $log for details or run manually: LE_HOSTNAME=$le_hostname box install letsencrypt"
+        exit 1
+    fi
 
-	echo_info "Let's Encrypt certificate issued for $le_hostname"
+    echo_info "Let's Encrypt certificate issued for $le_hostname"
 }
 
 # ==============================================================================
@@ -217,15 +217,15 @@ _request_certificate() {
 # ==============================================================================
 
 _ensure_backup_dir() {
-	[ -d "$backup_dir" ] || mkdir -p "$backup_dir"
+    [ -d "$backup_dir" ] || mkdir -p "$backup_dir"
 }
 
 _backup_file() {
-	local src="$1"
-	local name
-	name=$(basename "$src")
-	_ensure_backup_dir
-	[ -f "$src" ] && cp "$src" "$backup_dir/${name}.bak"
+    local src="$1"
+    local name
+    name=$(basename "$src")
+    _ensure_backup_dir
+    [ -f "$src" ] && cp "$src" "$backup_dir/${name}.bak"
 }
 
 # ==============================================================================
@@ -233,43 +233,43 @@ _backup_file() {
 # ==============================================================================
 
 _create_subdomain_vhost() {
-	local domain="$1"
-	local le_hostname="${2:-$domain}"
-	local cert_dir="/etc/nginx/ssl/$le_hostname"
-	local organizr_domain
-	organizr_domain=$(_get_organizr_domain)
+    local domain="$1"
+    local le_hostname="${2:-$domain}"
+    local cert_dir="/etc/nginx/ssl/$le_hostname"
+    local organizr_domain
+    organizr_domain=$(_get_organizr_domain)
 
-	echo_progress_start "Creating subdomain nginx vhost"
+    echo_progress_start "Creating subdomain nginx vhost"
 
-	if [ -f "$subfolder_conf" ]; then
-		_backup_file "$subfolder_conf"
-		rm -f "$subfolder_conf"
-	fi
+    if [ -f "$subfolder_conf" ]; then
+        _backup_file "$subfolder_conf"
+        rm -f "$subfolder_conf"
+    fi
 
-	# Create shared map for WebSocket + keepalive compatibility
-	if [[ ! -f /etc/nginx/conf.d/map-connection-upgrade.conf ]]; then
-		cat > /etc/nginx/conf.d/map-connection-upgrade.conf <<'MAPCONF'
+    # Create shared map for WebSocket + keepalive compatibility
+    if [[ ! -f /etc/nginx/conf.d/map-connection-upgrade.conf ]]; then
+        cat >/etc/nginx/conf.d/map-connection-upgrade.conf <<'MAPCONF'
 map $http_upgrade $connection_upgrade {
     default upgrade;
     ''      '';
 }
 MAPCONF
-	fi
+    fi
 
-	# Create upstream block with keepalive for connection pooling
-	cat > /etc/nginx/conf.d/upstream-emby.conf <<UPSTREAM
+    # Create upstream block with keepalive for connection pooling
+    cat >/etc/nginx/conf.d/upstream-emby.conf <<UPSTREAM
 upstream emby_backend {
     server 127.0.0.1:${app_port};
     keepalive 32;
 }
 UPSTREAM
 
-	local csp_header=""
-	if [ -n "$organizr_domain" ]; then
-		csp_header="add_header Content-Security-Policy \"frame-ancestors 'self' https://$organizr_domain\";"
-	fi
+    local csp_header=""
+    if [ -n "$organizr_domain" ]; then
+        csp_header="add_header Content-Security-Policy \"frame-ancestors 'self' https://$organizr_domain\";"
+    fi
 
-	cat >"$subdomain_vhost" <<VHOST
+    cat >"$subdomain_vhost" <<VHOST
 server {
     listen 80;
     listen [::]:80;
@@ -335,9 +335,9 @@ server {
 }
 VHOST
 
-	[ -L "$subdomain_enabled" ] || ln -s "$subdomain_vhost" "$subdomain_enabled"
+    [ -L "$subdomain_enabled" ] || ln -s "$subdomain_vhost" "$subdomain_enabled"
 
-	echo_progress_done "Subdomain vhost created"
+    echo_progress_done "Subdomain vhost created"
 }
 
 # ==============================================================================
@@ -345,32 +345,32 @@ VHOST
 # ==============================================================================
 
 _add_panel_meta() {
-	local domain="$1"
+    local domain="$1"
 
-	echo_progress_start "Adding panel meta urloverride"
+    echo_progress_start "Adding panel meta urloverride"
 
-	mkdir -p "$(dirname "$profiles_py")"
-	touch "$profiles_py"
+    mkdir -p "$(dirname "$profiles_py")"
+    touch "$profiles_py"
 
-	sed -i "/^class ${app_name}_meta(${app_name}_meta):/,/^class \|^$/d" "$profiles_py" 2>/dev/null || true
+    sed -i "/^class ${app_name}_meta(${app_name}_meta):/,/^class \|^$/d" "$profiles_py" 2>/dev/null || true
 
-	cat >>"$profiles_py" <<PYTHON
+    cat >>"$profiles_py" <<PYTHON
 
 class ${app_name}_meta(${app_name}_meta):
     baseurl = None
     urloverride = "https://${domain}"
 PYTHON
 
-	echo_progress_done "Panel meta updated"
+    echo_progress_done "Panel meta updated"
 }
 
 _remove_panel_meta() {
-	if [ -f "$profiles_py" ]; then
-		echo_progress_start "Removing panel meta urloverride"
-		sed -i "/^class ${app_name}_meta(${app_name}_meta):/,/^class \|^$/d" "$profiles_py" 2>/dev/null || true
-		sed -i -e :a -e '/^\n*$/{$d;N;ba' -e '}' "$profiles_py" 2>/dev/null || true
-		echo_progress_done "Panel meta removed"
-	fi
+    if [ -f "$profiles_py" ]; then
+        echo_progress_start "Removing panel meta urloverride"
+        sed -i "/^class ${app_name}_meta(${app_name}_meta):/,/^class \|^$/d" "$profiles_py" 2>/dev/null || true
+        sed -i -e :a -e '/^\n*$/{$d;N;ba' -e '}' "$profiles_py" 2>/dev/null || true
+        echo_progress_done "Panel meta removed"
+    fi
 }
 
 # ==============================================================================
@@ -378,7 +378,7 @@ _remove_panel_meta() {
 # ==============================================================================
 
 _create_subfolder_config() {
-	cat >"$subfolder_conf" <<-'NGX'
+    cat >"$subfolder_conf" <<-'NGX'
 		location /emby/ {
 		    rewrite /emby/(.*) /$1 break;
 		    include /etc/nginx/snippets/proxy.conf;
@@ -392,30 +392,30 @@ _create_subfolder_config() {
 # ==============================================================================
 
 _get_server_id() {
-	# Try API first (Emby must be running)
-	local api_response
-	api_response=$(curl -s "http://127.0.0.1:${app_port}/emby/System/Info/Public" 2>/dev/null)
-	if [ -n "$api_response" ]; then
-		local server_id
-		server_id=$(echo "$api_response" | jq -r '.Id // empty' 2>/dev/null)
-		if [ -n "$server_id" ]; then
-			echo "$server_id"
-			return 0
-		fi
-	fi
+    # Try API first (Emby must be running)
+    local api_response
+    api_response=$(curl -s "http://127.0.0.1:${app_port}/emby/System/Info/Public" 2>/dev/null)
+    if [ -n "$api_response" ]; then
+        local server_id
+        server_id=$(echo "$api_response" | jq -r '.Id // empty' 2>/dev/null)
+        if [ -n "$server_id" ]; then
+            echo "$server_id"
+            return 0
+        fi
+    fi
 
-	# Fallback: parse system.xml
-	local config_file="/var/lib/emby/config/system.xml"
-	if [ -f "$config_file" ]; then
-		local server_id
-		server_id=$(grep -oP '<ServerId>\K[^<]+' "$config_file" 2>/dev/null)
-		if [ -n "$server_id" ]; then
-			echo "$server_id"
-			return 0
-		fi
-	fi
+    # Fallback: parse system.xml
+    local config_file="/var/lib/emby/config/system.xml"
+    if [ -f "$config_file" ]; then
+        local server_id
+        server_id=$(grep -oP '<ServerId>\K[^<]+' "$config_file" 2>/dev/null)
+        if [ -n "$server_id" ]; then
+            echo "$server_id"
+            return 0
+        fi
+    fi
 
-	return 1
+    return 1
 }
 
 # ==============================================================================
@@ -423,9 +423,9 @@ _get_server_id() {
 # ==============================================================================
 
 _compute_premiere_key() {
-	local server_id="$1"
-	# Formula: MD5("MBSupporter" + serverId + "Ae3#fP!wi")
-	echo -n "MBSupporter${server_id}Ae3#fP!wi" | md5sum | cut -d' ' -f1
+    local server_id="$1"
+    # Formula: MD5("MBSupporter" + serverId + "Ae3#fP!wi")
+    echo -n "MBSupporter${server_id}Ae3#fP!wi" | md5sum | cut -d' ' -f1
 }
 
 # ==============================================================================
@@ -433,18 +433,18 @@ _compute_premiere_key() {
 # ==============================================================================
 
 _generate_premiere_cert() {
-	echo_progress_start "Generating self-signed certificate for mb3admin.com"
+    echo_progress_start "Generating self-signed certificate for mb3admin.com"
 
-	mkdir -p "$premiere_cert_dir"
+    mkdir -p "$premiere_cert_dir"
 
-	# Generate self-signed cert (10 years)
-	openssl req -x509 -nodes -days 3650 \
-		-newkey rsa:2048 \
-		-keyout "$premiere_cert_dir/key.pem" \
-		-out "$premiere_cert_dir/fullchain.pem" \
-		-subj "/CN=mb3admin.com" >>"$log" 2>&1
+    # Generate self-signed cert (10 years)
+    openssl req -x509 -nodes -days 3650 \
+        -newkey rsa:2048 \
+        -keyout "$premiere_cert_dir/key.pem" \
+        -out "$premiere_cert_dir/fullchain.pem" \
+        -subj "/CN=mb3admin.com" >>"$log" 2>&1
 
-	echo_progress_done "Certificate generated"
+    echo_progress_done "Certificate generated"
 }
 
 # ==============================================================================
@@ -452,24 +452,24 @@ _generate_premiere_cert() {
 # ==============================================================================
 
 _install_premiere_ca() {
-	echo_progress_start "Adding certificate to system CA trust"
+    echo_progress_start "Adding certificate to system CA trust"
 
-	# Copy cert to system CA directory
-	cp "$premiere_cert_dir/fullchain.pem" /usr/local/share/ca-certificates/mb3admin.crt
+    # Copy cert to system CA directory
+    cp "$premiere_cert_dir/fullchain.pem" /usr/local/share/ca-certificates/mb3admin.crt
 
-	# Update CA certificates
-	update-ca-certificates >>"$log" 2>&1
+    # Update CA certificates
+    update-ca-certificates >>"$log" 2>&1
 
-	echo_progress_done "Certificate trusted by system"
+    echo_progress_done "Certificate trusted by system"
 }
 
 _remove_premiere_ca() {
-	if [ -f /usr/local/share/ca-certificates/mb3admin.crt ]; then
-		echo_progress_start "Removing certificate from system CA trust"
-		rm -f /usr/local/share/ca-certificates/mb3admin.crt
-		update-ca-certificates >>"$log" 2>&1
-		echo_progress_done "Certificate removed from system trust"
-	fi
+    if [ -f /usr/local/share/ca-certificates/mb3admin.crt ]; then
+        echo_progress_start "Removing certificate from system CA trust"
+        rm -f /usr/local/share/ca-certificates/mb3admin.crt
+        update-ca-certificates >>"$log" 2>&1
+        echo_progress_done "Certificate removed from system trust"
+    fi
 }
 
 # ==============================================================================
@@ -477,11 +477,11 @@ _remove_premiere_ca() {
 # ==============================================================================
 
 _create_premiere_site() {
-	local premiere_key="$1"
+    local premiere_key="$1"
 
-	echo_progress_start "Creating Premiere nginx site"
+    echo_progress_start "Creating Premiere nginx site"
 
-	cat >"$premiere_vhost" <<VHOST
+    cat >"$premiere_vhost" <<VHOST
 server {
     listen 80;
     listen [::]:80;
@@ -531,9 +531,9 @@ server {
 }
 VHOST
 
-	[ -L "$premiere_enabled" ] || ln -s "$premiere_vhost" "$premiere_enabled"
+    [ -L "$premiere_enabled" ] || ln -s "$premiere_vhost" "$premiere_enabled"
 
-	echo_progress_done "Premiere nginx site created"
+    echo_progress_done "Premiere nginx site created"
 }
 
 # ==============================================================================
@@ -541,31 +541,31 @@ VHOST
 # ==============================================================================
 
 _patch_hosts() {
-	echo_progress_start "Patching /etc/hosts"
+    echo_progress_start "Patching /etc/hosts"
 
-	# Backup first
-	cp /etc/hosts "$hosts_backup"
+    # Backup first
+    cp /etc/hosts "$hosts_backup"
 
-	# Check if already patched
-	if grep -q "^# EMBY-PREMIERE-START$" /etc/hosts; then
-		echo_info "Hosts already patched, updating..."
-		_unpatch_hosts
-	fi
+    # Check if already patched
+    if grep -q "^# EMBY-PREMIERE-START$" /etc/hosts; then
+        echo_info "Hosts already patched, updating..."
+        _unpatch_hosts
+    fi
 
-	# Add with markers
-	cat >>/etc/hosts <<'EOF'
+    # Add with markers
+    cat >>/etc/hosts <<'EOF'
 # EMBY-PREMIERE-START
 127.0.0.1 mb3admin.com
 # EMBY-PREMIERE-END
 EOF
 
-	echo_progress_done "Hosts patched"
+    echo_progress_done "Hosts patched"
 }
 
 _unpatch_hosts() {
-	if grep -q "^# EMBY-PREMIERE-START$" /etc/hosts; then
-		sed -i '/^# EMBY-PREMIERE-START$/,/^# EMBY-PREMIERE-END$/d' /etc/hosts
-	fi
+    if grep -q "^# EMBY-PREMIERE-START$" /etc/hosts; then
+        sed -i '/^# EMBY-PREMIERE-START$/,/^# EMBY-PREMIERE-END$/d' /etc/hosts
+    fi
 }
 
 # ==============================================================================
@@ -573,60 +573,60 @@ _unpatch_hosts() {
 # ==============================================================================
 
 _install_subdomain() {
-	_prompt_domain
-	_prompt_le_mode
+    _prompt_domain
+    _prompt_le_mode
 
-	local domain
-	domain=$(_get_domain)
-	local le_hostname="${EMBY_LE_HOSTNAME:-$domain}"
-	local state
-	state=$(_get_install_state)
+    local domain
+    domain=$(_get_domain)
+    local le_hostname="${EMBY_LE_HOSTNAME:-$domain}"
+    local state
+    state=$(_get_install_state)
 
-	echo_info "${app_name^} Subdomain Setup"
-	echo_info "Domain: $domain"
-	[ "$le_hostname" != "$domain" ] && echo_info "LE Hostname: $le_hostname"
-	echo_info "Current state: $state"
+    echo_info "${app_name^} Subdomain Setup"
+    echo_info "Domain: $domain"
+    [ "$le_hostname" != "$domain" ] && echo_info "LE Hostname: $le_hostname"
+    echo_info "Current state: $state"
 
-	case "$state" in
-	"not_installed")
-		_install_app
-		;& # fallthrough
-	"subfolder" | "unknown")
-		_request_certificate "$domain"
-		_create_subdomain_vhost "$domain" "$le_hostname"
-		_add_panel_meta "$domain"
-		_exclude_from_organizr
-		_reload_nginx
-		echo_success "${app_name^} converted to subdomain mode"
-		echo_info "Access at: https://$domain"
-		;;
-	"subdomain")
-		echo_info "Already in subdomain mode"
-		;;
-	esac
+    case "$state" in
+        "not_installed")
+            _install_app
+            ;& # fallthrough
+        "subfolder" | "unknown")
+            _request_certificate "$domain"
+            _create_subdomain_vhost "$domain" "$le_hostname"
+            _add_panel_meta "$domain"
+            _exclude_from_organizr
+            _reload_nginx
+            echo_success "${app_name^} converted to subdomain mode"
+            echo_info "Access at: https://$domain"
+            ;;
+        "subdomain")
+            echo_info "Already in subdomain mode"
+            ;;
+    esac
 }
 
 _revert_subdomain() {
-	echo_info "Reverting ${app_name^} to subfolder mode..."
+    echo_info "Reverting ${app_name^} to subfolder mode..."
 
-	[ -L "$subdomain_enabled" ] && rm -f "$subdomain_enabled"
-	[ -f "$subdomain_vhost" ] && rm -f "$subdomain_vhost"
-	rm -f /etc/nginx/conf.d/upstream-emby.conf
+    [ -L "$subdomain_enabled" ] && rm -f "$subdomain_enabled"
+    [ -f "$subdomain_vhost" ] && rm -f "$subdomain_vhost"
+    rm -f /etc/nginx/conf.d/upstream-emby.conf
 
-	if [ -f "$backup_dir/${app_name}.conf.bak" ]; then
-		cp "$backup_dir/${app_name}.conf.bak" "$subfolder_conf"
-		echo_info "Restored subfolder nginx config"
-	else
-		echo_info "Recreating subfolder config..."
-		_create_subfolder_config
-	fi
+    if [ -f "$backup_dir/${app_name}.conf.bak" ]; then
+        cp "$backup_dir/${app_name}.conf.bak" "$subfolder_conf"
+        echo_info "Restored subfolder nginx config"
+    else
+        echo_info "Recreating subfolder config..."
+        _create_subfolder_config
+    fi
 
-	_remove_panel_meta
-	_include_in_organizr
+    _remove_panel_meta
+    _include_in_organizr
 
-	_reload_nginx
-	echo_success "${app_name^} reverted to subfolder mode"
-	echo_info "Access at: https://your-server/${app_name}/"
+    _reload_nginx
+    echo_success "${app_name^} reverted to subfolder mode"
+    echo_info "Access at: https://your-server/${app_name}/"
 }
 
 # ==============================================================================
@@ -634,107 +634,107 @@ _revert_subdomain() {
 # ==============================================================================
 
 _install_premiere() {
-	# Check if Emby is installed
-	if [ ! -f "/install/.${app_lockname}.lock" ]; then
-		echo_error "${app_name^} is not installed. Install it first."
-		exit 1
-	fi
+    # Check if Emby is installed
+    if [ ! -f "/install/.${app_lockname}.lock" ]; then
+        echo_error "${app_name^} is not installed. Install it first."
+        exit 1
+    fi
 
-	# Check if already enabled
-	if _is_premiere_enabled; then
-		echo_info "Emby Premiere is already enabled"
-		local existing_key
-		existing_key=$(swizdb get "emby/premiere_key" 2>/dev/null) || true
-		if [ -n "$existing_key" ]; then
-			echo_info "Premiere Key: $existing_key"
-		fi
-		return 0
-	fi
+    # Check if already enabled
+    if _is_premiere_enabled; then
+        echo_info "Emby Premiere is already enabled"
+        local existing_key
+        existing_key=$(swizdb get "emby/premiere_key" 2>/dev/null) || true
+        if [ -n "$existing_key" ]; then
+            echo_info "Premiere Key: $existing_key"
+        fi
+        return 0
+    fi
 
-	echo_info "Enabling Emby Premiere..."
+    echo_info "Enabling Emby Premiere..."
 
-	# Check for jq
-	if ! command -v jq &>/dev/null; then
-		echo_info "Installing jq for JSON parsing..."
-		apt_install jq
-	fi
+    # Check for jq
+    if ! command -v jq &>/dev/null; then
+        echo_info "Installing jq for JSON parsing..."
+        apt_install jq
+    fi
 
-	# Get server ID
-	echo_progress_start "Retrieving Emby Server ID"
-	local server_id
-	server_id=$(_get_server_id)
-	if [ -z "$server_id" ]; then
-		echo_error "Could not retrieve Emby Server ID"
-		echo_error "Make sure Emby is running or check /var/lib/emby/config/system.xml"
-		exit 1
-	fi
-	echo_progress_done "Server ID: $server_id"
+    # Get server ID
+    echo_progress_start "Retrieving Emby Server ID"
+    local server_id
+    server_id=$(_get_server_id)
+    if [ -z "$server_id" ]; then
+        echo_error "Could not retrieve Emby Server ID"
+        echo_error "Make sure Emby is running or check /var/lib/emby/config/system.xml"
+        exit 1
+    fi
+    echo_progress_done "Server ID: $server_id"
 
-	# Compute key
-	echo_progress_start "Computing Premiere key"
-	local premiere_key
-	premiere_key=$(_compute_premiere_key "$server_id")
-	echo_progress_done "Key computed"
+    # Compute key
+    echo_progress_start "Computing Premiere key"
+    local premiere_key
+    premiere_key=$(_compute_premiere_key "$server_id")
+    echo_progress_done "Key computed"
 
-	# Generate certificate
-	_generate_premiere_cert
+    # Generate certificate
+    _generate_premiere_cert
 
-	# Add cert to system CA trust (so Emby trusts it)
-	_install_premiere_ca
+    # Add cert to system CA trust (so Emby trusts it)
+    _install_premiere_ca
 
-	# Create nginx site
-	_create_premiere_site "$premiere_key"
+    # Create nginx site
+    _create_premiere_site "$premiere_key"
 
-	# Patch hosts
-	_patch_hosts
+    # Patch hosts
+    _patch_hosts
 
-	# Reload nginx
-	_reload_nginx
+    # Reload nginx
+    _reload_nginx
 
-	# Store state
-	swizdb set "emby/premiere" "enabled"
-	swizdb set "emby/premiere_key" "$premiere_key"
-	swizdb set "emby/server_id" "$server_id"
+    # Store state
+    swizdb set "emby/premiere" "enabled"
+    swizdb set "emby/premiere_key" "$premiere_key"
+    swizdb set "emby/server_id" "$server_id"
 
-	echo_success "Emby Premiere enabled successfully!"
-	echo ""
-	echo_info "Server ID: $server_id"
-	echo_info "Premiere Key: $premiere_key"
-	echo ""
-	echo_warn "Save this key for reference."
-	echo_info "Restart Emby to activate: systemctl restart emby-server"
+    echo_success "Emby Premiere enabled successfully!"
+    echo ""
+    echo_info "Server ID: $server_id"
+    echo_info "Premiere Key: $premiere_key"
+    echo ""
+    echo_warn "Save this key for reference."
+    echo_info "Restart Emby to activate: systemctl restart emby-server"
 }
 
 _revert_premiere() {
-	if ! _is_premiere_enabled; then
-		echo_info "Emby Premiere is not enabled"
-		return 0
-	fi
+    if ! _is_premiere_enabled; then
+        echo_info "Emby Premiere is not enabled"
+        return 0
+    fi
 
-	echo_info "Reverting Emby Premiere bypass..."
+    echo_info "Reverting Emby Premiere bypass..."
 
-	# Remove nginx site
-	[ -L "$premiere_enabled" ] && rm -f "$premiere_enabled"
-	[ -f "$premiere_vhost" ] && rm -f "$premiere_vhost"
+    # Remove nginx site
+    [ -L "$premiere_enabled" ] && rm -f "$premiere_enabled"
+    [ -f "$premiere_vhost" ] && rm -f "$premiere_vhost"
 
-	# Remove hosts patch
-	_unpatch_hosts
+    # Remove hosts patch
+    _unpatch_hosts
 
-	# Ask about removing SSL cert
-	if ask "Remove self-signed certificate?" N; then
-		_remove_premiere_ca
-		rm -rf "$premiere_cert_dir"
-		echo_info "Certificate removed"
-	fi
+    # Ask about removing SSL cert
+    if ask "Remove self-signed certificate?" N; then
+        _remove_premiere_ca
+        rm -rf "$premiere_cert_dir"
+        echo_info "Certificate removed"
+    fi
 
-	# Clear swizdb
-	swizdb clear "emby/premiere" 2>/dev/null || true
-	swizdb clear "emby/premiere_key" 2>/dev/null || true
+    # Clear swizdb
+    swizdb clear "emby/premiere" 2>/dev/null || true
+    swizdb clear "emby/premiere_key" 2>/dev/null || true
 
-	_reload_nginx
+    _reload_nginx
 
-	echo_success "Emby Premiere bypass removed"
-	echo_info "Restart Emby to deactivate: systemctl restart emby-server"
+    echo_success "Emby Premiere bypass removed"
+    echo_info "Restart Emby to deactivate: systemctl restart emby-server"
 }
 
 # ==============================================================================
@@ -742,49 +742,49 @@ _revert_premiere() {
 # ==============================================================================
 
 _remove() {
-	local force="$1"
-	if [ "$force" != "--force" ] && [ ! -f "/install/.${app_lockname}.lock" ]; then
-		echo_error "${app_name^} is not installed (use --force to override)"
-		exit 1
-	fi
+    local force="$1"
+    if [ "$force" != "--force" ] && [ ! -f "/install/.${app_lockname}.lock" ]; then
+        echo_error "${app_name^} is not installed (use --force to override)"
+        exit 1
+    fi
 
-	echo_info "Removing ${app_name^}..."
+    echo_info "Removing ${app_name^}..."
 
-	# Revert premiere if enabled
-	if _is_premiere_enabled; then
-		_revert_premiere
-	fi
+    # Revert premiere if enabled
+    if _is_premiere_enabled; then
+        _revert_premiere
+    fi
 
-	# Revert subdomain if configured
-	if [ -f "$subdomain_vhost" ]; then
-		rm -f "$subdomain_enabled"
-		rm -f "$subdomain_vhost"
-		rm -f /etc/nginx/conf.d/upstream-emby.conf
-		_remove_panel_meta
-	fi
+    # Revert subdomain if configured
+    if [ -f "$subdomain_vhost" ]; then
+        rm -f "$subdomain_enabled"
+        rm -f "$subdomain_vhost"
+        rm -f /etc/nginx/conf.d/upstream-emby.conf
+        _remove_panel_meta
+    fi
 
-	# Remove subfolder config if exists
-	rm -f "$subfolder_conf"
+    # Remove subfolder config if exists
+    rm -f "$subfolder_conf"
 
-	# Remove backup dir
-	rm -rf "$backup_dir"
+    # Remove backup dir
+    rm -rf "$backup_dir"
 
-	# Reload nginx
-	_reload_nginx 2>/dev/null || true
+    # Reload nginx
+    _reload_nginx 2>/dev/null || true
 
-	# Remove app via box
-	echo_info "Removing ${app_name^} via box remove ${app_name}..."
-	box remove "$app_name"
+    # Remove app via box
+    echo_info "Removing ${app_name^} via box remove ${app_name}..."
+    box remove "$app_name"
 
-	# Remove all swizdb entries
-	swizdb clear "emby/domain" 2>/dev/null || true
-	swizdb clear "emby/premiere" 2>/dev/null || true
-	swizdb clear "emby/premiere_key" 2>/dev/null || true
-	swizdb clear "emby/server_id" 2>/dev/null || true
+    # Remove all swizdb entries
+    swizdb clear "emby/domain" 2>/dev/null || true
+    swizdb clear "emby/premiere" 2>/dev/null || true
+    swizdb clear "emby/premiere_key" 2>/dev/null || true
+    swizdb clear "emby/server_id" 2>/dev/null || true
 
-	echo_success "${app_name^} has been removed"
-	echo_info "Note: Let's Encrypt certificate was not removed"
-	exit 0
+    echo_success "${app_name^} has been removed"
+    echo_info "Note: Let's Encrypt certificate was not removed"
+    exit 0
 }
 
 # ==============================================================================
@@ -792,33 +792,33 @@ _remove() {
 # ==============================================================================
 
 _interactive() {
-	echo_info "${app_name^} Setup"
+    echo_info "${app_name^} Setup"
 
-	# Install Emby if needed
-	_install_app
+    # Install Emby if needed
+    _install_app
 
-	# Ask about subdomain
-	local state
-	state=$(_get_install_state)
+    # Ask about subdomain
+    local state
+    state=$(_get_install_state)
 
-	if [ "$state" != "subdomain" ]; then
-		if ask "Convert Emby to subdomain mode?" N; then
-			_install_subdomain
-		fi
-	else
-		echo_info "Subdomain already configured"
-	fi
+    if [ "$state" != "subdomain" ]; then
+        if ask "Convert Emby to subdomain mode?" N; then
+            _install_subdomain
+        fi
+    else
+        echo_info "Subdomain already configured"
+    fi
 
-	# Ask about premiere
-	if ! _is_premiere_enabled; then
-		if ask "Enable Emby Premiere?" N; then
-			_install_premiere
-		fi
-	else
-		echo_info "Premiere already enabled"
-	fi
+    # Ask about premiere
+    if ! _is_premiere_enabled; then
+        if ask "Enable Emby Premiere?" N; then
+            _install_premiere
+        fi
+    else
+        echo_info "Premiere already enabled"
+    fi
 
-	echo_success "${app_name^} setup complete"
+    echo_success "${app_name^} setup complete"
 }
 
 # ==============================================================================
@@ -826,16 +826,16 @@ _interactive() {
 # ==============================================================================
 
 _usage() {
-	echo "Usage: $0 [OPTIONS]"
-	echo ""
-	echo "  (no args)             Interactive setup"
-	echo "  --subdomain           Convert to subdomain mode"
-	echo "  --subdomain --revert  Revert to subfolder mode"
-	echo "  --premiere            Enable Emby Premiere"
-	echo "  --premiere --revert   Disable Emby Premiere"
-	echo "  --remove [--force]    Complete removal"
-	echo "  --register-panel      Re-register with panel"
-	exit 1
+    echo "Usage: $0 [OPTIONS]"
+    echo ""
+    echo "  (no args)             Interactive setup"
+    echo "  --subdomain           Convert to subdomain mode"
+    echo "  --subdomain --revert  Revert to subfolder mode"
+    echo "  --premiere            Enable Emby Premiere"
+    echo "  --premiere --revert   Disable Emby Premiere"
+    echo "  --remove [--force]    Complete removal"
+    echo "  --register-panel      Re-register with panel"
+    exit 1
 }
 
 # ==============================================================================
@@ -843,10 +843,10 @@ _usage() {
 # ==============================================================================
 
 _preflight() {
-	if [ ! -f /install/.nginx.lock ]; then
-		echo_error "nginx is not installed. Please install nginx first."
-		exit 1
-	fi
+    if [ ! -f /install/.nginx.lock ]; then
+        echo_error "nginx is not installed. Please install nginx first."
+        exit 1
+    fi
 }
 
 # ==============================================================================
@@ -856,45 +856,45 @@ _preflight() {
 _preflight
 
 case "${1:-}" in
-"--subdomain")
-	case "${2:-}" in
-	"--revert") _revert_subdomain ;;
-	"") _install_subdomain ;;
-	*) _usage ;;
-	esac
-	;;
-"--premiere")
-	case "${2:-}" in
-	"--revert") _revert_premiere ;;
-	"") _install_premiere ;;
-	*) _usage ;;
-	esac
-	;;
-"--remove")
-	_remove "$2"
-	;;
-"--register-panel")
-	if [ ! -f "/install/.${app_lockname}.lock" ]; then
-		echo_error "${app_name^} is not installed"
-		exit 1
-	fi
-	state=$(_get_install_state)
-	if [ "$state" = "subdomain" ]; then
-		domain=$(_get_domain)
-		if [ -n "$domain" ]; then
-			_add_panel_meta "$domain"
-		else
-			echo_error "No domain configured"
-			exit 1
-		fi
-	fi
-	systemctl restart panel 2>/dev/null || true
-	echo_success "Panel registration updated for ${app_name^}"
-	;;
-"")
-	_interactive
-	;;
-*)
-	_usage
-	;;
+    "--subdomain")
+        case "${2:-}" in
+            "--revert") _revert_subdomain ;;
+            "") _install_subdomain ;;
+            *) _usage ;;
+        esac
+        ;;
+    "--premiere")
+        case "${2:-}" in
+            "--revert") _revert_premiere ;;
+            "") _install_premiere ;;
+            *) _usage ;;
+        esac
+        ;;
+    "--remove")
+        _remove "$2"
+        ;;
+    "--register-panel")
+        if [ ! -f "/install/.${app_lockname}.lock" ]; then
+            echo_error "${app_name^} is not installed"
+            exit 1
+        fi
+        state=$(_get_install_state)
+        if [ "$state" = "subdomain" ]; then
+            domain=$(_get_domain)
+            if [ -n "$domain" ]; then
+                _add_panel_meta "$domain"
+            else
+                echo_error "No domain configured"
+                exit 1
+            fi
+        fi
+        systemctl restart panel 2>/dev/null || true
+        echo_success "Panel registration updated for ${app_name^}"
+        ;;
+    "")
+        _interactive
+        ;;
+    *)
+        _usage
+        ;;
 esac
