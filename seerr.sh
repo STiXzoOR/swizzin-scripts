@@ -8,6 +8,9 @@
 #shellcheck source=sources/functions/utils
 . /etc/swizzin/sources/functions/utils
 
+# shellcheck source=lib/nginx-utils.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/nginx-utils.sh" 2>/dev/null || true
+
 # Log to Swizzin.log
 export log=/root/logs/swizzin.log
 touch "$log"
@@ -511,7 +514,7 @@ _install_subdomain() {
 		_request_certificate "$domain"
 		_create_subdomain_vhost "$domain" "$le_hostname"
 		_add_panel_meta "$domain"
-		systemctl reload nginx
+		_reload_nginx
 		echo_success "${app_name^} converted to subdomain mode"
 		echo_info "Access at: https://$domain"
 		;;
@@ -529,7 +532,7 @@ _revert_subdomain() {
 
 	_remove_panel_meta
 
-	systemctl reload nginx
+	_reload_nginx
 	local app_port
 	app_port=$(swizdb get "$app_name/port" 2>/dev/null) || app_port=10000
 	echo_success "${app_name^} reverted to direct access"
@@ -579,7 +582,7 @@ _remove() {
 		echo_progress_start "Removing nginx configuration"
 		rm -f "$subdomain_enabled"
 		rm -f "$subdomain_vhost"
-		systemctl reload nginx 2>/dev/null || true
+		_reload_nginx 2>/dev/null || true
 		echo_progress_done "Nginx configuration removed"
 	fi
 

@@ -37,6 +37,9 @@ else
     echo_header()  { echo ""; echo "=== $1 ==="; echo ""; }
 fi
 
+# shellcheck source=lib/nginx-utils.sh
+. "${SCRIPT_DIR}/lib/nginx-utils.sh" 2>/dev/null || true
+
 # ==============================================================================
 # Configuration
 # ==============================================================================
@@ -290,8 +293,7 @@ CIPHERS
 
     # 9. Test and reload nginx
     echo_info "Testing nginx configuration..."
-    if nginx -t 2>&1; then
-        systemctl reload nginx
+    if _reload_nginx; then
         echo_success "Nginx configuration valid and reloaded"
     else
         echo_error "Nginx configuration test failed!"
@@ -383,8 +385,7 @@ remove_streaming_nginx() {
 
     # 9. Test and reload nginx
     echo_info "Testing nginx configuration..."
-    if nginx -t 2>&1; then
-        systemctl reload nginx
+    if _reload_nginx; then
         echo_success "Nginx configuration valid and reloaded"
     else
         echo_error "Nginx configuration test failed!"

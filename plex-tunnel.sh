@@ -8,6 +8,9 @@
 #shellcheck source=sources/functions/utils
 . /etc/swizzin/sources/functions/utils
 
+# shellcheck source=lib/nginx-utils.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/nginx-utils.sh" 2>/dev/null || true
+
 # ==============================================================================
 # Panel Helper
 # ==============================================================================
@@ -1136,7 +1139,7 @@ _remove() {
 		echo_progress_start "Removing subdomain nginx configuration"
 		rm -f "$subdomain_enabled"
 		rm -f "$subdomain_vhost"
-		systemctl reload nginx 2>/dev/null || true
+		_reload_nginx 2>/dev/null || true
 		echo_progress_done "Subdomain configuration removed"
 	fi
 
@@ -1277,7 +1280,7 @@ _install_subdomain() {
 		_create_subdomain_vhost "$domain" "$le_hostname"
 		_add_panel_meta "$domain"
 		_exclude_from_organizr
-		systemctl reload nginx
+		_reload_nginx
 		echo_success "${app_pretty} subdomain configured"
 		echo_info "Access at: https://$domain"
 		;;
@@ -1295,7 +1298,7 @@ _revert_subdomain() {
 
 	_remove_panel_meta
 
-	systemctl reload nginx 2>/dev/null || true
+	_reload_nginx 2>/dev/null || true
 
 	echo_success "${app_pretty} subdomain removed"
 	echo_info "Access at: http://your-server:${app_port}/web"

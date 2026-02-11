@@ -11,6 +11,9 @@
 #shellcheck source=sources/functions/php
 . /etc/swizzin/sources/functions/php
 
+# shellcheck source=lib/nginx-utils.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/nginx-utils.sh" 2>/dev/null || true
+
 # Log to Swizzin.log
 export log=/root/logs/swizzin.log
 touch "$log"
@@ -715,7 +718,7 @@ _migrate_all_apps() {
 	done
 
 	if [ "$migrated" -gt 0 ]; then
-		systemctl reload nginx
+		_reload_nginx
 		echo_info "Migration complete"
 	fi
 }
@@ -775,7 +778,7 @@ _install() {
 		_add_panel_meta "$domain"
 		_select_apps
 		_apply_protection
-		systemctl reload nginx
+		_reload_nginx
 		reload_php_fpm
 		echo_success "Organizr converted to subdomain mode"
 		echo_info "Access at: https://$domain"
@@ -828,7 +831,7 @@ _configure() {
 	# Cleanup temp file
 	rm -f "$config_file.tmp"
 
-	systemctl reload nginx
+	_reload_nginx
 	echo_success "Organizr SSO configuration updated"
 }
 
@@ -863,7 +866,7 @@ _revert() {
 	# Keep auth snippet and config for future use
 	echo_info "Config preserved at $config_file for future re-enable"
 
-	systemctl reload nginx
+	_reload_nginx
 	echo_success "Organizr reverted to subfolder mode"
 	echo_info "Access at: https://your-server/organizr/"
 }

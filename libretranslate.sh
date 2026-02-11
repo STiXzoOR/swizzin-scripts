@@ -8,6 +8,9 @@
 #shellcheck source=sources/functions/utils
 . /etc/swizzin/sources/functions/utils
 
+# shellcheck source=lib/nginx-utils.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/nginx-utils.sh" 2>/dev/null || true
+
 PANEL_HELPER_LOCAL="/opt/swizzin-extras/panel_helpers.sh"
 PANEL_HELPER_URL="https://raw.githubusercontent.com/STiXzoOR/swizzin-scripts/main/panel_helpers.sh"
 
@@ -714,7 +717,7 @@ _nginx_libretranslate() {
 			}
 		NGX
 
-		systemctl reload nginx
+		_reload_nginx
 		echo_progress_done "Nginx configured"
 	else
 		echo_info "$app_name will run on port $app_port"
@@ -919,7 +922,7 @@ _install_subdomain() {
 		_create_subdomain_vhost "$domain" "$le_hostname"
 		_add_panel_meta "$domain"
 		_exclude_from_organizr
-		systemctl reload nginx
+		_reload_nginx
 		echo_success "${app_name^} converted to subdomain mode"
 		echo_info "Access at: https://$domain"
 		;;
@@ -960,7 +963,7 @@ _revert_subdomain() {
 	_remove_panel_meta
 	_include_in_organizr
 
-	systemctl reload nginx
+	_reload_nginx
 	echo_success "${app_name^} reverted to subfolder mode"
 	echo_info "Access at: https://your-server/$app_baseurl/"
 }
@@ -1101,7 +1104,7 @@ _remove_libretranslate() {
 		echo_progress_done "Subdomain configuration removed"
 	fi
 
-	systemctl reload nginx 2>/dev/null || true
+	_reload_nginx 2>/dev/null || true
 
 	# Remove panel meta (subdomain mode)
 	_remove_panel_meta

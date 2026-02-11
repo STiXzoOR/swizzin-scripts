@@ -8,6 +8,9 @@
 #shellcheck source=sources/functions/utils
 . /etc/swizzin/sources/functions/utils
 
+# shellcheck source=lib/nginx-utils.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/nginx-utils.sh" 2>/dev/null || true
+
 PANEL_HELPER_LOCAL="/opt/swizzin-extras/panel_helpers.sh"
 PANEL_HELPER_URL="https://raw.githubusercontent.com/STiXzoOR/swizzin-scripts/main/panel_helpers.sh"
 
@@ -314,7 +317,7 @@ _remove_huntarr() {
 	if [ -f "/etc/nginx/apps/$app_name.conf" ]; then
 		echo_progress_start "Removing nginx configuration"
 		rm -f "/etc/nginx/apps/$app_name.conf"
-		systemctl reload nginx 2>/dev/null || true
+		_reload_nginx 2>/dev/null || true
 		echo_progress_done "Nginx configuration removed"
 	fi
 
@@ -408,7 +411,7 @@ _nginx_huntarr() {
 			}
 		NGX
 
-		systemctl reload nginx
+		_reload_nginx
 		echo_progress_done "Nginx configured"
 	else
 		echo_info "${app_name^} will run on port $app_port"

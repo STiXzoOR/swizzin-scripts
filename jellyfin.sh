@@ -8,6 +8,9 @@
 #shellcheck source=sources/functions/utils
 . /etc/swizzin/sources/functions/utils
 
+# shellcheck source=lib/nginx-utils.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/nginx-utils.sh" 2>/dev/null || true
+
 # Log to Swizzin.log
 export log=/root/logs/swizzin.log
 touch "$log"
@@ -598,7 +601,7 @@ _install_subdomain() {
 		_clear_baseurl
 		_add_panel_meta "$domain"
 		_exclude_from_organizr
-		systemctl reload nginx
+		_reload_nginx
 		echo_success "${app_name^} converted to subdomain mode"
 		echo_info "Access at: https://$domain"
 		;;
@@ -627,7 +630,7 @@ _revert_subdomain() {
 	_remove_panel_meta
 	_include_in_organizr
 
-	systemctl reload nginx
+	_reload_nginx
 	echo_success "${app_name^} reverted to subfolder mode"
 	echo_info "Access at: https://your-server/${app_name}/"
 }
@@ -655,7 +658,7 @@ _remove() {
 	rm -f "$subfolder_conf"
 	rm -rf "$backup_dir"
 
-	systemctl reload nginx 2>/dev/null || true
+	_reload_nginx 2>/dev/null || true
 
 	echo_info "Removing ${app_name^} via box remove ${app_name}..."
 	box remove "$app_name"

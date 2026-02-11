@@ -8,6 +8,9 @@
 #shellcheck source=sources/functions/utils
 . /etc/swizzin/sources/functions/utils
 
+# shellcheck source=lib/nginx-utils.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/nginx-utils.sh" 2>/dev/null || true
+
 # Panel Helper - Download and cache for panel integration
 PANEL_HELPER_LOCAL="/opt/swizzin-extras/panel_helpers.sh"
 PANEL_HELPER_URL="https://raw.githubusercontent.com/STiXzoOR/swizzin-scripts/main/panel_helpers.sh"
@@ -230,7 +233,7 @@ _add_instance() {
 			    }
 			}
 		NGX
-		systemctl reload nginx
+		_reload_nginx
 		echo_progress_done
 	fi
 
@@ -283,7 +286,7 @@ _remove_instance() {
 	if [[ -f "/etc/nginx/apps/${instance_name}.conf" ]]; then
 		echo_progress_start "Removing nginx config"
 		rm -f "/etc/nginx/apps/${instance_name}.conf"
-		systemctl reload nginx 2>/dev/null || true
+		_reload_nginx 2>/dev/null || true
 		echo_progress_done
 	fi
 

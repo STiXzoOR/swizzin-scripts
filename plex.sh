@@ -8,6 +8,9 @@
 #shellcheck source=sources/functions/utils
 . /etc/swizzin/sources/functions/utils
 
+# shellcheck source=lib/nginx-utils.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/nginx-utils.sh" 2>/dev/null || true
+
 # Log to Swizzin.log
 export log=/root/logs/swizzin.log
 touch "$log"
@@ -203,7 +206,7 @@ _nginx_subfolder() {
 
 	echo_progress_start "Creating nginx subfolder config"
 	_create_subfolder_config
-	systemctl reload nginx
+	_reload_nginx
 	echo_progress_done "nginx configured for /plex/"
 }
 
@@ -506,7 +509,7 @@ _install_subdomain() {
 		_create_subdomain_vhost "$domain" "$le_hostname"
 		_add_panel_meta "$domain"
 		_exclude_from_organizr
-		systemctl reload nginx
+		_reload_nginx
 		_configure_plex_preferences "$domain"
 		echo_success "${app_name^} converted to subdomain mode"
 		echo_info "Access at: https://$domain"
@@ -536,7 +539,7 @@ _revert_subdomain() {
 	_include_in_organizr
 	_reset_plex_preferences
 
-	systemctl reload nginx
+	_reload_nginx
 	echo_success "${app_name^} reverted to subfolder mode"
 	echo_info "Access at: https://your-server/plex/"
 }
@@ -569,7 +572,7 @@ _remove() {
 	rm -rf "$backup_dir"
 
 	# Reload nginx
-	systemctl reload nginx 2>/dev/null || true
+	_reload_nginx 2>/dev/null || true
 
 	# Remove app via box
 	echo_info "Removing ${app_name^} via box remove ${app_name}..."

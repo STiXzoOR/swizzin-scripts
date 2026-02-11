@@ -549,11 +549,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 **The `_reload_nginx()` helper should capture and log stderr** from `nginx -t` to aid debugging. Updated implementation above includes this.
 
-- [ ] Create `lib/nginx-utils.sh` with `_reload_nginx()` function
-- [ ] Source it from all scripts that call `systemctl reload nginx`
-- [ ] Replace all 42 install-path `systemctl reload nginx` calls with `_reload_nginx`
-- [ ] Replace all 23 removal-path calls with `_reload_nginx 2>/dev/null || true`
-- [ ] Update all 5 templates
+- [x] Create `lib/nginx-utils.sh` with `_reload_nginx()` function
+- [x] Source it from all 23 scripts that call `systemctl reload nginx`
+- [x] Replace all install-path `systemctl reload nginx` calls with `_reload_nginx`
+- [x] Replace all removal-path calls with `_reload_nginx 2>/dev/null || true`
+- [x] Update all 5 templates
 
 ---
 
