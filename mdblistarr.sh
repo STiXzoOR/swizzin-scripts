@@ -322,6 +322,15 @@ _install_docker() {
 _install_mdblistarr() {
     mkdir -p "$app_dbdir"
 
+    # Create Django settings override to trust nginx reverse proxy headers
+    cat >"$app_dbdir/settings_override.py" <<'SETTINGS'
+from mdblist.settings import *  # noqa: F401,F403
+
+# Trust nginx reverse proxy headers so Django sees the real host/proto
+USE_X_FORWARDED_HOST = True
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+SETTINGS
+
     echo_progress_start "Generating Docker Compose configuration"
 
     cat >"$app_dir/docker-compose.yml" <<COMPOSE
@@ -335,6 +344,8 @@ services:
       - ${app_dbdir}:/usr/src/db
     environment:
       - PORT=${app_port}
+      - PYTHONPATH=/usr/src/db:/usr/src/app
+      - DJANGO_SETTINGS_MODULE=settings_override
 COMPOSE
 
     echo_progress_done "Docker Compose configuration generated"
