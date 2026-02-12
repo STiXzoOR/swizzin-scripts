@@ -92,7 +92,7 @@ _get_domain() {
 }
 
 _prompt_domain() {
-    if [ -n "$SEERR_DOMAIN" ]; then
+    if [ -n "${SEERR_DOMAIN:-}" ]; then
         echo_info "Using domain from SEERR_DOMAIN: $SEERR_DOMAIN"
         app_domain="$SEERR_DOMAIN"
         return
@@ -133,7 +133,7 @@ _prompt_domain() {
 }
 
 _prompt_le_mode() {
-    if [ -n "$SEERR_LE_INTERACTIVE" ]; then
+    if [ -n "${SEERR_LE_INTERACTIVE:-}" ]; then
         echo_info "Using LE mode from SEERR_LE_INTERACTIVE: $SEERR_LE_INTERACTIVE"
         return
     fi

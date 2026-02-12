@@ -402,6 +402,13 @@ APP_CONFIGS = {
             "port": "LT_PORT",
         },
     },
+    "mdblistarr": {
+        "config_paths": ["/opt/mdblistarr/docker-compose.yml"],
+        "format": "mdblistarr",
+        "keys": {
+            "port": "PORT",
+        },
+    },
 }
 
 
@@ -853,6 +860,31 @@ def parse_docker_compose_env(path: str, keys: Dict[str, str]) -> Dict[str, Any]:
     return result
 
 
+def parse_mdblistarr_config(path: str, keys: Dict[str, str]) -> Dict[str, Any]:
+    """Parse MDBListarr config: port from docker-compose, API key from SQLite db."""
+    result = parse_docker_compose_env(path, keys)
+
+    # Try to extract MDBList API key from SQLite database
+    db_path = os.path.join(os.path.dirname(path), "db", "db.sqlite3")
+    if os.path.exists(db_path):
+        try:
+            import sqlite3
+
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT value FROM mdblistrr_preferences WHERE name = 'mdblist_apikey'"
+            )
+            row = cursor.fetchone()
+            if row and row[0]:
+                result["apikey"] = row[0]
+            conn.close()
+        except Exception:
+            pass
+
+    return result
+
+
 def get_systemd_port(service_name: str) -> Optional[str]:
     """Extract port from systemd service environment."""
     try:
@@ -934,6 +966,8 @@ def parse_app_config(
             parsed = parse_rtorrent_config(config_file, keys)
         elif fmt == "docker_compose":
             parsed = parse_docker_compose_env(config_file, keys)
+        elif fmt == "mdblistarr":
+            parsed = parse_mdblistarr_config(config_file, keys)
         else:
             parsed = {}
 

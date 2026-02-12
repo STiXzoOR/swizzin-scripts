@@ -185,7 +185,7 @@ _get_domain() {
 }
 
 _prompt_domain() {
-    if [ -n "$LIBRETRANSLATE_DOMAIN" ]; then
+    if [ -n "${LIBRETRANSLATE_DOMAIN:-}" ]; then
         echo_info "Using domain from LIBRETRANSLATE_DOMAIN: $LIBRETRANSLATE_DOMAIN"
         app_domain="$LIBRETRANSLATE_DOMAIN"
         return
@@ -226,7 +226,7 @@ _prompt_domain() {
 }
 
 _prompt_le_mode() {
-    if [ -n "$LIBRETRANSLATE_LE_INTERACTIVE" ]; then
+    if [ -n "${LIBRETRANSLATE_LE_INTERACTIVE:-}" ]; then
         echo_info "Using LE mode from LIBRETRANSLATE_LE_INTERACTIVE: $LIBRETRANSLATE_LE_INTERACTIVE"
         return
     fi
@@ -767,7 +767,7 @@ _install_fresh() {
     fi
 
     # Set owner for install
-    if [[ -n "$LIBRETRANSLATE_OWNER" ]]; then
+    if [[ -n "${LIBRETRANSLATE_OWNER:-}" ]]; then
         echo_info "Setting ${app_name^} owner = $LIBRETRANSLATE_OWNER"
         swizdb set "$app_name/owner" "$LIBRETRANSLATE_OWNER"
     fi

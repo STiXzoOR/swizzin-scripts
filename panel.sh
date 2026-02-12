@@ -67,7 +67,7 @@ _get_domain() {
 }
 
 _prompt_domain() {
-    if [ -n "$PANEL_DOMAIN" ]; then
+    if [ -n "${PANEL_DOMAIN:-}" ]; then
         echo_info "Using domain from PANEL_DOMAIN: $PANEL_DOMAIN"
         app_domain="$PANEL_DOMAIN"
         return
@@ -108,7 +108,7 @@ _prompt_domain() {
 }
 
 _prompt_le_mode() {
-    if [ -n "$PANEL_LE_INTERACTIVE" ]; then
+    if [ -n "${PANEL_LE_INTERACTIVE:-}" ]; then
         echo_info "Using LE mode from PANEL_LE_INTERACTIVE: $PANEL_LE_INTERACTIVE"
         return
     fi

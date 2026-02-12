@@ -114,7 +114,7 @@ _install_notifiarr() {
     echo_info "Checking for ${app_name} API Key"
     if ! grep -qE 'Environment=DN_API_KEY=[0-9a-fA-F-]{36}' "/etc/systemd/system/$app_servicefile" 2>/dev/null; then
         # Check for environment variable first
-        if [ -n "$DN_API_KEY" ]; then
+        if [ -n "${DN_API_KEY:-}" ]; then
             API_KEY="$DN_API_KEY"
             echo_info "Using API Key from DN_API_KEY environment variable"
         else
@@ -839,3 +839,5 @@ fi
 
 touch "/install/.$app_lockname.lock"
 echo_success "${app_name^} installed"
+echo_info "Access at: https://your-server/${app_baseurl}/"
+echo_info "Port: ${app_port}"

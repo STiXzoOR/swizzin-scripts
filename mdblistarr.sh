@@ -126,7 +126,7 @@ _get_domain() {
 }
 
 _prompt_domain() {
-    if [ -n "$MDBLISTARR_DOMAIN" ]; then
+    if [ -n "${MDBLISTARR_DOMAIN:-}" ]; then
         echo_info "Using domain from MDBLISTARR_DOMAIN: $MDBLISTARR_DOMAIN"
         app_domain="$MDBLISTARR_DOMAIN"
         return
@@ -167,7 +167,7 @@ _prompt_domain() {
 }
 
 _prompt_le_mode() {
-    if [ -n "$MDBLISTARR_LE_INTERACTIVE" ]; then
+    if [ -n "${MDBLISTARR_LE_INTERACTIVE:-}" ]; then
         echo_info "Using LE mode from MDBLISTARR_LE_INTERACTIVE: $MDBLISTARR_LE_INTERACTIVE"
         return
     fi
@@ -496,7 +496,7 @@ _discover_arr_instances() {
                     echo_info "Detected Sonarr/Radarr instances:"
                     found=true
                 fi
-                printf "  %-20s http://127.0.0.1:%-5s API: %s\n" "${display_name}:" "${port}${url_base}" "$api_key"
+                printf "  %-20s http://127.0.0.1:%s%s  API: %s\n" "${display_name}:" "${port}" "/${url_base#/}" "$api_key"
             fi
             break
         done
@@ -511,7 +511,7 @@ _discover_arr_instances() {
 
     echo ""
     echo_info "Default credentials: admin / admin"
-    echo_error "Change the default password after first login!"
+    echo_warn "Change the default password after first login!"
 }
 
 # ==============================================================================
@@ -527,7 +527,7 @@ _install_fresh() {
     _cleanup_needed=true
 
     # Set owner for install
-    if [[ -n "$MDBLISTARR_OWNER" ]]; then
+    if [[ -n "${MDBLISTARR_OWNER:-}" ]]; then
         echo_info "Setting ${app_name^} owner = $MDBLISTARR_OWNER"
         swizdb set "$app_name/owner" "$MDBLISTARR_OWNER"
     fi

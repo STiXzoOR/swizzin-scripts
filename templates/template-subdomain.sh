@@ -105,7 +105,7 @@ _get_domain() {
 # Prompt for domain interactively
 # CUSTOMIZE: Change MYAPP_DOMAIN, myapp, and Myapp to match your app
 _prompt_domain() {
-    if [ -n "$MYAPP_DOMAIN" ]; then
+    if [ -n "${MYAPP_DOMAIN:-}" ]; then
         echo_info "Using domain from MYAPP_DOMAIN: $MYAPP_DOMAIN"
         app_domain="$MYAPP_DOMAIN"
         return
@@ -148,7 +148,7 @@ _prompt_domain() {
 # Prompt for Let's Encrypt mode
 # CUSTOMIZE: Change MYAPP_LE_INTERACTIVE to match your app
 _prompt_le_mode() {
-    if [ -n "$MYAPP_LE_INTERACTIVE" ]; then
+    if [ -n "${MYAPP_LE_INTERACTIVE:-}" ]; then
         echo_info "Using LE mode from MYAPP_LE_INTERACTIVE: $MYAPP_LE_INTERACTIVE"
         return
     fi

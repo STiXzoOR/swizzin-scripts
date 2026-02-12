@@ -79,7 +79,7 @@ _get_domain() {
 
 # Prompt for domain interactively
 _prompt_domain() {
-    if [ -n "$EMBY_DOMAIN" ]; then
+    if [ -n "${EMBY_DOMAIN:-}" ]; then
         echo_info "Using domain from EMBY_DOMAIN: $EMBY_DOMAIN"
         app_domain="$EMBY_DOMAIN"
         return
@@ -121,7 +121,7 @@ _prompt_domain() {
 
 # Prompt for Let's Encrypt mode
 _prompt_le_mode() {
-    if [ -n "$EMBY_LE_INTERACTIVE" ]; then
+    if [ -n "${EMBY_LE_INTERACTIVE:-}" ]; then
         echo_info "Using LE mode from EMBY_LE_INTERACTIVE: $EMBY_LE_INTERACTIVE"
         return
     fi

@@ -244,7 +244,7 @@ _progress_heartbeat() {
 
 healthcheck() {
     local status="$1"
-    [[ -n "$HC_UUID" ]] && curl -fsS -m 10 --retry 3 "https://hc-ping.com/${HC_UUID}${status}" &>/dev/null || true
+    [[ -n "${HC_UUID:-}" ]] && curl -fsS -m 10 --retry 3 "https://hc-ping.com/${HC_UUID}${status}" &>/dev/null || true
 }
 
 _generate_size_excludes() {

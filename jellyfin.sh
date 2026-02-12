@@ -88,7 +88,7 @@ _get_domain() {
 }
 
 _prompt_domain() {
-    if [ -n "$JELLYFIN_DOMAIN" ]; then
+    if [ -n "${JELLYFIN_DOMAIN:-}" ]; then
         echo_info "Using domain from JELLYFIN_DOMAIN: $JELLYFIN_DOMAIN"
         app_domain="$JELLYFIN_DOMAIN"
         return
@@ -129,7 +129,7 @@ _prompt_domain() {
 }
 
 _prompt_le_mode() {
-    if [ -n "$JELLYFIN_LE_INTERACTIVE" ]; then
+    if [ -n "${JELLYFIN_LE_INTERACTIVE:-}" ]; then
         echo_info "Using LE mode from JELLYFIN_LE_INTERACTIVE: $JELLYFIN_LE_INTERACTIVE"
         return
     fi

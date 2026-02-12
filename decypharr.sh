@@ -103,7 +103,7 @@ app_default_mount="/mnt"
 # Prompt for rclone mount path or use default/env
 _get_mount_path() {
     # Check environment variable first
-    if [ -n "$DECYPHARR_MOUNT_PATH" ]; then
+    if [ -n "${DECYPHARR_MOUNT_PATH:-}" ]; then
         echo_info "Using mount path from DECYPHARR_MOUNT_PATH: $DECYPHARR_MOUNT_PATH"
         app_mount_path="$DECYPHARR_MOUNT_PATH"
         return
@@ -779,7 +779,7 @@ if [ -f "/install/.$app_lockname.lock" ]; then
     echo_info "${app_name^} is already installed"
 else
     # Set owner for install
-    if [ -n "$DECYPHARR_OWNER" ]; then
+    if [ -n "${DECYPHARR_OWNER:-}" ]; then
         echo_info "Setting ${app_name^} owner = $DECYPHARR_OWNER"
         swizdb set "$app_name/owner" "$DECYPHARR_OWNER"
     fi
@@ -820,6 +820,8 @@ fi
 
 touch "/install/.$app_lockname.lock"
 echo_success "${app_name^} installed"
+echo_info "Access at: https://your-server/${app_baseurl}/"
+echo_info "Port: ${app_port}"
 
 # Hint about symlink import script if Sonarr/Radarr are installed
 if compgen -G "/install/.sonarr*.lock" >/dev/null 2>&1 || compgen -G "/install/.radarr*.lock" >/dev/null 2>&1; then

@@ -524,3 +524,5 @@ fi
 
 touch "/install/.$app_lockname.lock"
 echo_success "${app_name^} installed"
+echo_info "Access at: https://your-server/${app_baseurl}/"
+echo_info "Port: ${app_port}"

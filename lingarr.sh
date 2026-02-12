@@ -122,7 +122,7 @@ _get_domain() {
 }
 
 _prompt_domain() {
-    if [ -n "$LINGARR_DOMAIN" ]; then
+    if [ -n "${LINGARR_DOMAIN:-}" ]; then
         echo_info "Using domain from LINGARR_DOMAIN: $LINGARR_DOMAIN"
         app_domain="$LINGARR_DOMAIN"
         return
@@ -163,7 +163,7 @@ _prompt_domain() {
 }
 
 _prompt_le_mode() {
-    if [ -n "$LINGARR_LE_INTERACTIVE" ]; then
+    if [ -n "${LINGARR_LE_INTERACTIVE:-}" ]; then
         echo_info "Using LE mode from LINGARR_LE_INTERACTIVE: $LINGARR_LE_INTERACTIVE"
         return
     fi
@@ -686,7 +686,7 @@ _install_fresh() {
     fi
 
     # Set owner for install
-    if [[ -n "$LINGARR_OWNER" ]]; then
+    if [[ -n "${LINGARR_OWNER:-}" ]]; then
         echo_info "Setting ${app_name^} owner = $LINGARR_OWNER"
         swizdb set "$app_name/owner" "$LINGARR_OWNER"
     fi

@@ -74,7 +74,7 @@ _get_domain() {
 }
 
 _prompt_domain() {
-    if [ -n "$PLEX_DOMAIN" ]; then
+    if [ -n "${PLEX_DOMAIN:-}" ]; then
         echo_info "Using domain from PLEX_DOMAIN: $PLEX_DOMAIN"
         app_domain="$PLEX_DOMAIN"
         return
@@ -115,7 +115,7 @@ _prompt_domain() {
 }
 
 _prompt_le_mode() {
-    if [ -n "$PLEX_LE_INTERACTIVE" ]; then
+    if [ -n "${PLEX_LE_INTERACTIVE:-}" ]; then
         echo_info "Using LE mode from PLEX_LE_INTERACTIVE: $PLEX_LE_INTERACTIVE"
         return
     fi

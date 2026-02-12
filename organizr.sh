@@ -80,7 +80,7 @@ _get_domain() {
 # Prompt for domain interactively
 _prompt_domain() {
     # Check environment variable first (bypass)
-    if [ -n "$ORGANIZR_DOMAIN" ]; then
+    if [ -n "${ORGANIZR_DOMAIN:-}" ]; then
         echo_info "Using domain from ORGANIZR_DOMAIN: $ORGANIZR_DOMAIN"
         app_domain="$ORGANIZR_DOMAIN"
         return
@@ -129,7 +129,7 @@ _prompt_domain() {
 # Prompt for Let's Encrypt mode
 _prompt_le_mode() {
     # Check environment variable first (bypass)
-    if [ -n "$ORGANIZR_LE_INTERACTIVE" ]; then
+    if [ -n "${ORGANIZR_LE_INTERACTIVE:-}" ]; then
         echo_info "Using LE mode from ORGANIZR_LE_INTERACTIVE: $ORGANIZR_LE_INTERACTIVE"
         return
     fi

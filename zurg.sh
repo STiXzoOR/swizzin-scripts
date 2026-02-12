@@ -167,7 +167,7 @@ _select_zurg_version() {
 # GitHub authentication for paid version
 _get_github_token() {
     # Check environment variable first
-    if [ -n "$GITHUB_TOKEN" ]; then
+    if [ -n "${GITHUB_TOKEN:-}" ]; then
         local token_preview="${GITHUB_TOKEN:0:4}...${GITHUB_TOKEN: -4}"
         echo_info "Using GitHub token from GITHUB_TOKEN environment variable ($token_preview)"
         github_token="$GITHUB_TOKEN"
@@ -262,7 +262,7 @@ _get_mount_point() {
     fi
 
     # Check environment variable first
-    if [ -n "$ZURG_MOUNT_POINT" ]; then
+    if [ -n "${ZURG_MOUNT_POINT:-}" ]; then
         echo_info "Using mount point from ZURG_MOUNT_POINT: $ZURG_MOUNT_POINT"
         app_mount_point="$ZURG_MOUNT_POINT"
         return
@@ -517,7 +517,7 @@ _install_zurg() {
     echo_info "Checking for Real-Debrid API token"
     if [ ! -f "$app_configdir/config.yml" ] || ! grep -qE '^token: .+' "$app_configdir/config.yml" 2>/dev/null; then
         # Check for environment variable first
-        if [ -n "$RD_TOKEN" ]; then
+        if [ -n "${RD_TOKEN:-}" ]; then
             echo_info "Using token from RD_TOKEN environment variable"
         else
             echo_query "Paste your Real-Debrid API token" "from https://real-debrid.com/apitoken"
