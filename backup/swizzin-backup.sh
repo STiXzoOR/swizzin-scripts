@@ -717,8 +717,12 @@ cmd_backup() {
     local prune_exit=0
     local compact_exit=0
 
-    if [[ $backup_exit -ge 128 ]]; then
-        log "Skipping prune and compact — backup was interrupted (signal $((backup_exit - 128)))"
+    if [[ $backup_exit -ne 0 ]]; then
+        if [[ $backup_exit -ge 128 ]]; then
+            log "Skipping prune and compact — backup was interrupted (signal $((backup_exit - 128)))"
+        else
+            log "Skipping prune and compact — backup failed (exit: $backup_exit)"
+        fi
     else
         log "Phase 2/3: Pruning old archives..."
         local phase2_start
