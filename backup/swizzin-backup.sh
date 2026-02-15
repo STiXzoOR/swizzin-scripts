@@ -636,6 +636,10 @@ cmd_backup() {
     local phase1_start
     phase1_start=$(date +%s)
 
+    # Break any stale remote lock. The local flock guarantees no concurrent
+    # local run, so any existing remote lock is leftover from a crash/disconnect.
+    borg break-lock 2>/dev/null && log "Cleared stale repo lock" || true
+
     # Generate size-based excludes for /mnt/symlinks
     _size_excludes_file=$(mktemp "${TMPDIR:-/tmp}/swizzin-size-excludes.XXXXXX")
     _generate_size_excludes "$SYMLINKS_SIZE_LIMIT" "$_size_excludes_file"
