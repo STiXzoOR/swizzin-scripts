@@ -99,6 +99,24 @@ if [ ! -d "$swiz_configdir" ]; then
 fi
 chown "$user":"$user" "$swiz_configdir"
 
+# Detect free/paid from config file when swizdb has no entry
+_detect_zurg_version_from_config() {
+    local config_file="$app_configdir/config.yml"
+    if [ -f "$config_file" ]; then
+        if grep -q 'rclone_enabled: true' "$config_file" 2>/dev/null; then
+            echo "paid"
+            return 0
+        elif grep -q '# Zurg configuration (paid version)' "$config_file" 2>/dev/null; then
+            echo "paid"
+            return 0
+        else
+            echo "free"
+            return 0
+        fi
+    fi
+    return 1
+}
+
 # Zurg version selection
 _select_zurg_version() {
     # Check existing version in swizdb
@@ -1095,12 +1113,18 @@ _nginx_zurg() {
 _upgrade_binary_zurg() {
     echo_info "Updating zurg binary..."
 
-    # Read version from swizdb
+    # Read version from swizdb, fall back to config file detection
     local zurg_version
     zurg_version=$(swizdb get "zurg/version" 2>/dev/null) || true
     if [ -z "$zurg_version" ]; then
-        echo_error "Cannot determine zurg version from swizdb. Reinstall to fix."
-        exit 1
+        zurg_version=$(_detect_zurg_version_from_config) || true
+        if [ -n "$zurg_version" ]; then
+            echo_info "Recovered version ($zurg_version) from config file, saving to swizdb"
+            swizdb set "zurg/version" "$zurg_version"
+        else
+            echo_error "Cannot determine zurg version. Reinstall to fix."
+            exit 1
+        fi
     fi
 
     _verbose "Detected installed version: $zurg_version"
@@ -1366,8 +1390,14 @@ if [ "${1:-}" = "--switch-version" ]; then
 
     current_version=$(swizdb get "zurg/version" 2>/dev/null) || true
     if [ -z "$current_version" ]; then
-        echo_error "Cannot determine current zurg version. Reinstall to fix."
-        exit 1
+        current_version=$(_detect_zurg_version_from_config) || true
+        if [ -n "$current_version" ]; then
+            echo_info "Recovered version ($current_version) from config file, saving to swizdb"
+            swizdb set "zurg/version" "$current_version"
+        else
+            echo_error "Cannot determine current zurg version. Reinstall to fix."
+            exit 1
+        fi
     fi
 
     # Determine target version
@@ -1403,7 +1433,15 @@ fi
 
 # Check if already installed (unless switching versions)
 if [ "$switch_mode" != "true" ] && [ -f "/install/.$app_lockname.lock" ]; then
-    current_version=$(swizdb get "zurg/version" 2>/dev/null) || current_version="unknown"
+    current_version=$(swizdb get "zurg/version" 2>/dev/null) || true
+    if [ -z "$current_version" ]; then
+        current_version=$(_detect_zurg_version_from_config) || true
+        if [ -n "$current_version" ]; then
+            swizdb set "zurg/version" "$current_version"
+        else
+            current_version="unknown"
+        fi
+    fi
     echo_info "Zurg ($current_version) is already installed"
 
     # Normalize ZURG_USE_LATEST_TAG for comparison
