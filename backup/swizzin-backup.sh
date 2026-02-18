@@ -211,7 +211,7 @@ declare -A SERVICE_STOP_CRITICAL=(
     ["jackett"]=1 ["nzbhydra"]=1
     ["overseerr"]=1 ["jellyseerr"]=1 ["seerr"]=1 ["ombi"]=1
     ["tautulli"]=1
-    ["jellyfin"]=1
+    ["emby"]=1 ["jellyfin"]=1
     ["mdblistarr"]=1
 )
 
@@ -375,20 +375,43 @@ stop_services() {
         fi
 
         # Stop the base service
+        # Always attempt stop for critical services — handles crash-looping
+        # services that appear briefly inactive between restarts. systemctl
+        # stop on an already-inactive service is a harmless no-op.
         local service
         service=$(get_service_name "$app")
-        if is_service_active "$service"; then
-            log "  Stopping: $service"
-            systemctl stop "$service" 2>/dev/null && stopped_services+=("$service")
+        local was_active=false
+        is_service_active "$service" && was_active=true
+        if [[ "$was_active" == true ]] \
+            || [[ "$STOP_MODE" == "critical" && -n "${SERVICE_STOP_CRITICAL[$app]:-}" ]]; then
+            if systemctl stop "$service" 2>/dev/null; then
+                if [[ "$was_active" == true ]]; then
+                    log "  Stopping: $service"
+                    stopped_services+=("$service")
+                elif systemctl is-enabled --quiet "$service" 2>/dev/null; then
+                    log "  Stopping: $service (was inactive/failed — preventing restarts)"
+                    stopped_services+=("$service")
+                fi
+            fi
         fi
 
         # Stop multi-instance services after their base app
         if [[ "$app" == "sonarr" || "$app" == "radarr" || "$app" == "bazarr" ]]; then
             for mi_svc in ${multi_instances["$app"]:-}; do
                 [[ -z "$mi_svc" ]] && continue
-                if is_service_active "$mi_svc"; then
-                    log "  Stopping: $mi_svc (multi-instance)"
-                    systemctl stop "$mi_svc" 2>/dev/null && stopped_services+=("$mi_svc")
+                local mi_was_active=false
+                is_service_active "$mi_svc" && mi_was_active=true
+                if [[ "$mi_was_active" == true ]] \
+                    || [[ "$STOP_MODE" == "critical" && -n "${SERVICE_STOP_CRITICAL[$app]:-}" ]]; then
+                    if systemctl stop "$mi_svc" 2>/dev/null; then
+                        if [[ "$mi_was_active" == true ]]; then
+                            log "  Stopping: $mi_svc (multi-instance)"
+                            stopped_services+=("$mi_svc")
+                        elif systemctl is-enabled --quiet "$mi_svc" 2>/dev/null; then
+                            log "  Stopping: $mi_svc (multi-instance, was inactive/failed)"
+                            stopped_services+=("$mi_svc")
+                        fi
+                    fi
                 fi
             done
         fi
