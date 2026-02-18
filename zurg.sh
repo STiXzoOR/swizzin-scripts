@@ -84,7 +84,7 @@ swiz_configdir="/home/$user/.config"
 app_configdir="$swiz_configdir/${app_name}"
 app_group="$user"
 app_port=9999
-app_reqs=("curl" "unzip" "fuse3")
+app_reqs=("curl" "unzip" "fuse3" "ffmpeg")
 app_servicefile="$app_name.service"
 app_mount_servicefile="rclone-$app_name.service"
 app_dir="/usr/bin"
@@ -791,6 +791,12 @@ repair_every_mins: 60
 # Media Analysis
 auto_analyze_new_torrents: true
 cache_network_test_results: true
+
+# Binary paths
+# Use system binaries instead of zurg's auto-downloaded static builds
+# System ffprobe is preferred (ffbinaries.com static builds segfault on URL probing)
+ffprobe_binary: /usr/bin/ffprobe
+rclone_binary: /usr/bin/rclone
 
 # Rclone Management
 # Zurg applies benchmark-optimized defaults automatically
