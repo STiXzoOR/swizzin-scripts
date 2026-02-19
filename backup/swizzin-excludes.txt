@@ -72,6 +72,8 @@ home/*/.config/zurg/mnt/**
 #===============================================================================
 
 # === SONARR (+ multi-instance) ===
+home/*/.config/Sonarr/logs.db
+home/*/.config/Sonarr/logs.db-*
 home/*/.config/Sonarr/logs
 home/*/.config/Sonarr/logs/**
 home/*/.config/Sonarr/MediaCover
@@ -80,6 +82,8 @@ home/*/.config/Sonarr/UpdateLogs
 home/*/.config/Sonarr/UpdateLogs/**
 home/*/.config/Sonarr/updates
 home/*/.config/Sonarr/updates/**
+home/*/.config/sonarr-*/logs.db
+home/*/.config/sonarr-*/logs.db-*
 home/*/.config/sonarr-*/logs
 home/*/.config/sonarr-*/logs/**
 home/*/.config/sonarr-*/MediaCover
@@ -90,6 +94,8 @@ home/*/.config/sonarr-*/updates
 home/*/.config/sonarr-*/updates/**
 
 # === RADARR (+ multi-instance) ===
+home/*/.config/Radarr/logs.db
+home/*/.config/Radarr/logs.db-*
 home/*/.config/Radarr/logs
 home/*/.config/Radarr/logs/**
 home/*/.config/Radarr/MediaCover
@@ -98,6 +104,8 @@ home/*/.config/Radarr/UpdateLogs
 home/*/.config/Radarr/UpdateLogs/**
 home/*/.config/Radarr/Update
 home/*/.config/Radarr/Update/**
+home/*/.config/radarr-*/logs.db
+home/*/.config/radarr-*/logs.db-*
 home/*/.config/radarr-*/logs
 home/*/.config/radarr-*/logs/**
 home/*/.config/radarr-*/MediaCover
@@ -108,6 +116,8 @@ home/*/.config/radarr-*/updates
 home/*/.config/radarr-*/updates/**
 
 # === LIDARR ===
+home/*/.config/Lidarr/logs.db
+home/*/.config/Lidarr/logs.db-*
 home/*/.config/Lidarr/logs
 home/*/.config/Lidarr/logs/**
 home/*/.config/Lidarr/MediaCover
@@ -116,6 +126,8 @@ home/*/.config/Lidarr/UpdateLogs
 home/*/.config/Lidarr/UpdateLogs/**
 
 # === PROWLARR ===
+home/*/.config/Prowlarr/logs.db
+home/*/.config/Prowlarr/logs.db-*
 home/*/.config/Prowlarr/logs
 home/*/.config/Prowlarr/logs/**
 home/*/.config/Prowlarr/UpdateLogs

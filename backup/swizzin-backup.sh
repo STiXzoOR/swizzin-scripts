@@ -389,7 +389,9 @@ stop_services() {
                     log "  Stopping: $service"
                     stopped_services+=("$service")
                 elif systemctl is-enabled --quiet "$service" 2>/dev/null; then
-                    log "  Stopping: $service (was inactive/failed — preventing restarts)"
+                    # Mask to truly prevent restarts during backup
+                    systemctl mask --runtime "$service" 2>/dev/null || true
+                    log "  Stopping: $service (was inactive/failed — masked to prevent restarts)"
                     stopped_services+=("$service")
                 fi
             fi
@@ -408,7 +410,8 @@ stop_services() {
                             log "  Stopping: $mi_svc (multi-instance)"
                             stopped_services+=("$mi_svc")
                         elif systemctl is-enabled --quiet "$mi_svc" 2>/dev/null; then
-                            log "  Stopping: $mi_svc (multi-instance, was inactive/failed)"
+                            systemctl mask --runtime "$mi_svc" 2>/dev/null || true
+                            log "  Stopping: $mi_svc (multi-instance, was inactive/failed — masked)"
                             stopped_services+=("$mi_svc")
                         fi
                     fi
@@ -443,6 +446,8 @@ start_services() {
     # Start in reverse order (infrastructure first, consumers last)
     for ((i = ${#services[@]} - 1; i >= 0; i--)); do
         local service="${services[$i]}"
+        # Unmask in case we masked it during stop (runtime masks only)
+        systemctl unmask "$service" 2>/dev/null || true
         log "  Starting: $service"
         systemctl start "$service" 2>/dev/null || failed+=("$service")
     done
@@ -488,9 +493,12 @@ cleanup() {
     # Clean temp files
     [[ -n "$_borg_output_file" ]] && rm -f "$_borg_output_file"
     [[ -n "$_size_excludes_file" ]] && rm -f "$_size_excludes_file"
-    # Restart services if needed
+    # Unmask any runtime-masked services and restart them
     if [[ -f "$STOPPED_SERVICES_FILE" ]]; then
-        log "TRAP: Restarting services after unexpected exit..."
+        log "TRAP: Unmasking and restarting services after unexpected exit..."
+        while IFS= read -r svc; do
+            [[ -n "$svc" ]] && systemctl unmask "$svc" 2>/dev/null || true
+        done <"$STOPPED_SERVICES_FILE"
         start_services
     fi
     # Send failure notification if backup was in progress and exited unexpectedly
