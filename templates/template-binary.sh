@@ -463,7 +463,7 @@ _systemd_myapp() {
 		ExecStart=${app_dir}/${app_binary} --config=${app_configdir}
 		WorkingDirectory=${app_configdir}
 		TimeoutStopSec=20
-		KillMode=process
+		KillMode=control-group
 		Restart=on-failure
 		RestartSec=5
 

@@ -78,7 +78,7 @@ UMask=0002
 Type=simple
 ExecStart=/opt/Sonarr/Sonarr -nobrowser -data=/home/{user}/.config/sonarr-{name}
 TimeoutStopSec=20
-KillMode=process
+KillMode=control-group
 Restart=on-failure
 
 [Install]

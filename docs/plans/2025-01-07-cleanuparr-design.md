@@ -75,7 +75,7 @@ Type=simple
 WorkingDirectory=/opt/cleanuparr
 ExecStart=/opt/cleanuparr/Cleanuparr
 TimeoutStopSec=20
-KillMode=process
+KillMode=control-group
 Restart=on-failure
 
 [Install]

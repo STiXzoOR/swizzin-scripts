@@ -411,7 +411,7 @@ Type=simple
 WorkingDirectory=${app_dir}
 ExecStart=${app_dir}/${app_binary}
 TimeoutStopSec=20
-KillMode=process
+KillMode=control-group
 Restart=on-failure
 
 [Install]

@@ -642,7 +642,7 @@ Type=simple
 # Change the path to ${app_name^} here if it is in a different location for you.
 ExecStart=$app_dir/$app_binary --config=$app_configdir
 TimeoutStopSec=20
-KillMode=process
+KillMode=control-group
 Restart=on-failure
 
 # These lines optionally isolate (sandbox) ${app_name^} from the rest of the system.

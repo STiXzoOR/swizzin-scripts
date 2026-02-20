@@ -215,7 +215,7 @@ _add_instance() {
 		Type=simple
 		ExecStart=${app_binary} -nobrowser --data=${config_dir}
 		TimeoutStopSec=20
-		KillMode=process
+		KillMode=control-group
 		Restart=on-failure
 
 		[Install]
@@ -402,6 +402,31 @@ _list_instances() {
     echo ""
 }
 
+# Patch base systemd unit with hardening fixes
+_patch_base_service() {
+    local service_file="/etc/systemd/system/${app_name}.service"
+    [[ -f "$service_file" ]] || return 0
+
+    local changed=false
+
+    # Fix KillMode=process → control-group
+    if grep -q 'KillMode=process' "$service_file" 2>/dev/null; then
+        sed -i 's/KillMode=process/KillMode=control-group/' "$service_file"
+        changed=true
+    fi
+
+    # Add KillMode if missing entirely
+    if ! grep -q 'KillMode=' "$service_file" 2>/dev/null; then
+        sed -i '/TimeoutStopSec=/a KillMode=control-group' "$service_file"
+        changed=true
+    fi
+
+    if [[ "$changed" == "true" ]]; then
+        systemctl daemon-reload
+        echo_info "Patched base ${app_pretty} service (KillMode=control-group)"
+    fi
+}
+
 # Install base app if not installed
 _ensure_base_installed() {
     if [[ ! -f "/install/.${app_lockname}.lock" ]]; then
@@ -416,6 +441,9 @@ _ensure_base_installed() {
             exit 0
         fi
     fi
+
+    # Patch base service with hardening fixes
+    _patch_base_service
 
     # Ensure base app has panel meta override
     _ensure_base_panel_meta

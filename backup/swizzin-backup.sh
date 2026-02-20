@@ -339,6 +339,49 @@ is_service_active() {
     systemctl is-active --quiet "$1" 2>/dev/null
 }
 
+# Kill any orphaned processes for arr apps that survive systemctl stop.
+# Radarr/Sonarr/etc self-restart via child processes that can escape the
+# service cgroup (especially with KillMode=process). This ensures no
+# stray processes hold SQLite database locks during backup.
+kill_stray_arr_processes() {
+    local app="$1"
+    local binary data_dir
+
+    case "$app" in
+        sonarr*)  binary="Sonarr"  ;;
+        radarr*)  binary="Radarr"  ;;
+        lidarr*)  binary="Lidarr"  ;;
+        prowlarr) binary="Prowlarr" ;;
+        bazarr*)  binary="bazarr"  ;;
+        *)        return 0 ;;
+    esac
+
+    # Determine data directory for this instance
+    case "$app" in
+        sonarr)    data_dir="/home/${SWIZZIN_USER}/.config/Sonarr" ;;
+        radarr)    data_dir="/home/${SWIZZIN_USER}/.config/Radarr" ;;
+        lidarr)    data_dir="/home/${SWIZZIN_USER}/.config/Lidarr" ;;
+        prowlarr)  data_dir="/home/${SWIZZIN_USER}/.config/Prowlarr" ;;
+        bazarr)    data_dir="/home/${SWIZZIN_USER}/.config/bazarr" ;;
+        *)         data_dir="/home/${SWIZZIN_USER}/.config/${app}" ;;
+    esac
+
+    local stale_pids
+    stale_pids=$(pgrep -f "${binary}.*${data_dir}" 2>/dev/null || true)
+    if [[ -n "$stale_pids" ]]; then
+        log "  Killing stray ${app} processes: ${stale_pids//$'\n'/ }"
+        echo "$stale_pids" | xargs kill 2>/dev/null || true
+        sleep 2
+        # SIGKILL any survivors
+        stale_pids=$(pgrep -f "${binary}.*${data_dir}" 2>/dev/null || true)
+        if [[ -n "$stale_pids" ]]; then
+            log "  Force-killing stubborn ${app} processes: ${stale_pids//$'\n'/ }"
+            echo "$stale_pids" | xargs kill -9 2>/dev/null || true
+            sleep 1
+        fi
+    fi
+}
+
 stop_services() {
     if [[ "$STOP_MODE" == "none" ]]; then
         log "STOP_MODE=none — skipping service stops"
@@ -397,6 +440,9 @@ stop_services() {
             fi
         fi
 
+        # Kill any stray processes that escaped the cgroup
+        kill_stray_arr_processes "$app"
+
         # Stop multi-instance services after their base app
         if [[ "$app" == "sonarr" || "$app" == "radarr" || "$app" == "bazarr" ]]; then
             for mi_svc in ${multi_instances["$app"]:-}; do
@@ -415,6 +461,7 @@ stop_services() {
                             stopped_services+=("$mi_svc")
                         fi
                     fi
+                    kill_stray_arr_processes "$mi_svc"
                 fi
             done
         fi

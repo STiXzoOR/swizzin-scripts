@@ -251,7 +251,7 @@ _add_instance() {
 		Type=simple
 		ExecStart=${app_binary} -nobrowser -data=${config_dir}
 		TimeoutStopSec=20
-		KillMode=process
+		KillMode=control-group
 		Restart=on-failure
 
 		[Install]

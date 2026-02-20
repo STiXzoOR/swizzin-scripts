@@ -406,7 +406,7 @@ _systemd_flaresolverr() {
 		EnvironmentFile=${app_configdir}/env.conf
 		ExecStart=${app_dir}/${app_binary}
 		TimeoutStopSec=20
-		KillMode=process
+		KillMode=control-group
 		Restart=on-failure
 		RestartSec=5
 
