@@ -268,7 +268,7 @@ _install_app() {
 
     # Source fnm environment and install Node LTS + pnpm
     local fnm_env='export FNM_PATH="$HOME/.local/share/fnm"; export PATH="$FNM_PATH:$PATH"; eval "$(fnm env)"'
-    su - "$user" -c "$fnm_env; fnm install lts-latest && fnm use lts-latest && fnm default lts-latest && npm install -g pnpm@9" >>"$log" 2>&1 || {
+    su - "$user" -c "$fnm_env; fnm install lts-latest && fnm use lts-latest && fnm default lts-latest && npm install -g pnpm@10" >>"$log" 2>&1 || {
         echo_error "Failed to install Node LTS and pnpm via fnm"
         exit 1
     }
@@ -284,30 +284,14 @@ _install_app() {
 
     echo_progress_done "fnm, Node LTS and pnpm installed"
 
-    echo_progress_start "Downloading and extracting Seerr source code"
+    echo_progress_start "Cloning Seerr source code"
 
-    local _tmp_download
-    _tmp_download=$(mktemp /tmp/seerr-XXXXXX.tar.gz)
-
-    local dlurl
-    dlurl="$(curl -sS https://api.github.com/repos/seerr-team/seerr/releases/latest | jq -r .tarball_url)" || {
-        echo_error "Failed to query GitHub for latest Seerr release"
+    git clone --depth 1 https://github.com/seerr-team/seerr.git "$app_dir" >>"$log" 2>&1 || {
+        echo_error "Failed to clone Seerr repository"
         exit 1
     }
-
-    if ! curl -sL "$dlurl" -o "$_tmp_download" >>"$log" 2>&1; then
-        echo_error "Download failed"
-        exit 1
-    fi
-
-    mkdir -p "$app_dir"
-    tar --strip-components=1 -C "$app_dir" -xzvf "$_tmp_download" >>"$log" 2>&1 || {
-        echo_error "Failed to extract Seerr archive"
-        exit 1
-    }
-    rm -f "$_tmp_download"
     chown -R "$user":"$user" "$app_dir"
-    echo_progress_done "Seerr source code extracted to $app_dir"
+    echo_progress_done "Seerr source code cloned to $app_dir"
 
     echo_progress_start "Configuring and building Seerr"
 
@@ -322,7 +306,7 @@ _install_app() {
     fi
 
     # Install deps + build using pnpm as the app user
-    su - "$user" -c "$fnm_env; cd '$app_dir' && pnpm install" >>"$log" 2>&1 || {
+    su - "$user" -c "$fnm_env; cd '$app_dir' && CYPRESS_INSTALL_BINARY=0 pnpm install --frozen-lockfile" >>"$log" 2>&1 || {
         echo_error "Failed to install Seerr dependencies"
         exit 1
     }
