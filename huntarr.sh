@@ -3,6 +3,20 @@ set -euo pipefail
 # huntarr installer
 # STiXzoOR 2025
 # Usage: bash huntarr.sh [--remove [--force]] [--update [--full] [--verbose]] [--register-panel]
+#
+# WARNING: USE AT YOUR OWN RISK
+# Huntarr has known critical security vulnerabilities (disclosed Feb 2025):
+#   - Unauthenticated API endpoints expose all connected *arr API keys in cleartext
+#   - Unauthenticated 2FA enrollment allows full account takeover
+#   - Unauthenticated setup reset (/api/setup/clear) allows owner replacement
+#   - Zip Slip (arbitrary file write via uploads)
+#   - Path traversal via backup_id (arbitrary directory deletion)
+#   - X-Forwarded-For header spoofing bypasses local access restrictions
+# The upstream repo has been deleted. These vulnerabilities are UNPATCHED.
+# See: https://lemmy.world/post/43496203
+#
+# This installer applies auth to the API proxy path, but cannot fix
+# vulnerabilities within Huntarr itself. Do NOT expose to untrusted networks.
 
 . /etc/swizzin/sources/globals.sh
 
@@ -429,7 +443,8 @@ _nginx_huntarr() {
 			}
 
 			location ^~ /$app_baseurl/api {
-			    auth_basic off;
+			    auth_basic "What's the password?";
+			    auth_basic_user_file /etc/htpasswd.d/htpasswd.${user};
 			    proxy_pass http://127.0.0.1:$app_port;
 			    proxy_set_header Host \$host;
 			    proxy_set_header X-Real-IP \$remote_addr;
@@ -495,11 +510,19 @@ if [ "${1:-}" = "--register-panel" ]; then
 fi
 
 # Check if already installed
-if [ -f "/install/.$app_lockname.lock" ]; then
+if [[ -f "/install/.${app_lockname}.lock" ]]; then
     echo_info "${app_name^} is already installed"
 else
+    echo_warn "SECURITY WARNING: Huntarr has known critical vulnerabilities (unpatched)."
+    echo_warn "API keys for all connected *arr apps may be at risk."
+    echo_warn "The upstream repository has been deleted. USE AT YOUR OWN RISK."
+    if ! ask "Do you still want to install Huntarr?" N; then
+        echo_info "Installation cancelled."
+        exit 0
+    fi
+
     # Set owner for install
-    if [ -n "$HUNTARR_OWNER" ]; then
+    if [[ -n "$HUNTARR_OWNER" ]]; then
         echo_info "Setting ${app_name^} owner = $HUNTARR_OWNER"
         swizdb set "$app_name/owner" "$HUNTARR_OWNER"
     fi
