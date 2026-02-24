@@ -85,7 +85,7 @@ DEFAULTS = {
     "LIST_NAME_PREFIX": "[mdblist-auto]",
 }
 
-# *arr instance config paths (same as zurg_common.py)
+# *arr instance config paths
 ARR_INSTANCES = {
     "radarr": {
         "type": "radarr",
