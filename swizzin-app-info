@@ -322,6 +322,11 @@ APP_CONFIGS = {
             "port": "port",
         },
     },
+    "newtarr": {
+        "config_paths": ["/home/{user}/.config/Newtarr/general.json"],
+        "format": "json",
+        "keys": {},
+    },
     "zurg": {
         "config_paths": ["/home/{user}/.config/zurg/config.yml"],
         "format": "yaml",
