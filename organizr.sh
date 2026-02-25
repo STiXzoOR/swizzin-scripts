@@ -57,6 +57,19 @@ subdomain_vhost="/etc/nginx/sites-available/organizr"
 subdomain_enabled="/etc/nginx/sites-enabled/organizr"
 profiles_py="/opt/swizzin/core/custom/profiles.py"
 
+# Apps that MUST always have auth_request - they can expose API keys or
+# compromise the *arr stack if accessed without authentication.
+# These cannot be deselected in the whiptail dialog.
+FORCED_AUTH_APPS=("huntarr" "newtarr" "cleanuparr" "prowlarr")
+
+_is_forced_app() {
+    local app="$1"
+    for forced in "${FORCED_AUTH_APPS[@]}"; do
+        [[ "$forced" == "$app" ]] && return 0
+    done
+    return 1
+}
+
 # Get domain from swizdb, config file, or env
 _get_domain() {
     # Check swizdb first
@@ -464,8 +477,9 @@ _select_apps() {
     # Build whiptail options
     local options=()
     for app in "${available_apps[@]}"; do
-        # Check if already in config
-        if [ -f "$config_file" ] && grep -q "^${app}:" "$config_file"; then
+        if _is_forced_app "$app"; then
+            options+=("$app" "[FORCED]" "ON")
+        elif [ -f "$config_file" ] && grep -q "^${app}:" "$config_file"; then
             options+=("$app" "" "ON")
         else
             options+=("$app" "" "OFF")
@@ -485,6 +499,14 @@ _select_apps() {
 
     # Parse selected apps (whiptail returns "app1" "app2" format)
     selected=$(echo "$selected" | tr -d '"')
+
+    # Re-inject forced apps that the user may have deselected
+    for app in "${FORCED_AUTH_APPS[@]}"; do
+        if [[ -f "/etc/nginx/apps/${app}.conf" ]] && ! echo " $selected " | grep -q " $app "; then
+            selected="$selected $app"
+            echo_warn "$app is a forced-auth app and cannot be deselected"
+        fi
+    done
 
     # Update config file
     _update_config "$selected"
@@ -542,10 +564,52 @@ _protect_app() {
         return
     fi
 
-    # Skip if already has auth_request
+    # Skip if already has auth_request (but for forced apps, ensure ALL blocks are protected)
     if grep -q "auth_request /organizr-auth" "$conf"; then
         echo_info "$app already protected, updating auth level"
         sed -i "s|auth_request /organizr-auth/auth-[0-9]*;|auth_request /organizr-auth/auth-${auth_level};|g" "$conf"
+
+        # For forced apps, also replace any "auth_request off;" and ensure
+        # ALL proxy_pass blocks have auth_request (not just the first)
+        if _is_forced_app "$app"; then
+            sed -i "s|auth_request off;|auth_request /organizr-auth/auth-${auth_level};|g" "$conf"
+            # Check for proxy_pass blocks missing auth_request
+            local temp_conf
+            temp_conf=$(mktemp)
+            awk -v level="$auth_level" '
+            BEGIN { brace_depth = 0; buffer = ""; has_proxy = 0; has_auth = 0 }
+            /location.*\{/ && brace_depth == 0 {
+                brace_depth = 1; has_proxy = 0; has_auth = 0; buffer = $0 "\n"; next
+            }
+            brace_depth > 0 {
+                buffer = buffer $0 "\n"
+                if (/\{/) brace_depth++
+                if (/\}/) brace_depth--
+                if (/proxy_pass/) has_proxy = 1
+                if (/auth_request/) has_auth = 1
+                if (brace_depth == 0) {
+                    if (has_proxy && !has_auth) {
+                        n = split(buffer, lines, "\n")
+                        for (i = 1; i <= n; i++) {
+                            if (lines[i] ~ /location.*\{/) {
+                                print lines[i]
+                                print "    auth_request /organizr-auth/auth-" level ";"
+                            } else if (lines[i] != "") {
+                                print lines[i]
+                            }
+                        }
+                    } else {
+                        printf "%s", buffer
+                    }
+                    buffer = ""
+                }
+                next
+            }
+            { print }
+            ' "$conf" >"$temp_conf"
+            mv "$temp_conf" "$conf"
+        fi
+
         # Ensure it's in apps include
         _add_to_apps_include "$app"
         return
@@ -560,12 +624,19 @@ _protect_app() {
     sed -i 's/^\([[:space:]]*auth_basic\)/#\1/g' "$conf"
     sed -i 's/^\([[:space:]]*auth_basic_user_file\)/#\1/g' "$conf"
 
+    # For forced apps, also replace any existing "auth_request off;"
+    if _is_forced_app "$app"; then
+        sed -i "s|auth_request off;|auth_request /organizr-auth/auth-${auth_level};|g" "$conf"
+    fi
+
     # Find location blocks with proxy_pass (skip return 301 redirects)
-    # Using a temp file for complex processing
+    # For forced apps (protect_all=1), add auth_request to ALL proxy blocks
+    local protect_all=0
+    _is_forced_app "$app" && protect_all=1
     local temp_conf
     temp_conf=$(mktemp)
 
-    awk -v level="$auth_level" '
+    awk -v level="$auth_level" -v protect_all="$protect_all" '
 	BEGIN { brace_depth = 0; buffer = ""; has_proxy = 0; added_global = 0 }
 
 	# Track brace depth for nested location blocks
@@ -591,13 +662,13 @@ _protect_app() {
 
 		# End of top-level location block (all braces closed)
 		if (brace_depth == 0) {
-			# Only add auth_request to first proxy location block
-			if (has_proxy && !added_global) {
+			# For forced apps (protect_all), add auth_request to every proxy block
+			# For normal apps, only add to the first proxy block
+			if (has_proxy && (protect_all || !added_global)) {
 				# Insert auth_request after the opening brace line
 				n = split(buffer, lines, "\n")
 				for (i = 1; i <= n; i++) {
-					# Only add auth_request after the FIRST (outer) location brace
-					if (lines[i] ~ /location.*\{/ && !added_global) {
+					if (lines[i] ~ /location.*\{/ && (protect_all || !added_global)) {
 						print lines[i]
 						print "        auth_request /organizr-auth/auth-" level ";"
 						added_global = 1
@@ -631,6 +702,20 @@ _unprotect_app() {
     local conf="/etc/nginx/apps/${app}.conf"
 
     if [ ! -f "$conf" ]; then
+        return
+    fi
+
+    # Forced apps revert to basic auth instead of losing all authentication
+    if _is_forced_app "$app"; then
+        echo_info "Reverting $app to basic auth (forced-auth app)"
+        # Remove auth_request lines
+        sed -i '/auth_request \/organizr-auth\/auth-[0-9]*;/d' "$conf"
+        sed -i '/auth_request off;/d' "$conf"
+        # Uncomment auth_basic (restores installer defaults)
+        sed -i 's/^#\([[:space:]]*auth_basic\)/\1/g' "$conf"
+        sed -i 's/^#\([[:space:]]*auth_basic_user_file\)/\1/g' "$conf"
+        _remove_from_apps_include "$app"
+        echo_progress_done "$app reverted to basic auth"
         return
     fi
 
