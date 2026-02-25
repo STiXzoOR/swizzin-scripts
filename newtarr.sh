@@ -415,7 +415,7 @@ _nginx_newtarr() {
 			}
 
 			location ^~ /$app_baseurl/ {
-			    proxy_pass http://127.0.0.1:$app_port;
+			    proxy_pass http://127.0.0.1:$app_port/;
 			    proxy_set_header Host \$host;
 			    proxy_set_header X-Real-IP \$remote_addr;
 			    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
@@ -426,6 +426,24 @@ _nginx_newtarr() {
 			    proxy_set_header Upgrade \$http_upgrade;
 			    proxy_set_header Connection \$http_connection;
 
+			    # Rewrite hardcoded absolute paths (upstream uses Docker-style root paths).
+			    sub_filter_types text/html application/javascript text/javascript;
+			    sub_filter_once off;
+			    sub_filter '"/api/'    '"/$app_baseurl/api/';
+			    sub_filter "'/api/"    "'/$app_baseurl/api/";
+			    sub_filter '\`/api/'   '\`/$app_baseurl/api/';
+			    sub_filter '"/static/' '"/$app_baseurl/static/';
+			    sub_filter "'/static/" "'/$app_baseurl/static/";
+			    sub_filter '"/user'    '"/$app_baseurl/user';
+			    sub_filter "'/user"    "'/$app_baseurl/user";
+			    sub_filter '\`/logs'   '\`/$app_baseurl/logs';
+			    sub_filter '\`/config/' '\`/$app_baseurl/config/';
+			    sub_filter '"/version.txt' '"/$app_baseurl/version.txt';
+			    sub_filter "'/version.txt" "'/$app_baseurl/version.txt";
+			    sub_filter '"/#'       '"/$app_baseurl/#';
+			    sub_filter 'href="/"'  'href="/$app_baseurl/"';
+			    sub_filter "href = '/'" "href = '/$app_baseurl/'";
+
 			    auth_basic "What's the password?";
 			    auth_basic_user_file /etc/htpasswd.d/htpasswd.${user};
 			}
@@ -433,7 +451,7 @@ _nginx_newtarr() {
 			location ^~ /$app_baseurl/api {
 			    auth_basic "What's the password?";
 			    auth_basic_user_file /etc/htpasswd.d/htpasswd.${user};
-			    proxy_pass http://127.0.0.1:$app_port;
+			    proxy_pass http://127.0.0.1:$app_port/api;
 			    proxy_set_header Host \$host;
 			    proxy_set_header X-Real-IP \$remote_addr;
 			    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
