@@ -18,6 +18,7 @@ Swizzin installer scripts - bash installation scripts for integrating applicatio
 - [Plex Tunnel](docs/apps/plex-tunnel.md) - Plex with VPN tunnel (Hetzner bypass)
 - [Organizr](docs/apps/organizr.md) - SSO gateway
 - [Multi-Instance](docs/apps/multi-instance.md) - Sonarr/Radarr instance management
+- [Newtarr](docs/apps/newtarr.md) - ElfHosted Huntarr fork (media library search)
 - [Zurg](docs/apps/zurg.md) - Real-Debrid WebDAV + rclone
 
 ## Subsystems
