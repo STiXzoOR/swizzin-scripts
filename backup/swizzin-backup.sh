@@ -212,6 +212,7 @@ declare -A SERVICE_STOP_CRITICAL=(
     ["overseerr"]=1 ["jellyseerr"]=1 ["seerr"]=1 ["ombi"]=1
     ["tautulli"]=1
     ["emby"]=1 ["jellyfin"]=1
+    ["huntarr"]=1
     ["mdblistarr"]=1
 )
 
@@ -799,12 +800,14 @@ cmd_backup() {
     local prune_exit=0
     local compact_exit=0
 
-    if [[ $backup_exit -ne 0 ]]; then
+    if [[ $backup_exit -ge 2 ]]; then
         if [[ $backup_exit -ge 128 ]]; then
             log "Skipping prune and compact — backup was interrupted (signal $((backup_exit - 128)))"
         else
             log "Skipping prune and compact — backup failed (exit: $backup_exit)"
         fi
+    elif [[ $backup_exit -eq 1 ]]; then
+        log "Backup completed with warnings (rc 1) — continuing with prune and compact"
     else
         log "Phase 2/3: Pruning old archives..."
         local phase2_start
