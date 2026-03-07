@@ -16,7 +16,7 @@ set -euo pipefail
 . "$(dirname "${BASH_SOURCE[0]}")/lib/debrid-utils.sh"
 
 # shellcheck source=lib/prowlarr-utils.sh
-. "$(dirname "${BASH_SOURCE[0]}")/lib/prowlarr-utils.sh"
+. "$(dirname "${BASH_SOURCE[0]}")/lib/prowlarr-utils.sh" 2>/dev/null || true
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PANEL_HELPER_CACHE="/opt/swizzin-extras/panel_helpers.sh"
@@ -322,13 +322,15 @@ _configure_prowlarr() {
     local api_key="${_stremthru_auth_password:-}"
 
     # Attempt auto-configuration if Prowlarr is installed and we have credentials
-    if [[ -n "$api_key" ]] && _discover_prowlarr; then
+    if [[ -n "$api_key" ]] && command -v _discover_prowlarr >/dev/null 2>&1 && _discover_prowlarr; then
         _add_prowlarr_torznab "StremThru" "$torznab_url" "$api_key" || true
     fi
 
     # Always display manual instructions
-    _display_prowlarr_torznab_info "StremThru" "$torznab_url" \
-        "API Key: Use the generated auth password from STREMTHRU_AUTH"
+    if command -v _display_prowlarr_torznab_info >/dev/null 2>&1; then
+        _display_prowlarr_torznab_info "StremThru" "$torznab_url" \
+            "API Key: Use the generated auth password from STREMTHRU_AUTH"
+    fi
 }
 
 # ==============================================================================
@@ -412,7 +414,7 @@ _update_stremthru() {
 # Remove
 # ==============================================================================
 _remove_stremthru() {
-    local force="$1"
+    local force="${1:-}"
 
     if [[ "$force" != "--force" ]] && [[ ! -f "/install/.${app_lockname}.lock" ]]; then
         echo_error "${app_pretty} is not installed (use --force to override)"
@@ -469,16 +471,12 @@ _remove_stremthru() {
     # Purge or keep config
     if [[ "$purgeconfig" = "true" ]]; then
         echo_progress_start "Purging configuration and data"
-        # Securely delete compose file (contains debrid credentials)
-        [[ -f "${app_dir}/docker-compose.yml" ]] && shred -u "${app_dir}/docker-compose.yml"
         rm -rf "$app_dir"
         echo_progress_done "All files purged"
         swizdb clear "${app_name}/owner" 2>/dev/null || true
         swizdb clear "${app_name}/port" 2>/dev/null || true
     else
         echo_info "Configuration kept at: ${app_dir}"
-        # Securely delete compose file even on non-purge (contains debrid credentials)
-        [[ -f "${app_dir}/docker-compose.yml" ]] && shred -u "${app_dir}/docker-compose.yml"
     fi
 
     # Remove lock file

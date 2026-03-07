@@ -84,7 +84,6 @@ app_lockname="${app_name}"
 app_baseurl="${app_name}"
 
 app_image="ipromknight/zilean:latest"
-app_container_port="8181"
 
 app_dir="/opt/${app_name}"
 app_servicefile="${app_name}.service"
@@ -411,7 +410,7 @@ _update_zilean() {
 # ==============================================================================
 
 _remove_zilean() {
-    local force="$1"
+    local force="${1:-}"
 
     if [[ "$force" != "--force" ]] && [[ ! -f "/install/.${app_lockname}.lock" ]]; then
         echo_error "${app_pretty} is not installed (use --force to override)"

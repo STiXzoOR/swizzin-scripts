@@ -277,6 +277,8 @@ services:
 COMPOSE
 
     echo_progress_done "Docker Compose configuration generated"
+    chmod 600 "${app_dir}/docker-compose.yml"
+    chown root:root "${app_dir}/docker-compose.yml"
 
     echo_progress_start "Pulling ${app_pretty} Docker image"
     docker compose -f "${app_dir}/docker-compose.yml" pull >>"$log" 2>&1 || {
@@ -410,6 +412,7 @@ _nginx_nzbdav() {
 			    auth_basic_user_file /etc/htpasswd.d/htpasswd.${user};
 			}
 
+			# SABnzbd API bypass - NZBDav's own API key provides authentication
 			location ^~ /${app_baseurl}/api {
 			    auth_request off;
 			    proxy_pass http://127.0.0.1:${app_port}/api;

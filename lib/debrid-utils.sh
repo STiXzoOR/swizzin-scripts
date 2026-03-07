@@ -9,9 +9,10 @@ _VALID_DEBRID_PROVIDERS="realdebrid alldebrid torbox premiumize offcloud debridl
 # Returns 0 if valid, 1 if not
 _validate_debrid_provider() {
     local provider="$1"
-    if [[ " $_VALID_DEBRID_PROVIDERS " =~ [[:space:]]${provider}[[:space:]] ]]; then
-        return 0
-    fi
+    local p
+    for p in $_VALID_DEBRID_PROVIDERS; do
+        [[ "$p" == "$provider" ]] && return 0
+    done
     return 1
 }
 
@@ -69,6 +70,12 @@ _prompt_debrid_provider() {
 
     if [[ -z "$debrid_key" ]]; then
         echo_error "API key cannot be empty"
+        exit 1
+    fi
+
+    # Validate API key characters (prevent YAML injection in compose files)
+    if [[ ! "$debrid_key" =~ ^[A-Za-z0-9_-]+$ ]]; then
+        echo_error "API key contains invalid characters (only A-Z, a-z, 0-9, _, - allowed)"
         exit 1
     fi
 }

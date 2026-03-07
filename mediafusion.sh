@@ -213,21 +213,9 @@ _install_mediafusion() {
     swizdb set "${app_name}/redis_port" "$redis_port"
     swizdb set "${app_name}/browser_port" "$browser_port"
 
-    # Prompt for debrid provider (optional)
-    local debrid_comment=""
-    if command -v _prompt_debrid_provider >/dev/null 2>&1; then
-        if _prompt_debrid_provider "MEDIAFUSION" "${app_dir}/docker-compose.yml" "SECRET_KEY"; then
-            if [[ -n "${debrid_provider:-}" && -n "${debrid_key:-}" ]]; then
-                debrid_comment="# Debrid: provider=${debrid_provider} (configure via web UI)"
-                echo_info "Debrid provider ${debrid_provider} noted. Configure credentials via the web UI after install."
-            fi
-        fi
-    fi
-
     echo_progress_start "Generating Docker Compose configuration"
 
     cat >"${app_dir}/docker-compose.yml" <<COMPOSE
-${debrid_comment}
 services:
   mediafusion:
     image: mhdzumair/mediafusion:latest
@@ -375,10 +363,6 @@ COMPOSE
 _systemd_mediafusion() {
     echo_progress_start "Installing systemd service"
 
-    local mem_max="${SYSTEMD_MEM_MAX:-6G}"
-    local cpu_quota="${SYSTEMD_CPU_QUOTA:-600%}"
-    local tasks_max="${SYSTEMD_TASKS_MAX:-4096}"
-
     cat >"/etc/systemd/system/${app_servicefile}" <<EOF
 [Unit]
 Description=MediaFusion (Universal Stremio/Kodi Add-on with Torznab API)
@@ -395,13 +379,6 @@ ExecStart=/usr/bin/docker compose up -d
 ExecStop=/usr/bin/docker compose down
 TimeoutStartSec=120
 TimeoutStopSec=30
-
-# Resource limits to prevent runaway processes
-MemoryMax=${mem_max}
-MemoryHigh=$(echo "${mem_max}" | sed 's/G$//')G
-CPUQuota=${cpu_quota}
-TasksMax=${tasks_max}
-LimitNOFILE=500000
 
 [Install]
 WantedBy=multi-user.target
