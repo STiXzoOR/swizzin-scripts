@@ -414,6 +414,39 @@ APP_CONFIGS = {
             "port": "PORT",
         },
     },
+    "zilean": {
+        "config_paths": ["/opt/zilean/docker-compose.yml"],
+        "format": "docker_compose",
+        "keys": {
+            "port": "PORT",
+            "image": "ipromknight/zilean:latest",
+        },
+        "default_port": 8181,
+    },
+    "stremthru": {
+        "config_paths": ["/opt/stremthru/docker-compose.yml"],
+        "format": "docker_compose",
+        "keys": {
+            "port": "PORT",
+            "image": "muniftanjim/stremthru:latest",
+        },
+    },
+    "mediafusion": {
+        "config_paths": ["/opt/mediafusion/docker-compose.yml"],
+        "format": "docker_compose",
+        "keys": {
+            "port": "PORT",
+            "image": "mhdzumair/mediafusion:latest",
+        },
+    },
+    "nzbdav": {
+        "config_paths": ["/opt/nzbdav/docker-compose.yml", "/opt/nzbdav/config/"],
+        "format": "docker_compose",
+        "keys": {
+            "port": "PORT",
+            "image": "nzbdav/nzbdav:latest",
+        },
+    },
 }
 
 
