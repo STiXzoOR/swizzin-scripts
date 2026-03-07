@@ -6,10 +6,11 @@ Swizzin installer scripts - bash installation scripts for integrating applicatio
 
 | Task                        | Documentation                                                                                                 |
 | --------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| Create a new installer      | Start with a [template](docs/templates.md), follow the [maintenance checklist](docs/maintenance-checklist.md) |
+| Create a new installer      | Use the `/new-installer` skill, or start with a [template](docs/templates.md) manually                        |
 | Understand script structure | [Architecture](docs/architecture.md)                                                                          |
 | Code style questions        | [Coding Standards](docs/coding-standards.md)                                                                  |
 | Environment variables       | [Environment Variables](docs/environment-variables.md)                                                        |
+| Update the installer skill  | [Skill Maintenance](docs/skill-maintenance.md)                                                                |
 
 ## App-Specific Documentation
 
