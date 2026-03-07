@@ -16,14 +16,16 @@ origin: docs/brainstorms/2026-03-07-nzbdav-brainstorm.md
 **Research sources:** Web (NZBDav GitHub, setup guide, entrypoint.sh, Dockerfile, Issue #227), codebase (zurg.sh lines 253-1105, mdblistarr.sh, Docker template), spec flow analysis, rclone/systemd/FUSE best practices, security hardening patterns
 
 ### Key Improvements
-1. Resolved chicken-and-egg problem with `--setup-rclone` subcommand (rclone mount deferred until after web UI setup)
-2. Confirmed `sub_filter` required — NZBDav has no base URL support, reuse zurg.sh `sub_filter` rules
-3. Security: `network_mode: host` exposes port on `0.0.0.0` — added UFW rule requirement
-4. Health check confirmed at `/health` endpoint (from entrypoint.sh analysis, NOT `/health` on port 3000 directly — backend health on port 8080, proxied by frontend)
-5. rclone mount systemd: `Type=notify` with `ExecStartPre` readiness probe (not fixed sleep)
-6. Removal ordering: unmount rclone FIRST, then stop Docker (prevents hung FUSE mounts)
-7. rclone.conf section removal on purge (sed-based, preserves other remotes — zurg.sh:444-452 pattern)
-8. FUSE kernel module check before install (`modinfo fuse`)
+1. **Networking changed to bridge** — NZBDav has NO `PORT` env var (Issue #227). Cannot use `network_mode: host` with dynamic port allocation. Use `ports: ["127.0.0.1:${app_port}:3000"]` + `extra_hosts` for arr connectivity. Resolves 0.0.0.0 exposure without UFW.
+2. **`/mnt:/mnt:rslave` volume added** — NZBDav needs host mount visibility for symlink resolution (Rclone Mount Directory setting) and library repairs (dead link monitoring). Requires mount propagation for host-side rclone FUSE mount.
+3. Resolved chicken-and-egg problem via **re-run detection** (not `--setup-rclone` subcommand — no codebase precedent for post-install flags)
+4. Confirmed `sub_filter` required — NZBDav has no base URL support, reuse zurg.sh `sub_filter` rules
+5. Health check confirmed at `/health` endpoint (frontend proxies to backend)
+6. **All rclone flags kept** — official setup guide documents each as essential for streaming performance
+7. rclone mount systemd: `Type=notify` with bounded `ExecStartPre` readiness probe (max 60s timeout)
+8. Removal ordering: unmount rclone FIRST, then stop Docker (prevents hung FUSE mounts)
+9. **`umask 077`** on credential file writes (TOCTOU race fix)
+10. rclone.conf is app-isolated at `/opt/nzbdav/rclone.conf` — just delete on purge (no section removal needed)
 
 ## Overview
 
@@ -46,18 +48,27 @@ A `nzbdav.sh` installer with two systemd services:
 | `nzbdav.service` | oneshot (Docker Compose) | Runs NZBDav container |
 | `rclone-nzbdav.service` | notify (rclone mount) | Mounts WebDAV to host filesystem |
 
-Single Docker container. `network_mode: host`. Dynamic port allocation. nginx subfolder with API auth bypass. rclone WebDAV mount with FUSE. User-configurable mount point. Display Sonarr/Radarr connection info.
+Single Docker container. Bridge networking with `127.0.0.1` port mapping + `extra_hosts` for arr connectivity. Dynamic port allocation. nginx subfolder with API auth bypass. rclone WebDAV mount with FUSE. User-configurable mount point. Display Sonarr/Radarr connection info.
 
 ## Technical Considerations
 
 ### Architecture
 
 - **Single container**: NZBDav is self-contained — C# backend (port 8080 internal) + Node.js frontend (port 3000 exposed), SQLite config at `/config/db.sqlite`
-- **Networking**: `network_mode: host` (matches mdblistarr/lingarr pattern — arr stack runs natively on host, not in Docker)
-- **Port**: Dynamic via `port 10000 12000` (default 3000 conflicts with Grafana, Node apps, etc.)
+- **Networking**: Bridge with `ports: ["127.0.0.1:${app_port}:3000"]` + `extra_hosts: ["host.docker.internal:host-gateway"]`
+- **Port**: Dynamic via `port 10000 12000` (NZBDav has no `PORT` env var — always listens on 3000 internally. Bridge port mapping solves this.)
 - **Web UI**: Full admin interface — settings, queue, DAV explorer, health monitor
 - **rclone mount**: Host-side FUSE mount of NZBDav's WebDAV endpoint, separate systemd service
 - **User mapping**: `PUID`/`PGID` environment variables (LinuxServer.io-style entrypoint with `su-exec`, NOT Docker `user:` directive)
+- **Mount propagation**: `/mnt:/mnt:rslave` — NZBDav container must see host rclone mount for symlink resolution and library repairs
+
+**Why bridge networking (not `network_mode: host`):**
+Unlike mdblistarr/lingarr which support `PORT` and `ASPNETCORE_URLS` env vars, NZBDav has NO port/bind configuration (Issue #227). With `network_mode: host`, the app binds to `0.0.0.0:3000` AND `0.0.0.0:8080` with no way to control it. Bridge networking with `127.0.0.1` port mapping:
+1. Exposes only one port on localhost (3000 mapped to dynamic port)
+2. Backend port 8080 stays container-internal
+3. Dynamic port allocation works via Docker port mapping
+4. No UFW rule needed
+5. NZBDav reaches host arr apps via `host.docker.internal` (documented in post-install)
 
 ### NZBDav Internal Architecture
 
@@ -96,24 +107,40 @@ WebDAV endpoint + SABnzbd API + Health check at /health
 **Solution**: Install `rclone-nzbdav.service` but do NOT enable it on fresh install. Post-install instructions tell the user to:
 1. Configure NZBDav via web UI
 2. Set WebDAV password in Settings > WebDAV
-3. Run the provided command to configure rclone credentials and start the mount
+3. **Re-run the installer** (`bash nzbdav.sh`) — it detects the missing rclone.conf and prompts for the WebDAV password
+
+**Re-run detection logic** (no `--setup-rclone` subcommand — no codebase precedent for post-install flags):
 
 ```bash
-# Post-install script or manual command:
-_finalize_rclone() {
+# During main install flow:
+if [[ -f "/install/.nzbdav.lock" ]]; then
+    if [[ ! -f "${app_dir}/rclone.conf" ]]; then
+        # Lock exists but rclone not configured → prompt for WebDAV password
+        _setup_rclone
+    else
+        # Everything configured → just restart services
+        _restart_services
+    fi
+    exit 0
+fi
+```
+
+```bash
+_setup_rclone() {
     echo_query "Enter the WebDAV password you set in NZBDav Settings > WebDAV:"
     read -rs webdav_pass </dev/tty
     echo ""
 
     # Generate obscured password for rclone
     local obscured
-    obscured=$(rclone obscure "$webdav_pass") || {
+    obscured=$(echo "$webdav_pass" | rclone obscure -) || {
         echo_error "Failed to obscure password"
         return 1
     }
+    unset webdav_pass
 
-    # Write rclone.conf
-    cat >"${app_dir}/rclone.conf" <<RCLONE
+    # Write rclone.conf with restrictive permissions from creation
+    (umask 077; cat >"${app_dir}/rclone.conf" <<RCLONE
 [nzbdav]
 type = webdav
 url = http://127.0.0.1:${app_port}/
@@ -121,7 +148,7 @@ vendor = other
 user = admin
 pass = ${obscured}
 RCLONE
-    chmod 600 "${app_dir}/rclone.conf"
+    )
     chown "${user}:${user}" "${app_dir}/rclone.conf"
 
     # Enable and start rclone mount
@@ -129,6 +156,11 @@ RCLONE
     systemctl start rclone-nzbdav.service
 }
 ```
+
+**Security improvements over original design:**
+- `rclone obscure -` reads from stdin (password not visible in `ps aux`)
+- `unset webdav_pass` immediately after use
+- `umask 077` subshell ensures file created with 0600 from the start (no TOCTOU race)
 
 On **re-run** (rclone.conf already exists): skip the prompt, just restart the mount service.
 
@@ -140,18 +172,22 @@ services:
     image: nzbdav/nzbdav:latest
     container_name: nzbdav
     restart: unless-stopped
-    network_mode: host
+    ports:
+      - "127.0.0.1:<app_port>:3000"
     environment:
       - PUID=<uid>
       - PGID=<gid>
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - /opt/nzbdav/config:/config
+      - /mnt:/mnt:rslave
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
-      interval: 60s
+      interval: 1m
       timeout: 5s
       retries: 3
-      start_period: 10s
+      start_period: 30s
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -161,23 +197,20 @@ services:
 **Notes:**
 - `PUID`/`PGID` (not `user:`) — NZBDav's entrypoint uses `su-exec` to switch to the correct user
 - Bind mount at `/opt/nzbdav/config` for backup system compatibility (not named volumes)
-- No `/mnt:/mnt` mount — rclone runs on the host, not inside the container
-- Health check targets the frontend at port 3000 (which proxies to backend `/health`)
-- `network_mode: host` means the app binds to `0.0.0.0:<port>` — nginx + firewall required
+- `/mnt:/mnt:rslave` — NZBDav needs to see the host rclone mount for symlink resolution and library repairs (`:rslave` propagates host FUSE mounts into the container)
+- Health check matches official setup guide: `curl -f http://localhost:3000/health`
+- `127.0.0.1` port mapping — only accessible from localhost, no UFW rule needed
+- `extra_hosts` — allows NZBDav to reach host-native Sonarr/Radarr via `host.docker.internal`
 
 #### Research Insights
 
 **No `user:` directive — confirmed:** NZBDav's entrypoint.sh uses `su-exec` to drop from root to `PUID:PGID`. Adding Docker's `user:` directive would conflict — the entrypoint would fail because `su-exec` requires root to switch users. This matches the LinuxServer.io pattern used by Sonarr, Radarr, etc.
 
-**`start_period` tuning:** .NET apps with EF Core migrations can take 5-15s on first start. The `start_period: 10s` is borderline — increase to `30s` for safety on slow VPS instances. This only affects the initial grace period, not ongoing checks.
+**`start_period: 30s`:** .NET apps with EF Core migrations can take 5-15s on first start. The official guide uses `start_period: 5s`, but that's optimistic for slow VPS. 30s provides margin without affecting steady-state checks.
 
-**UFW firewall rule:** With `network_mode: host`, the dynamic port is directly accessible on all interfaces. Add UFW deny rule during install:
-```bash
-if command -v ufw &>/dev/null && ufw status | grep -q "active"; then
-    ufw deny in on any to any port "$app_port" proto tcp comment "nzbdav - nginx only" >>"$log" 2>&1 || true
-fi
-```
-Remove the UFW rule during `--remove`.
+**Bridge networking + `extra_hosts` trade-off:** MDBListarr and Lingarr use `network_mode: host` because they support `PORT`/`ASPNETCORE_URLS` env vars for port control. NZBDav lacks this, making bridge networking the only way to get dynamic port allocation and localhost-only binding. The trade-off: users configure arr hosts in NZBDav as `http://host.docker.internal:<port>` instead of `http://127.0.0.1:<port>`. This is documented in post-install instructions.
+
+**`:rslave` mount propagation:** Required because the host-side rclone mount happens AFTER the container starts (deferred setup). Without `:rslave`, the container would not see the FUSE mount created later at `/mnt/nzbdav`. With `:rslave`, new host mounts under `/mnt` propagate into the container automatically.
 
 ### rclone Mount Service
 
@@ -193,7 +226,7 @@ Requires=nzbdav.service
 Type=notify
 User=<user>
 Group=<user>
-ExecStartPre=/bin/bash -c 'until curl -sf http://127.0.0.1:<port>/health; do sleep 2; done'
+ExecStartPre=/bin/bash -c 'for i in $(seq 1 30); do curl -sf http://127.0.0.1:<port>/health && exit 0; sleep 2; done; echo "NZBDav health check timed out after 60s"; exit 1'
 ExecStart=/usr/bin/rclone mount nzbdav: <mount_point> \
     --config /opt/nzbdav/rclone.conf \
     --uid <uid> --gid <gid> \
@@ -240,7 +273,7 @@ if [[ "$(printf '%s\n' "1.70.3" "$rclone_ver" | sort -V | head -1)" != "1.70.3" 
 fi
 ```
 
-**Stale mount detection and recovery:** If the container crashes while the FUSE mount is active, the mount point becomes stale (`Transport endpoint is not connected`). The `--setup-rclone` and `--update` subcommands should check for stale mounts:
+**Stale mount detection and recovery:** If the container crashes while the FUSE mount is active, the mount point becomes stale (`Transport endpoint is not connected`). The re-run and `--update` flows should check for stale mounts:
 ```bash
 if mountpoint -q "$mount_point" 2>/dev/null || stat "$mount_point" 2>&1 | grep -q "Transport endpoint"; then
     fusermount -uz "$mount_point" 2>/dev/null || true
@@ -303,21 +336,13 @@ _get_mount_point() {
         app_mount_point="$input_mount"
     fi
 
-    # Check if already a mount point
-    if mountpoint -q "$app_mount_point" 2>/dev/null; then
-        echo_error "Path is already a mount point: $app_mount_point"
-        exit 1
-    fi
-
     swizdb set "nzbdav/mount_point" "$app_mount_point"
 }
 ```
 
 ### Nginx Configuration
 
-NZBDav does NOT support a base URL path prefix (no env var for it). However, since we use `network_mode: host`, the app is directly accessible. The nginx subfolder needs `sub_filter` for asset path rewriting.
-
-**Important**: Need to investigate whether NZBDav's frontend generates absolute or relative paths. If relative, no `sub_filter` needed. If absolute (e.g., `/assets/`, `/api/`), `sub_filter` is required.
+NZBDav does NOT support a base URL path prefix (no env var for it, Issue #227). The nginx subfolder needs `sub_filter` for asset path rewriting (TypeScript SPA generates absolute paths like `/assets/`, `/api/`).
 
 ```nginx
 location /nzbdav {
@@ -331,22 +356,29 @@ location ^~ /nzbdav/ {
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Host $host;
     proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header Accept-Encoding "";
     proxy_redirect off;
     proxy_http_version 1.1;
     proxy_set_header Upgrade $http_upgrade;
     proxy_set_header Connection $http_connection;
 
-    # sub_filter directives if needed (TBD during implementation)
-    # sub_filter_once off;
-    # sub_filter '="/' '="/nzbdav/';
-    # sub_filter 'href="/' 'href="/nzbdav/';
-    # sub_filter 'src="/' 'src="/nzbdav/';
+    # Rewrite absolute paths in responses (NZBDav has no base_url support)
+    sub_filter_once off;
+    sub_filter_types text/html text/css text/javascript application/javascript application/json;
+    sub_filter 'href="/' 'href="/nzbdav/';
+    sub_filter 'src="/' 'src="/nzbdav/';
+    sub_filter 'action="/' 'action="/nzbdav/';
+    sub_filter 'url(/' 'url(/nzbdav/';
+    sub_filter '"/api/' '"/nzbdav/api/';
+    sub_filter "'/api/" "'/nzbdav/api/";
+    sub_filter 'fetch("/' 'fetch("/nzbdav/';
+    sub_filter "fetch('/" "fetch('/nzbdav/";
 
     auth_basic "What's the password?";
     auth_basic_user_file /etc/htpasswd.d/htpasswd.<user>;
 }
 
-# SABnzbd API bypass for Sonarr/Radarr
+# SABnzbd API bypass for Sonarr/Radarr (localhost only via bridge networking)
 # NZBDav's SABnzbd API is at /api (standard SABnzbd path)
 location ^~ /nzbdav/api {
     auth_request off;
@@ -355,6 +387,7 @@ location ^~ /nzbdav/api {
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_http_version 1.1;
 }
 ```
 
@@ -385,12 +418,15 @@ This rewrites HTML/CSS/JS responses to prefix all absolute paths with `/nzbdav/`
 
 ### Security
 
-- `network_mode: host` means port is directly accessible — **must** ensure UFW blocks external access or app binds to `127.0.0.1`
-- `chmod 600` on `docker-compose.yml` and `rclone.conf` (contain no secrets in compose, but rclone.conf has obscured WebDAV password)
+- Bridge networking with `127.0.0.1` port mapping — port only accessible from localhost, no UFW rule needed
+- Backend port 8080 stays container-internal (not exposed via port mapping)
+- `umask 077` subshell around all credential file writes (`rclone.conf`) — no TOCTOU race
 - `chown root:root` on compose file, `chown user:user` on rclone.conf (rclone runs as user)
+- `chmod 700 /opt/nzbdav/config` — SQLite db contains Usenet credentials
 - `no-new-privileges:true` + `cap_drop: ALL` on container
 - WebDAV password read with `read -rs` (silent, no echo)
-- rclone password obscured via `rclone obscure` before writing to config
+- `rclone obscure -` reads password from stdin (not visible in `ps aux`)
+- `unset webdav_pass` immediately after use
 - SABnzbd API key is auto-generated by NZBDav and stored in SQLite — only accessible via web UI
 
 #### Research Insights
@@ -399,41 +435,35 @@ This rewrites HTML/CSS/JS responses to prefix all absolute paths with `/nzbdav/`
 
 **`read_only: true` consideration:** Unlike StremThru (which only writes to `/app/data`), NZBDav writes to `/config` and may create temp files elsewhere. Do NOT add `read_only: true` without testing — the .NET runtime and Node.js frontend may need writable `/tmp`. If desired, add `tmpfs: ["/tmp"]` but leave the root filesystem writable for safety.
 
-**rclone.conf password obscuration:** `rclone obscure` uses AES-CTR with a fixed key — it's obfuscation, not encryption. It prevents casual shoulder-surfing but won't stop a determined attacker with file access. Combined with `chmod 600`, this provides reasonable protection. Document this limitation in post-install info.
+**rclone.conf password obscuration:** `rclone obscure` uses AES-CTR with a fixed key — it's obfuscation, not encryption. It prevents casual shoulder-surfing but won't stop a determined attacker with file access. Combined with `umask 077` + `chmod 600`, this provides reasonable protection.
 
 ### Sonarr/Radarr Integration (Display Only)
 
-Discover installed arr instances and display connection info:
+NZBDav requires **bidirectional** integration with Sonarr/Radarr (unlike traditional download clients):
+1. **Arr → NZBDav**: Add NZBDav as SABnzbd download client in Sonarr/Radarr
+2. **NZBDav → Arr**: Add Sonarr/Radarr instances in NZBDav Settings > Radarr/Sonarr (for symlink creation and queue management)
+
+Since NZBDav runs in bridge networking, it reaches host-native arr apps via `host.docker.internal`.
+
+Display static connection info (no arr discovery needed — user already knows their arr URLs):
 
 ```bash
 _display_arr_info() {
     echo ""
     echo_info "=== Sonarr/Radarr Download Client Setup ==="
-    echo_info "Add NZBDav as a SABnzbd download client:"
-    echo_info "  Client: SABnzbd"
-    echo_info "  Host: 127.0.0.1"
-    echo_info "  Port: ${app_port}"
-    echo_info "  API Key: (found in NZBDav Settings > SABnzbd)"
+    echo_info "Step 1: Add NZBDav as download client in Sonarr/Radarr:"
+    echo_info "  Type: SABnzbd | Host: 127.0.0.1 | Port: ${app_port}"
+    echo_info "  API Key: found in NZBDav Settings > SABnzbd"
     echo ""
-    echo_info "Then configure NZBDav's Radarr/Sonarr settings:"
-    echo_info "  Go to NZBDav Settings > Radarr/Sonarr"
-    echo_info "  Add each instance with its host, port, and API key"
+    echo_info "Step 2: Add arr instances in NZBDav Settings > Radarr/Sonarr:"
+    echo_info "  Use http://host.docker.internal:<arr_port> as the host URL"
+    echo_info "  (NZBDav runs in Docker and reaches host services via host.docker.internal)"
     echo ""
-
-    # Discover and list installed arr instances
-    for app in sonarr radarr; do
-        if [[ -f "/install/.${app}.lock" ]]; then
-            local cfg port base api_key
-            for cfg in /home/*/.config/${app^}/config.xml; do
-                [[ -f "$cfg" ]] || continue
-                port=$(grep -oP '<Port>\K[^<]+' "$cfg" 2>/dev/null) || true
-                base=$(grep -oP '<UrlBase>\K[^<]+' "$cfg" 2>/dev/null) || true
-                api_key=$(grep -oP '<ApiKey>\K[^<]+' "$cfg" 2>/dev/null) || true
-                echo_info "  ${app^}: http://127.0.0.1:${port}${base:+/$base} (API: ${api_key})"
-                break
-            done
-        fi
-    done
+    echo_info "Step 3: Configure mount & repairs in NZBDav:"
+    echo_info "  Settings > SABnzbd > Rclone Mount Directory: ${app_mount_point}"
+    echo_info "  Settings > Repairs > Library Directory: /mnt/media (or your library root)"
+    echo_info "  Settings > Repairs > Enable Background Repairs: checked"
+    echo ""
 }
 ```
 
@@ -441,29 +471,36 @@ No auto-configuration — adding download clients via POST `/api/v3/downloadclie
 
 #### Research Insights
 
-**Arr discovery pattern:** The `for cfg in /home/*/.config/${app^}/config.xml` pattern matches how mdblistarr.sh discovers arr instances (`mdblistarr.sh:457-526`). Note the `${app^}` capitalize — Sonarr stores config at `~/.config/Sonarr/config.xml`, not `~/.config/sonarr/`. The `break` after first match assumes single-user Swizzin (correct for this project).
+**Simplified from arr discovery:** The original plan used mdblistarr.sh-style arr instance discovery (`_discover_arr_instances()`). This is unnecessary for NZBDav — users who set up Usenet streaming already know where Sonarr/Radarr runs. Static text with NZBDav's connection details is clearer and eliminates ~30 lines of discovery logic.
 
-**NZBDav bidirectional integration:** Unlike traditional download clients, NZBDav also needs to know about Sonarr/Radarr (for symlink creation and library management). The post-install info should remind users to configure both directions:
-1. Add NZBDav as SABnzbd client in each arr app
-2. Add each arr app in NZBDav Settings > Radarr/Sonarr
+**`host.docker.internal` requirement:** With bridge networking, the NZBDav container cannot reach `127.0.0.1` on the host. The `extra_hosts: ["host.docker.internal:host-gateway"]` directive maps `host.docker.internal` to the Docker bridge gateway IP. Users configure arr hosts in NZBDav as `http://host.docker.internal:8989` (Sonarr) or `http://host.docker.internal:7878` (Radarr).
+
+**Rclone Mount Directory setting:** From the official setup guide (Phase 4 Step 3): this tells NZBDav where files physically exist on the host filesystem so it can pass correct paths to Radarr/Sonarr for import. Must match the actual rclone mount point.
+
+**Library repairs:** NZBDav can monitor for dead symlinks in the media library and trigger automatic redownloads. Requires the Library Directory setting pointing to the root media folder (e.g., `/mnt/media`).
 
 ## Acceptance Criteria
 
-- [ ] `nzbdav.sh` installs NZBDav via Docker Compose with `network_mode: host`
+- [ ] `nzbdav.sh` installs NZBDav via Docker Compose with bridge networking (`127.0.0.1:${app_port}:3000`)
+- [ ] `extra_hosts: ["host.docker.internal:host-gateway"]` for arr connectivity from container
+- [ ] `/mnt:/mnt:rslave` volume for mount propagation (symlink resolution + repairs)
 - [ ] rclone + fuse3 installed on host
 - [ ] User prompted for mount point (default `/mnt/nzbdav`, persisted in swizdb)
 - [ ] `rclone-nzbdav.service` created but NOT enabled on fresh install (chicken-and-egg)
-- [ ] Post-install instructions guide user through first-run configuration + rclone setup
-- [ ] `nzbdav.sh --update` pulls latest image, recreates container, restarts rclone mount if active
+- [ ] Post-install instructions guide user through first-run config + re-run for rclone setup
+- [ ] Re-running installer detects missing rclone.conf and prompts for WebDAV password
+- [ ] `nzbdav.sh --update` pulls latest image, recreates container, restarts rclone mount only if it was active
 - [ ] `nzbdav.sh --remove` unmounts FUSE first, then stops Docker, cleans up both services
-- [ ] `nzbdav.sh --remove` with purge removes rclone.conf `[nzbdav]` section (not entire file), mount point, config
-- [ ] Nginx subfolder at `/nzbdav` with `auth_request off` for `/nzbdav/api`
+- [ ] `nzbdav.sh --remove` with purge deletes `/opt/nzbdav/rclone.conf` and VFS cache directory
+- [ ] Nginx subfolder at `/nzbdav` with `sub_filter` rules and `auth_request off` for `/nzbdav/api`
 - [ ] Panel registration works
 - [ ] `swizzin-app-info` updated
-- [ ] Sonarr/Radarr instance discovery with connection info displayed
+- [ ] Static connection info displayed (SABnzbd URL, arr setup steps with `host.docker.internal`)
 - [ ] Bind mounts at `/opt/nzbdav/` for backup system compatibility
 - [ ] `PUID`/`PGID` environment variables (not `user:` directive)
 - [ ] Container security: `no-new-privileges`, `cap_drop: ALL`
+- [ ] Credential security: `umask 077`, `rclone obscure -` via stdin, `unset` after use
+- [ ] `chmod 700 /opt/nzbdav/config` for SQLite database protection
 - [ ] Idempotent: re-running preserves existing config and rclone.conf
 - [ ] Unattended install via `NZBDAV_MOUNT_PATH`, `NZBDAV_PORT` env vars
 
@@ -477,14 +514,14 @@ Based on Docker template + zurg.sh rclone pattern:
 
 - **App variables**: `app_name="nzbdav"`, dynamic port, image `nzbdav/nzbdav:latest`, `app_reqs=("curl" "fuse3")`
 - **`_get_mount_point()`**: Prompt with default `/mnt/nzbdav`, env var override, swizdb persistence, mount conflict check
-- **`_install_nzbdav()`**: Docker install, compose generation (`network_mode: host`, `PUID`/`PGID`, bind mount), container start
+- **`_install_nzbdav()`**: Docker install, compose generation (bridge networking, `127.0.0.1` port map, `extra_hosts`, `PUID`/`PGID`, `/mnt:/mnt:rslave`), container start
 - **`_install_rclone()`**: Install rclone on host (reuse zurg.sh pattern), configure FUSE `user_allow_other`
 - **`_systemd_nzbdav()`**: Create TWO services — `nzbdav.service` (Docker oneshot) + `rclone-nzbdav.service` (rclone mount with readiness probe, NOT enabled on fresh install)
 - **`_nginx_nzbdav()`**: Subfolder proxy with SABnzbd API auth bypass, `sub_filter` if needed
-- **`_finalize_rclone()`**: Prompt for WebDAV password (on re-run or explicit call), write rclone.conf, enable+start mount service
-- **`_display_arr_info()`**: Discover Sonarr/Radarr, display connection info
+- **`_setup_rclone()`**: Prompt for WebDAV password (on re-run when rclone.conf missing), obscure via stdin, write with `umask 077`, enable+start mount service
+- **`_display_arr_info()`**: Static connection info (SABnzbd URL, `host.docker.internal` for arr hosts, mount directory, repairs config)
 - **`_update_nzbdav()`**: Pull latest image, recreate container, restart rclone mount service if running
-- **`_remove_nzbdav()`**: Stop rclone mount FIRST (unmount), then stop Docker, remove both services, remove rclone.conf `[nzbdav]` section, cleanup
+- **`_remove_nzbdav()`**: Stop rclone mount FIRST (unmount), then stop Docker, remove both services, delete `/opt/nzbdav/rclone.conf`, cleanup VFS cache
 - **Cleanup trap**: Extended for Docker container + FUSE unmount + rclone config
 
 #### Research Insights
@@ -507,11 +544,7 @@ This pattern comes from zurg.sh:395-422 (`_cleanup_version_artifacts()`).
 
 **Removal ordering — critical:** Must unmount FUSE BEFORE stopping the Docker container. If Docker stops first, the WebDAV backend disappears and `fusermount -uz` may hang. Order: (1) stop rclone-nzbdav.service, (2) fusermount -uz, (3) stop nzbdav.service, (4) remove containers. This matches zurg.sh:407-415.
 
-**rclone.conf section removal on purge:** Use the exact sed pattern from zurg.sh:447:
-```bash
-sed -i '/^\[nzbdav\]/,/^\[/{/^\[nzbdav\]/d;/^\[/!d}' "${app_dir}/rclone.conf"
-```
-Since NZBDav uses its own rclone.conf at `/opt/nzbdav/rclone.conf` (not the user's global `~/.config/rclone/rclone.conf`), it's simpler — just delete the entire file on purge. The section-removal pattern is only needed if sharing a global rclone.conf.
+**rclone.conf removal on purge:** NZBDav uses an app-isolated rclone.conf at `/opt/nzbdav/rclone.conf` (not the user's global `~/.config/rclone/rclone.conf`). Just `rm -f "${app_dir}/rclone.conf"` on purge. The zurg.sh:447 sed section-removal pattern is unnecessary here since there's no shared config file.
 
 **VFS cache cleanup on purge:** rclone stores VFS cache at `~/.cache/rclone/vfs/nzbdav/`. This can be up to 20GB. Report cache size before deletion (zurg.sh:435-441 pattern):
 ```bash
@@ -560,8 +593,8 @@ _post_install_info() {
     echo_info "   - SABnzbd settings (Settings > SABnzbd)"
     echo ""
     echo_info "2. After configuring, set up the rclone mount:"
-    echo_info "   Run: nzbdav.sh --setup-rclone"
-    echo_info "   This will ask for your WebDAV password and start the mount"
+    echo_info "   Re-run: bash nzbdav.sh"
+    echo_info "   It will detect the missing rclone config and ask for your WebDAV password"
     echo ""
     echo_info "Mount point: ${app_mount_point}"
     echo_info "SABnzbd API: http://127.0.0.1:${app_port}/api"
@@ -572,26 +605,26 @@ _post_install_info() {
 }
 ```
 
-### Phase 3: `--setup-rclone` subcommand
+### Phase 3: Re-run rclone Setup
 
-Add a dedicated `--setup-rclone` flag that:
-1. Prompts for WebDAV password
-2. Obscures it via `rclone obscure`
-3. Writes/updates rclone.conf
-4. Enables and starts `rclone-nzbdav.service`
-5. Verifies mount is working (`ls "$mount_point"`)
+No dedicated `--setup-rclone` subcommand (no codebase precedent). Instead, the installer's re-run detection handles it:
 
-This can also be called during `--update` if rclone.conf already exists (skip password prompt, just restart).
+1. **Fresh install** (no lock file): Full install, rclone service created but NOT enabled
+2. **Re-run, no rclone.conf** (lock file exists, rclone.conf missing): Prompt for WebDAV password, write rclone.conf, enable+start mount
+3. **Re-run, rclone.conf exists** (lock file + rclone.conf present): Just restart services
+
+The `--update` flow restarts the rclone mount only if `systemctl is-active rclone-nzbdav.service` was true before the container recreate.
 
 ## Dependencies & Risks
 
-- **No env var support**: NZBDav cannot be fully configured at install time (Issue #227). Requires web UI first-run. Mitigated by `--setup-rclone` subcommand.
-- **rclone v1.70.3+**: `--links` flag requires recent rclone. The `curl | bash` installer gets latest.
+- **No env var support**: NZBDav cannot be configured at install time (Issue #227). Requires web UI first-run. Mitigated by re-run detection for deferred rclone setup.
+- **rclone v1.70.3+**: `--links` flag requires recent rclone. The `curl | bash` installer gets latest. Add version check and warn if too old.
 - **FUSE availability**: Some VPS/containers lack FUSE kernel module. Check `modinfo fuse` and warn.
-- **Port exposure with `network_mode: host`**: App may bind to `0.0.0.0`. Rely on nginx + UFW.
+- **Mount propagation**: `/mnt:/mnt:rslave` requires Docker to support bind propagation. Fails on very old Docker versions (< 17.06). Swizzin targets recent Docker.
+- **`host.docker.internal` dependency**: NZBDav reaches arr apps via `host.docker.internal`. This requires Docker Engine 20.10+ (Linux support added). Falls back to Docker bridge gateway IP if needed.
 - **NZBDav `alpha` tag**: Currently the only available tag. May change to `latest`. Plan uses `latest`.
-- **sub_filter uncertainty**: Need to test whether NZBDav's frontend uses absolute or relative paths. Will resolve during implementation.
-- **Disk space**: VFS cache uses up to 20GB by default. May surprise users on small disks.
+- **sub_filter uncertainty**: Need to test whether NZBDav's frontend uses absolute or relative paths. Will resolve during implementation (TypeScript SPA likely uses absolute paths based on zurg.sh precedent).
+- **Disk space**: VFS cache uses up to 20GB by default. Post-install warning included.
 
 #### Research Insights
 
@@ -601,7 +634,7 @@ This can also be called during `--update` if rclone.conf already exists (skip pa
 
 ### Edge Cases
 
-- User forgets to run `--setup-rclone`: Mount service stays disabled, media servers can't access content. Clear post-install messaging.
+- User forgets to re-run installer: Mount service stays disabled, media servers can't access content. Clear post-install messaging.
 - rclone mount becomes stale after container crash: `Restart=on-failure` in systemd + readiness probe handles recovery.
 - Mount point already in use: Checked during install with `mountpoint -q`, abort with clear error.
 - User has other rclone remotes: Removal only deletes `[nzbdav]` section, not entire rclone.conf.
@@ -617,7 +650,7 @@ This can also be called during `--update` if rclone.conf already exists (skip pa
 
 ### Origin
 
-- **Brainstorm document:** [docs/brainstorms/2026-03-07-nzbdav-brainstorm.md](../brainstorms/2026-03-07-nzbdav-brainstorm.md) — Key decisions: bundle rclone, `network_mode: host`, display-only arr info, dynamic port, user-configurable mount point.
+- **Brainstorm document:** [docs/brainstorms/2026-03-07-nzbdav-brainstorm.md](../brainstorms/2026-03-07-nzbdav-brainstorm.md) — Key decisions: bundle rclone, display-only arr info, dynamic port, user-configurable mount point. (Networking changed from `network_mode: host` to bridge after discovering NZBDav lacks PORT env var.)
 
 ### Internal References
 
@@ -625,7 +658,8 @@ This can also be called during `--update` if rclone.conf already exists (skip pa
 - rclone mount pattern: `zurg.sh` (lines 253-272 rclone install, 862-876 rclone.conf, 1005-1060 mount service, 1057-1059 FUSE config)
 - Mount point prompt: `zurg.sh:275-310` (`_get_mount_point()`)
 - Sonarr/Radarr discovery: `mdblistarr.sh:457-526` (`_discover_arr_instances()`)
-- `network_mode: host`: `mdblistarr.sh:342`, `lingarr.sh:524`
+- Bridge networking with `extra_hosts`: diverges from `mdblistarr.sh` (host networking) because NZBDav lacks PORT env var
+- `extra_hosts` pattern: Docker Engine 20.10+ `host-gateway` support
 - FUSE requirements: `zurg.sh:87`, `decypharr.sh:87`
 - rclone.conf section removal: `zurg.sh:444-452`
 
@@ -637,3 +671,5 @@ This can also be called during `--update` if rclone.conf already exists (skip pa
 - NZBDav env var feature request: https://github.com/nzbdav-dev/nzbdav/issues/227
 - ElfHosted NZBDav: https://docs.elfhosted.com/app/nzbdav/
 - NZBDav entrypoint.sh: Uses `PUID`/`PGID` with `su-exec`, `CONFIG_PATH=/config`, `BACKEND_URL=http://localhost:8080`
+- NZBDav official setup guide: Phases 1-5 covering Docker deploy, rclone sidecar, arr integration, mount config, Stremio/AIOStreams
+- Official rclone flags documentation: Each flag explained as essential for streaming (--links, --use-cookies, --buffer-size 0M, --vfs-read-ahead 512M)
