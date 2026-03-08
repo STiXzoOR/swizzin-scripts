@@ -180,11 +180,26 @@ _install_stremthru() {
     fi
 
     if [[ "$need_credentials" == "true" ]]; then
-        # Generate auth password for StremThru web UI + Torznab
-        local auth_password
-        auth_password=$(openssl rand -base64 16 | tr -dc 'A-Za-z0-9' | cut -c -16)
+        # Prompt for dashboard password or generate one
+        local auth_password=""
+        echo_query "Enter a dashboard password (leave empty to auto-generate):" ""
+        read -rs auth_password </dev/tty
+        echo "" # newline after silent read
+
+        if [[ -z "$auth_password" ]]; then
+            auth_password=$(openssl rand -base64 16 | tr -dc 'A-Za-z0-9' | cut -c -16)
+            echo_info "Generated password: ${auth_password}"
+        fi
 
         echo_progress_start "Generating Docker Compose configuration"
+
+        # Write secrets to env file (not in compose)
+        cat >"${app_dir}/.env" <<ENV
+STREMTHRU_AUTH=${user}:${auth_password}
+STREMTHRU_STORE_AUTH=${user}:${debrid_provider}:${debrid_key}
+ENV
+        chmod 600 "${app_dir}/.env"
+        chown root:root "${app_dir}/.env"
 
         cat >"${app_dir}/docker-compose.yml" <<COMPOSE
 services:
@@ -194,10 +209,9 @@ services:
     restart: unless-stopped
     network_mode: host
     user: "${uid}:${gid}"
+    env_file: .env
     environment:
-      STREMTHRU__PORT: "${app_port}"
-      STREMTHRU_AUTH: "${user}:${auth_password}"
-      STREMTHRU_STORE_AUTH: "${user}:${debrid_provider}:${debrid_key}"
+      STREMTHRU_PORT: "${app_port}"
     volumes:
       - ${app_dir}/data:/app/data
     security_opt:
@@ -287,10 +301,19 @@ _nginx_stremthru() {
 			    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
 			    proxy_set_header X-Forwarded-Host \$host;
 			    proxy_set_header X-Forwarded-Proto \$scheme;
-			    proxy_redirect off;
+			    proxy_redirect / /${app_baseurl}/;
 			    proxy_http_version 1.1;
 			    proxy_set_header Upgrade \$http_upgrade;
 			    proxy_set_header Connection \$http_connection;
+
+			    # Rewrite SPA's hardcoded /dash paths to include subfolder prefix
+			    # (TanStack Router routes, API calls, asset references)
+			    proxy_set_header Accept-Encoding "";
+			    sub_filter_once off;
+			    sub_filter_types application/javascript text/javascript;
+			    sub_filter '/dash/' '/${app_baseurl}/dash/';
+			    sub_filter '"/dash"' '"/${app_baseurl}/dash"';
+			    sub_filter "'/dash'" "'/${app_baseurl}/dash'";
 
 			    auth_basic "What's the password?";
 			    auth_basic_user_file /etc/htpasswd.d/htpasswd.${user};
