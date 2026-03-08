@@ -274,6 +274,11 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
 COMPOSE
 
     echo_progress_done "Docker Compose configuration generated"
@@ -370,6 +375,50 @@ EOF
 }
 
 # ==============================================================================
+# njs Module (React Router manifest arg rewriting)
+# ==============================================================================
+_install_njs_manifest_rewriter() {
+    # Install nginx njs module if not present
+    if [[ ! -f /usr/lib/nginx/modules/ngx_http_js_module.so ]]; then
+        echo_progress_start "Installing nginx njs module"
+        apt-get install -y nginx-module-njs >>"$log" 2>&1 || {
+            echo_warn "Failed to install nginx-module-njs; lazy route discovery may not work"
+            return 0
+        }
+        echo_progress_done "nginx njs module installed"
+    fi
+
+    # Enable the module
+    if [[ ! -f /etc/nginx/modules-enabled/50-mod-http-js.conf ]]; then
+        echo 'load_module /usr/lib/nginx/modules/ngx_http_js_module.so;' \
+            >/etc/nginx/modules-enabled/50-mod-http-js.conf
+    fi
+
+    # Add js_import to nginx.conf http block if not present
+    if ! grep -q 'js_import nzbdav' /etc/nginx/nginx.conf 2>/dev/null; then
+        sed -i '/include \/etc\/nginx\/mime.types;/a\\n\t# njs scripts for NZBDav React Router support\n\tjs_import nzbdav from /etc/nginx/njs.d/nzbdav_manifest.js;\n\tsubrequest_output_buffer_size 4k;' /etc/nginx/nginx.conf
+    fi
+
+    # Write the njs script
+    mkdir -p /etc/nginx/njs.d
+    cat >/etc/nginx/njs.d/nzbdav_manifest.js <<'NJSEOF'
+// Strip /nzbdav prefix from p= query parameter values in __manifest requests.
+// React Router sends full pathnames (with basename) but the upstream expects bare route paths.
+async function proxy_manifest(r) {
+    var args = (r.variables.args || '').replace(/%2Fnzbdav%2F/gi, '%2F').replace(/\/nzbdav\//g, '/');
+    var resp = await r.subrequest('/_nzbdav_manifest_upstream', { args: args });
+
+    for (var h in resp.headersOut) {
+        r.headersOut[h] = resp.headersOut[h];
+    }
+    r.return(resp.status, resp.responseBuffer);
+}
+
+export default { proxy_manifest };
+NJSEOF
+}
+
+# ==============================================================================
 # Nginx Configuration
 # ==============================================================================
 _nginx_nzbdav() {
@@ -388,7 +437,7 @@ _nginx_nzbdav() {
 			    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
 			    proxy_set_header X-Forwarded-Host \$host;
 			    proxy_set_header X-Forwarded-Proto \$scheme;
-			    proxy_redirect off;
+			    proxy_redirect / /${app_baseurl}/;
 			    proxy_http_version 1.1;
 			    proxy_set_header Upgrade \$http_upgrade;
 			    proxy_set_header Connection \$http_connection;
@@ -396,20 +445,56 @@ _nginx_nzbdav() {
 			    # Disable upstream compression so sub_filter can rewrite
 			    proxy_set_header Accept-Encoding "";
 
-			    # Rewrite URLs in responses (NZBDav has no base URL support)
+			    # Rewrite URLs in responses (NZBDav is a React Router SSR app with no base URL support)
 			    sub_filter_once off;
 			    sub_filter_types text/html text/css text/javascript application/javascript application/json;
+
+			    # React Router basename — controls all client-side routing
+			    sub_filter '"basename":"/"' '"basename":"/${app_baseurl}"';
+
+			    # HTML attributes
 			    sub_filter 'href="/' 'href="/${app_baseurl}/';
 			    sub_filter 'src="/' 'src="/${app_baseurl}/';
 			    sub_filter 'action="/' 'action="/${app_baseurl}/';
+
+			    # JSX properties in bundled JS (React virtual DOM)
+			    sub_filter 'href:"/' 'href:"/${app_baseurl}/';
+			    sub_filter 'src:"/' 'src:"/${app_baseurl}/';
+
+			    # ES module imports and dynamic imports
+			    sub_filter 'from "/' 'from "/${app_baseurl}/';
+			    sub_filter 'import("/' 'import("/${app_baseurl}/';
+
+			    # Asset paths in JSON manifests
+			    sub_filter '"/assets/' '"/${app_baseurl}/assets/';
+
+			    # WebSocket URL (connects to origin root without this)
+			    sub_filter '.origin.replace(/^http/,"ws")' '.origin.replace(/^http/,"ws")+"/${app_baseurl}/"';
+
+			    # CSS url()
 			    sub_filter 'url(/' 'url(/${app_baseurl}/';
-			    sub_filter '"/api/' '"/${app_baseurl}/api/';
-			    sub_filter "'/api/" "'/${app_baseurl}/api/";
-			    sub_filter 'fetch("/' 'fetch("/${app_baseurl}/';
-			    sub_filter "fetch('/" "fetch('/${app_baseurl}/";
 
 			    auth_basic "What's the password?";
 			    auth_basic_user_file /etc/htpasswd.d/htpasswd.${user};
+			}
+
+			# React Router lazy route discovery — njs strips /${app_baseurl} prefix from p= route paths
+			location = /${app_baseurl}/__manifest {
+			    js_content nzbdav.proxy_manifest;
+			}
+
+			# Internal subrequest target for __manifest
+			location = /_nzbdav_manifest_upstream {
+			    internal;
+			    proxy_pass http://127.0.0.1:${app_port}/__manifest;
+			    proxy_set_header Host \$host;
+			    proxy_set_header X-Real-IP \$remote_addr;
+			    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+			    proxy_set_header X-Forwarded-Proto \$scheme;
+			    proxy_set_header Accept-Encoding "";
+			    sub_filter_once off;
+			    sub_filter_types application/json;
+			    sub_filter '"/assets/' '"/${app_baseurl}/assets/';
 			}
 
 			# SABnzbd API bypass - NZBDav's own API key provides authentication
@@ -424,6 +509,10 @@ _nginx_nzbdav() {
 		NGX
 
         _nginx_config_written="/etc/nginx/apps/${app_name}.conf"
+
+        # Install njs module and script for React Router manifest arg rewriting
+        _install_njs_manifest_rewriter
+
         _reload_nginx
         echo_progress_done "Nginx configured"
     else
@@ -442,7 +531,7 @@ _setup_rclone() {
     swizdb set "${app_name}/mount_point" "$app_mount_point"
 
     # Prompt for WebDAV password
-    echo_query "Enter NZBDav WebDAV password (configured in the web UI)"
+    echo_query "Enter NZBDav WebDAV password (configured in the web UI)" ""
     read -rs webdav_pass </dev/tty
     echo ""
 
@@ -513,11 +602,47 @@ _post_install_message() {
     echo_info "The rclone mount service has been created but NOT enabled."
     echo_info "It will be enabled when you re-run after configuring the web UI."
     echo ""
+
+    # Detect SABnzbd port from its config
+    local sab_port=""
+    local sab_ini="/opt/sabnzbd/sabnzbd.ini"
+    if [[ -f "$sab_ini" ]]; then
+        sab_port=$(grep -oP '^port\s*=\s*\K\d+' "$sab_ini" 2>/dev/null | head -1) || true
+    fi
     echo_info "SABnzbd API URL (from inside Docker):"
-    echo_info "  http://host.docker.internal:PORT/sabnzbd/api"
+    echo_info "  http://host.docker.internal:${sab_port:-<port>}/sabnzbd/api"
+
+    # Detect Sonarr/Radarr ports from their XML configs
+    local arr_examples=()
+    local sonarr_config radarr_config arr_port
+    for sonarr_config in /home/*/.config/Sonarr/config.xml /home/*/.config/sonarr/config.xml; do
+        if [[ -f "$sonarr_config" ]]; then
+            arr_port=$(grep -oP '<Port>\K[^<]+' "$sonarr_config" 2>/dev/null | head -1) || true
+            if [[ -n "$arr_port" ]]; then
+                arr_examples+=("Sonarr:  http://host.docker.internal:${arr_port}")
+            fi
+            break
+        fi
+    done
+    for radarr_config in /home/*/.config/Radarr/config.xml /home/*/.config/radarr/config.xml; do
+        if [[ -f "$radarr_config" ]]; then
+            arr_port=$(grep -oP '<Port>\K[^<]+' "$radarr_config" 2>/dev/null | head -1) || true
+            if [[ -n "$arr_port" ]]; then
+                arr_examples+=("Radarr:  http://host.docker.internal:${arr_port}")
+            fi
+            break
+        fi
+    done
+
     echo ""
-    echo_info "Arr connection (from inside Docker):"
-    echo_info "  http://host.docker.internal:PORT"
+    echo_info "Arr connections (from inside Docker):"
+    if [[ ${#arr_examples[@]} -gt 0 ]]; then
+        for example in "${arr_examples[@]}"; do
+            echo_info "  ${example}"
+        done
+    else
+        echo_info "  http://host.docker.internal:<arr_port>"
+    fi
     echo ""
 }
 
