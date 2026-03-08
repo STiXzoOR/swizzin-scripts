@@ -89,7 +89,7 @@ app_dir="/opt/${app_name}"
 app_servicefile="${app_name}.service"
 
 app_icon_name="${app_name}"
-app_icon_url="https://cdn.jsdelivr.net/gh/selfhst/icons@main/png/zilean.png"
+app_icon_url="https://raw.githubusercontent.com/iPromKnight/zilean/8bfd20d49deda5e263a06476b47176d2a876a200/src/Zilean.ApiService/wwwroot/images/zilean-logo.png"
 
 # ==============================================================================
 # User/Owner Setup

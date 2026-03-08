@@ -95,7 +95,7 @@ app_dir="/opt/mediafusion"
 app_servicefile="${app_name}.service"
 
 app_icon_name="${app_name}"
-app_icon_url="https://cdn.jsdelivr.net/gh/selfhst/icons@main/png/mediafusion.png"
+app_icon_url="https://raw.githubusercontent.com/mhdzumair/MediaFusion/228f4946b4a89425c129fede7ac1d93bc69b46fa/resources/images/mediafusion_logo.png"
 
 # ==============================================================================
 # User/Owner Setup

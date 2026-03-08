@@ -91,7 +91,7 @@ app_dir="/opt/${app_name}"
 app_servicefile="${app_name}.service"
 
 app_icon_name="${app_name}"
-app_icon_url="https://cdn.jsdelivr.net/gh/selfhst/icons@main/png/stremthru.png"
+app_icon_url="https://emojiapi.dev/api/v1/sparkles/256.png"
 
 # ==============================================================================
 # User/Owner Setup

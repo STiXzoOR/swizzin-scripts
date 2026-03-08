@@ -92,7 +92,7 @@ app_configdir="${app_dir}/config"
 app_servicefile="${app_name}.service"
 app_mount_servicefile="rclone-nzbdav.service"
 app_icon_name="${app_name}"
-app_icon_url="https://cdn.jsdelivr.net/gh/selfhst/icons@main/png/nzbdav.png"
+app_icon_url="https://cdn.jsdelivr.net/gh/selfhst/icons@main/png/nzb-dav.png"
 app_default_mount="/mnt/nzbdav"
 app_reqs=("curl" "fuse3")
 
