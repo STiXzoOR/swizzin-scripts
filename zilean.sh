@@ -203,8 +203,6 @@ services:
     shm_size: 256m
     security_opt:
       - no-new-privileges:true
-    cap_drop:
-      - ALL
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U zilean -d zilean"]
       interval: 10s

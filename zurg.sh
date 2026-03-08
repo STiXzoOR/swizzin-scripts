@@ -206,7 +206,7 @@ _get_github_token() {
     echo_info "Create a token at: https://github.com/settings/tokens"
     echo_info "Required scope: repo (to access private repositories)"
     echo ""
-    echo_query "Enter your GitHub Personal Access Token"
+    echo_query "Enter your GitHub Personal Access Token" ""
     read -r github_token </dev/tty
     echo "" >/dev/tty
 

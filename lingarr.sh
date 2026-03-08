@@ -391,12 +391,12 @@ _discover_media_paths() {
     # Allow adding additional paths (or all paths if none discovered/confirmed)
     while true; do
         if [[ ${#MEDIA_PATHS[@]} -eq 0 ]]; then
-            echo_query "Enter a media path (e.g., /mnt/media/movies, or leave empty to cancel)"
+            echo_query "Enter a media path (e.g., /mnt/media/movies, or leave empty to cancel)" ""
         else
             if ! ask "Add another media path?" N; then
                 break
             fi
-            echo_query "Enter the media path (or leave empty to skip)"
+            echo_query "Enter the media path (or leave empty to skip)" ""
         fi
 
         local new_path

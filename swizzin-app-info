@@ -27,6 +27,7 @@ Example output:
 """
 
 import argparse
+import filecmp
 import glob
 import json
 import os
@@ -43,6 +44,36 @@ from typing import Any, Dict, List, Optional
 # =============================================================================
 
 INSTALL_PATH = "/usr/local/bin/swizzin-app-info"
+REPO_SOURCE = "/opt/swizzin-scripts/swizzin-app-info"
+
+
+def check_for_update() -> None:
+    """Auto-update from repo source if the installed copy is outdated."""
+    # Only check when running from the installed location
+    if os.path.realpath(__file__) != INSTALL_PATH:
+        return
+    if not os.path.isfile(REPO_SOURCE):
+        return
+    if filecmp.cmp(INSTALL_PATH, REPO_SOURCE, shallow=False):
+        return  # Already up to date
+
+    if os.geteuid() == 0:
+        try:
+            shutil.copy2(REPO_SOURCE, INSTALL_PATH)
+            os.chmod(INSTALL_PATH, 0o755)
+            print(
+                "Updated swizzin-app-info from repo. "
+                "Changes take effect on next run.",
+                file=sys.stderr,
+            )
+        except OSError as e:
+            print(f"Warning: auto-update failed: {e}", file=sys.stderr)
+    else:
+        print(
+            "Notice: a newer version is available. "
+            "Run 'sudo swizzin-app-info --install' to update.",
+            file=sys.stderr,
+        )
 
 
 def install_self() -> None:
@@ -1279,6 +1310,10 @@ Examples:
         help="Remove from /usr/local/bin/ (requires sudo)",
     )
     args = parser.parse_args()
+
+    # Auto-update installed copy from repo when available
+    if not args.install and not args.uninstall:
+        check_for_update()
 
     # Handle installation commands first
     if args.install:

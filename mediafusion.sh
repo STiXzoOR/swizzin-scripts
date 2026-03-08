@@ -283,8 +283,6 @@ services:
       - mediafusion-net
     security_opt:
       - no-new-privileges:true
-    cap_drop:
-      - ALL
 
   mediafusion-redis:
     image: redis:7-alpine
@@ -304,8 +302,6 @@ services:
       - mediafusion-net
     security_opt:
       - no-new-privileges:true
-    cap_drop:
-      - ALL
 
   mediafusion-browserless:
     image: ghcr.io/browserless/chromium:latest
@@ -325,8 +321,6 @@ services:
           memory: 1536M
     security_opt:
       - no-new-privileges:true
-    cap_drop:
-      - ALL
 
 networks:
   mediafusion-net:

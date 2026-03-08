@@ -55,7 +55,7 @@ _prompt_debrid_provider() {
     fi
 
     echo_info "Supported providers: ${_VALID_DEBRID_PROVIDERS}"
-    echo_query "Enter debrid provider name:"
+    echo_query "Enter debrid provider name:" ""
     read -r debrid_provider </dev/tty
 
     if ! _validate_debrid_provider "$debrid_provider"; then
@@ -64,7 +64,7 @@ _prompt_debrid_provider() {
         exit 1
     fi
 
-    echo_query "Enter your ${debrid_provider} API key:"
+    echo_query "Enter your ${debrid_provider} API key:" ""
     read -rs debrid_key </dev/tty
     echo "" # newline after silent read
 

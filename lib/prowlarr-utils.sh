@@ -51,7 +51,7 @@ _add_prowlarr_torznab() {
   "enable": true,
   "fields": [
     {"name": "baseUrl", "value": "${url}"},
-    {"name": "apiPath", "value": "/api"},
+    {"name": "apiPath", "value": ""},
     {"name": "apiKey", "value": "${api_key}"},
     {"name": "minimumSeeders", "value": 0}
   ],
@@ -60,18 +60,25 @@ _add_prowlarr_torznab() {
 JSONEOF
     )
 
-    local http_code
+    local response_body http_code
+    response_body=$(mktemp)
     http_code=$(curl --config <(printf 'header = "X-Api-Key: %s"' "$PROWLARR_API") \
-        -s -o /dev/null -w '%{http_code}' \
+        -s -o "$response_body" -w '%{http_code}' \
         -X POST "${prowlarr_url}/api/v1/indexer" \
         -H "Content-Type: application/json" \
         -d "$payload") || true
 
     if [[ "$http_code" == "201" ]]; then
+        rm -f "$response_body"
         echo_progress_done "${name} added to Prowlarr"
         return 0
     else
         echo_warn "Could not auto-configure Prowlarr (HTTP ${http_code})"
+        # Log response for debugging
+        if [[ -s "$response_body" ]]; then
+            echo_info "Prowlarr API response: $(cat "$response_body")"
+        fi
+        rm -f "$response_body"
         return 1
     fi
 }
