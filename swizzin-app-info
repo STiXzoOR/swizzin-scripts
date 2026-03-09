@@ -464,9 +464,9 @@ APP_CONFIGS = {
     },
     "mediafusion": {
         "config_paths": ["/opt/mediafusion/docker-compose.yml"],
-        "format": "docker_compose",
+        "format": "mediafusion",
         "keys": {
-            "port": "PORT",
+            "api_password": "API_PASSWORD",
             "image": "mhdzumair/mediafusion:latest",
         },
     },
@@ -954,6 +954,65 @@ def parse_mdblistarr_config(path: str, keys: Dict[str, str]) -> Dict[str, Any]:
     return result
 
 
+def parse_mediafusion_config(path: str, keys: Dict[str, str]) -> Dict[str, Any]:
+    """Parse MediaFusion config: API password from compose, admin UUID from postgres."""
+    result = {}
+    try:
+        with open(path, "r") as f:
+            content = f.read()
+        for result_key, env_key in keys.items():
+            # Match both YAML map style (KEY: "value") and list style (- KEY=value)
+            match = re.search(
+                rf'(?:^\s*{env_key}:\s*["\']?([^"\'\n]+)|^-\s*{env_key}=([^\n]+))',
+                content,
+                re.MULTILINE,
+            )
+            if match:
+                result[result_key] = (match.group(1) or match.group(2)).strip().strip("\"'")
+    except Exception as e:
+        result["_error"] = str(e)
+
+    # Build Torznab API key: API_PASSWORD:admin_uuid
+    api_password = result.get("api_password", "")
+    if api_password:
+        # Read postgres connection from docker-compose to query admin UUID
+        try:
+            with open(path, "r") as f:
+                content = f.read()
+            pg_match = re.search(
+                r"POSTGRES_URI:\s*[\"']?postgresql\+asyncpg://(\w+):([^@]+)@([^/]+)/(\w+)",
+                content,
+            )
+            if pg_match:
+                pg_user, pg_pass, pg_host, pg_db = pg_match.groups()
+                # Strip quotes
+                pg_pass = pg_pass.rstrip("\"'")
+                import subprocess as _sp
+
+                pg_result = _sp.run(
+                    [
+                        "docker", "exec", "mediafusion-postgres",
+                        "psql", "-U", pg_user, "-d", pg_db, "-tAc",
+                        "SELECT uuid FROM users WHERE role='ADMIN' LIMIT 1;",
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                )
+                admin_uuid = pg_result.stdout.strip()
+                if admin_uuid:
+                    result["apikey"] = f"{api_password}:{admin_uuid}"
+        except Exception:
+            pass
+
+    # Get port from nginx since gunicorn port is patched at runtime
+    port = get_nginx_port("mediafusion")
+    if port:
+        result["port"] = port
+
+    return result
+
+
 def get_systemd_port(service_name: str) -> Optional[str]:
     """Extract port from systemd service environment."""
     try:
@@ -1037,6 +1096,8 @@ def parse_app_config(
             parsed = parse_docker_compose_env(config_file, keys)
         elif fmt == "mdblistarr":
             parsed = parse_mdblistarr_config(config_file, keys)
+        elif fmt == "mediafusion":
+            parsed = parse_mediafusion_config(config_file, keys)
         else:
             parsed = {}
 

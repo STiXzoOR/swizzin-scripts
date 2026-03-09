@@ -208,7 +208,16 @@ _install_mediafusion() {
     secret_key=$(openssl rand -hex 16)
     api_password=$(openssl rand -base64 16 | tr -dc 'A-Za-z0-9' | cut -c -16)
     db_pass=$(openssl rand -base64 32 | tr -dc 'A-Za-z0-9' | cut -c -32)
-    server_hostname=$(hostname -f)
+
+    # Detect server hostname: Organizr domain > nginx server_name > hostname -f
+    local organizr_config="/opt/swizzin-extras/organizr-auth.conf"
+    if [[ -f "$organizr_config" ]] && grep -q "^ORGANIZR_DOMAIN=" "$organizr_config"; then
+        server_hostname=$(grep "^ORGANIZR_DOMAIN=" "$organizr_config" | cut -d'"' -f2)
+    elif [[ -f /etc/nginx/sites-enabled/default ]]; then
+        server_hostname=$(grep -m1 'server_name' /etc/nginx/sites-enabled/default | awk '{print $2}' | tr -d ';')
+    else
+        server_hostname=$(hostname -f)
+    fi
 
     # Persist ports in swizdb
     swizdb set "${app_name}/port" "$app_port"
