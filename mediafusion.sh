@@ -488,17 +488,34 @@ _nginx_mediafusion() {
 _configure_prowlarr() {
     local torznab_url="http://127.0.0.1:${app_port}/torznab"
 
-    # Always display manual instructions
-    if command -v _display_prowlarr_torznab_info >/dev/null 2>&1; then
-        _display_prowlarr_torznab_info "MediaFusion" "${torznab_url}" \
-            "API Key: ${_mediafusion_api_password:-<see compose file>}"
+    # Deploy custom Cardigann indexer definition (MediaFusion requires search params
+    # that the Generic Torznab indexer can't provide)
+    local prowlarr_custom_dir=""
+    for cfg_dir in /home/*/.config/Prowlarr; do
+        [[ -d "$cfg_dir" ]] || continue
+        prowlarr_custom_dir="${cfg_dir}/Definitions/Custom"
+        break
+    done
+
+    if [[ -n "$prowlarr_custom_dir" ]]; then
+        local template="${SCRIPT_DIR}/resources/prowlarr/mediafusion.yml"
+        if [[ -f "$template" ]]; then
+            mkdir -p "$prowlarr_custom_dir"
+            sed "s/__PORT__/${app_port}/" "$template" > "${prowlarr_custom_dir}/mediafusion.yml"
+            # Fix ownership to match Prowlarr's user
+            local prowlarr_user
+            prowlarr_user=$(stat -c '%U' "$(dirname "$prowlarr_custom_dir")")
+            chown "${prowlarr_user}:${prowlarr_user}" "${prowlarr_custom_dir}/mediafusion.yml"
+            echo_info "Deployed MediaFusion custom indexer to Prowlarr"
+            # Restart Prowlarr to load the new definition
+            systemctl restart prowlarr 2>/dev/null || true
+        fi
     fi
 
-    # Attempt auto-configuration if Prowlarr is installed
-    if command -v _discover_prowlarr >/dev/null 2>&1; then
-        if _discover_prowlarr; then
-            _add_prowlarr_torznab "MediaFusion" "${torznab_url}" "${_mediafusion_api_password:-}" || true
-        fi
+    # Display manual instructions
+    if command -v _display_prowlarr_torznab_info >/dev/null 2>&1; then
+        _display_prowlarr_torznab_info "MediaFusion" "${torznab_url}" \
+            "API Key: ${_mediafusion_api_password:-<see compose file>} (add via Custom indexer in Prowlarr)"
     fi
 }
 
