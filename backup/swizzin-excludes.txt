@@ -289,6 +289,33 @@ opt/mdblistarr/docker-compose.yml
 opt/cleanuparr/logs
 opt/cleanuparr/logs/**
 
+# === STREMTHRU ===
+# Keep data dir (SQLite DB, hashlists), exclude cache and docker-compose (recreated by installer)
+opt/stremthru/data/cache
+opt/stremthru/data/cache/**
+opt/stremthru/docker-compose.yml
+
+# === MEDIAFUSION ===
+# Keep pgdata and redis dirs, exclude docker-compose (recreated by installer)
+opt/mediafusion/docker-compose.yml
+
+# === ZILEAN ===
+# Keep pgdata and data dirs, exclude docker-compose (recreated by installer)
+opt/zilean/docker-compose.yml
+
+# === NZBDAV ===
+# Keep config dir (SQLite DB), exclude docker-compose (recreated by installer)
+opt/nzbdav/docker-compose.yml
+
+# === NEWTARR ===
+# Keep config/data, exclude code (reinstallable via git clone) and venv
+opt/newtarr/.git
+opt/newtarr/.git/**
+opt/newtarr/.venv
+opt/newtarr/.venv/**
+opt/newtarr/frontend/node_modules
+opt/newtarr/frontend/node_modules/**
+
 # === ORGANIZR ===
 srv/organizr/api/logs
 srv/organizr/api/logs/**
