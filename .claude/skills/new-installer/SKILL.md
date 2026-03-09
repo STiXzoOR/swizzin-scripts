@@ -129,11 +129,23 @@ After the script is created, read `references/maintenance-checklist.md` and
 present the required follow-up tasks:
 
 - [ ] **Update `swizzin-app-info`** — Add entry to `APP_CONFIGS` dict with
-  config_paths, format, and keys
-- [ ] **Update backup system** — Add to `SERVICE_TYPES`, `SERVICE_STOP_ORDER`,
-  `APP_PATHS`, and `swizzin-excludes.txt`
+  config_paths, format, and keys. Then copy to installed location:
+  `cp swizzin-app-info /usr/local/bin/swizzin-app-info`
+- [ ] **Update backup system** — Add to all three files:
+  - `backup/swizzin-backup.sh`: `SERVICE_TYPES`, `SERVICE_STOP_ORDER`,
+    `SERVICE_STOP_CRITICAL` (if SQLite), header comment
+  - `backup/swizzin-restore.sh`: `APP_PATHS`, `SERVICE_TYPES`
+  - `backup/swizzin-excludes.txt`: exclusion patterns for logs, caches,
+    docker-compose.yml (recreated by installer), reinstallable code
+  - Then copy all three to installed locations:
+    `cp backup/swizzin-backup.sh /usr/local/bin/swizzin-backup.sh`
+    `cp backup/swizzin-restore.sh /usr/local/bin/swizzin-restore.sh`
+    `cp backup/swizzin-excludes.txt /etc/swizzin-excludes.txt`
+- [ ] **Update `backup/README.md`** — Add to Supported Applications table
 - [ ] **Update `README.md`** — Add to Available Scripts table
 - [ ] **Update `docs/architecture.md`** — Add to Files Overview table
+- [ ] **Update `docs/apps/docker-apps.md`** — If Docker-based, add file
+  layout and features section
 - [ ] **Test the script** — Verify install, `--update`, `--remove`, and
   rollback behavior
 

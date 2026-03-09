@@ -14,7 +14,7 @@ Swizzin installer scripts - bash installation scripts for integrating applicatio
 
 ## App-Specific Documentation
 
-- [Docker Apps](docs/apps/docker-apps.md) - Lingarr, LibreTranslate, MDBListarr
+- [Docker Apps](docs/apps/docker-apps.md) - Lingarr, LibreTranslate, MDBListarr, StremThru, MediaFusion, Zilean, NzbDAV
 - [Media Servers](docs/apps/media-servers.md) - Plex, Emby, Jellyfin subdomain scripts
 - [Plex Tunnel](docs/apps/plex-tunnel.md) - Plex with VPN tunnel (Hetzner bypass)
 - [Organizr](docs/apps/organizr.md) - SSO gateway
@@ -36,6 +36,7 @@ Swizzin installer scripts - bash installation scripts for integrating applicatio
 | `lib/nginx-utils.sh` | Validated nginx reload (`_reload_nginx`) |
 | `lib/utils.sh` | Sed escape for safe substitution (`_sed_escape_value`) |
 | `lib/notifications.sh` | Discord/Pushover/Notifiarr/email notifications + rate limiting |
+| `lib/prowlarr-utils.sh` | Auto-configure Prowlarr Torznab indexers (`_add_prowlarr_torznab`) |
 
 ## Testing
 

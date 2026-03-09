@@ -43,6 +43,11 @@ This backup system works with any SSH-accessible borg repository:
 | **huntarr**                    | Automated media discovery              |
 | **subgen**                     | Whisper AI subtitle generation         |
 | **cleanuparr**                 | Download queue cleanup                 |
+| **stremthru**                  | Debrid streaming proxy (SQLite)        |
+| **mediafusion**                | Stremio add-on + Torznab (Postgres)    |
+| **zilean**                     | DMM hashlist Torznab indexer (Postgres) |
+| **nzbdav**                     | NZB-to-WebDAV bridge (SQLite)          |
+| **newtarr**                    | Media library search tool              |
 
 ---
 
@@ -321,13 +326,15 @@ STOP_MODE="critical"
 - **Indexers**: jackett, nzbhydra
 - **Request management**: overseerr, jellyseerr, seerr, ombi
 - **Monitoring**: tautulli
+- **Debrid indexers**: stremthru, nzbdav (SQLite databases)
 
 **Non-critical services** (keep running in `critical` mode):
 
 - Media servers: emby, jellyfin, plex, airsonic, calibreweb, mango, navidrome
 - Download clients: deluge, flood, qbittorrent, rtorrent, transmission, nzbget, sabnzbd
 - Helpers: huntarr, cleanuparr, notifiarr, decypharr, byparr, flaresolverr
-- Utilities: filebrowser, syncthing, pyload, netdata, subgen, zurg
+- Debrid indexers: mediafusion, zilean (Postgres-backed, no SQLite)
+- Utilities: filebrowser, syncthing, pyload, netdata, subgen, newtarr, zurg
 
 > **Note:** Apps with built-in automated backups (Sonarr, Radarr, Bazarr, Huntarr, Tautulli, etc.) create periodic ZIP/DB snapshots that are included in the borg backup. These provide an extra recovery point even if the live database is slightly inconsistent.
 

@@ -29,6 +29,12 @@ Add an entry to the `APP_CONFIGS` dictionary:
 }
 ```
 
+Then update the installed copy:
+
+```bash
+cp swizzin-app-info /usr/local/bin/swizzin-app-info
+```
+
 ## 3. Update Backup System
 
 ### backup/swizzin-backup.sh
@@ -48,11 +54,21 @@ Mirror the above, plus:
 
 ### backup/swizzin-excludes.txt
 
-Add exclusion patterns for logs, caches, temp files.
+Add exclusion patterns for logs, caches, temp files, docker-compose.yml (recreated by installer), and reinstallable code (.git, .venv, node_modules).
 
 ### backup/README.md
 
 Add to Supported Applications table.
+
+### Update installed copies
+
+After updating backup files, copy them to the server:
+
+```bash
+cp backup/swizzin-backup.sh /usr/local/bin/swizzin-backup.sh
+cp backup/swizzin-restore.sh /usr/local/bin/swizzin-restore.sh
+cp backup/swizzin-excludes.txt /etc/swizzin-excludes.txt
+```
 
 ## 4. Update README.md
 
