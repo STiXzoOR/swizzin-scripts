@@ -225,6 +225,39 @@ _install_mediafusion() {
     swizdb set "${app_name}/redis_port" "$redis_port"
     swizdb set "${app_name}/browser_port" "$browser_port"
 
+    # Auto-detect Prowlarr/Jackett for feed scraper integration
+    local prowlarr_env="" jackett_env=""
+    if [[ -f /install/.prowlarr.lock ]]; then
+        local pr_port pr_apikey pr_baseurl
+        for cfg in /home/*/.config/Prowlarr/config.xml; do
+            [[ -f "$cfg" ]] || continue
+            pr_port=$(grep -oP '(?<=<Port>)\d+' "$cfg" 2>/dev/null)
+            pr_apikey=$(grep -oP '(?<=<ApiKey>)[^<]+' "$cfg" 2>/dev/null)
+            pr_baseurl=$(grep -oP '(?<=<UrlBase>)[^<]+' "$cfg" 2>/dev/null)
+            break
+        done
+        if [[ -n "$pr_port" && -n "$pr_apikey" ]]; then
+            prowlarr_env="      PROWLARR_URL: \"http://127.0.0.1:${pr_port}${pr_baseurl:-}\"
+      PROWLARR_API_KEY: \"${pr_apikey}\""
+            echo_info "Detected Prowlarr — feed scraper integration enabled"
+        fi
+    fi
+    if [[ -f /install/.jackett.lock ]]; then
+        local jk_port jk_apikey jk_baseurl
+        for cfg in /home/*/.config/Jackett/ServerConfig.json; do
+            [[ -f "$cfg" ]] || continue
+            jk_port=$(python3 -c "import json; print(json.load(open('$cfg'))['Port'])" 2>/dev/null)
+            jk_apikey=$(python3 -c "import json; print(json.load(open('$cfg'))['APIKey'])" 2>/dev/null)
+            jk_baseurl=$(python3 -c "import json; print(json.load(open('$cfg')).get('BasePathOverride', '/jackett'))" 2>/dev/null)
+            break
+        done
+        if [[ -n "$jk_port" && -n "$jk_apikey" ]]; then
+            jackett_env="      JACKETT_URL: \"http://127.0.0.1:${jk_port}${jk_baseurl:-}\"
+      JACKETT_API_KEY: \"${jk_apikey}\""
+            echo_info "Detected Jackett — feed scraper integration enabled"
+        fi
+    fi
+
     echo_progress_start "Generating Docker Compose configuration"
 
     cat >"${app_dir}/docker-compose.yml" <<COMPOSE
@@ -246,7 +279,10 @@ services:
       REDIS_URL: "redis://127.0.0.1:${redis_port}"
       HOST_URL: "https://${server_hostname}/mediafusion"
       BROWSERLESS_URL: "http://127.0.0.1:${browser_port}"
-      CONTACT_EMAIL: "admin@localhost"
+      PLAYWRIGHT_CDP_URL: "ws://127.0.0.1:${browser_port}?blockAds=true&stealth=true"
+${prowlarr_env:+${prowlarr_env}
+}${jackett_env:+${jackett_env}
+}      CONTACT_EMAIL: "admin@localhost"
     depends_on:
       mediafusion-postgres:
         condition: service_healthy
@@ -270,7 +306,10 @@ services:
       REDIS_URL: "redis://127.0.0.1:${redis_port}"
       HOST_URL: "https://${server_hostname}/mediafusion"
       BROWSERLESS_URL: "http://127.0.0.1:${browser_port}"
-      CONTACT_EMAIL: "admin@localhost"
+      PLAYWRIGHT_CDP_URL: "ws://127.0.0.1:${browser_port}?blockAds=true&stealth=true"
+${prowlarr_env:+${prowlarr_env}
+}${jackett_env:+${jackett_env}
+}      CONTACT_EMAIL: "admin@localhost"
     depends_on:
       - mediafusion
     deploy:
