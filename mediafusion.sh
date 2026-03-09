@@ -9,6 +9,9 @@ set -euo pipefail
 #shellcheck source=sources/functions/utils
 . /etc/swizzin/sources/functions/utils
 
+# shellcheck source=lib/utils.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/utils.sh" 2>/dev/null || true
+
 # shellcheck source=lib/nginx-utils.sh
 . "$(dirname "${BASH_SOURCE[0]}")/lib/nginx-utils.sh" 2>/dev/null || true
 
@@ -222,6 +225,11 @@ services:
     container_name: mediafusion
     restart: unless-stopped
     network_mode: host
+    entrypoint: ["bash", "-c"]
+    command:
+      - |
+        sed -i 's/--bind 0.0.0.0:8000/--bind 0.0.0.0:${app_port}/' /mediafusion/deployment/startup.sh
+        exec /mediafusion/deployment/startup.sh
     environment:
       SECRET_KEY: "${secret_key}"
       API_PASSWORD: "${api_password}"
@@ -229,6 +237,7 @@ services:
       REDIS_URL: "redis://127.0.0.1:${redis_port}"
       HOST_URL: "https://${server_hostname}/mediafusion"
       BROWSERLESS_URL: "http://127.0.0.1:${browser_port}"
+      CONTACT_EMAIL: "admin@localhost"
     depends_on:
       mediafusion-postgres:
         condition: service_healthy
@@ -244,12 +253,15 @@ services:
     container_name: mediafusion-worker
     restart: unless-stopped
     network_mode: host
-    command: pipenv run dramatiq api.task -p 1 -t 4
+    command: dramatiq api.task -p 1 -t 4
     environment:
       SECRET_KEY: "${secret_key}"
+      API_PASSWORD: "${api_password}"
       POSTGRES_URI: "postgresql+asyncpg://mediafusion:${db_pass}@127.0.0.1:${pg_port}/mediafusion"
       REDIS_URL: "redis://127.0.0.1:${redis_port}"
+      HOST_URL: "https://${server_hostname}/mediafusion"
       BROWSERLESS_URL: "http://127.0.0.1:${browser_port}"
+      CONTACT_EMAIL: "admin@localhost"
     depends_on:
       - mediafusion
     deploy:
@@ -403,7 +415,7 @@ _nginx_mediafusion() {
 			    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
 			    proxy_set_header X-Forwarded-Host \$host;
 			    proxy_set_header X-Forwarded-Proto \$scheme;
-			    proxy_redirect off;
+			    proxy_redirect / /${app_baseurl}/;
 			    proxy_http_version 1.1;
 			    proxy_set_header Upgrade \$http_upgrade;
 			    proxy_set_header Connection \$http_connection;
@@ -411,6 +423,23 @@ _nginx_mediafusion() {
 			    # Longer timeouts for scraper operations
 			    proxy_read_timeout 120s;
 			    proxy_send_timeout 120s;
+
+			    # Rewrite hardcoded root-relative paths in HTML and JS
+			    proxy_set_header Accept-Encoding "";
+			    sub_filter_once off;
+			    sub_filter_types application/javascript text/javascript;
+			    sub_filter '"/api/v1' '"/${app_baseurl}/api/v1';
+			    sub_filter '"/api?' '"/${app_baseurl}/api?';
+			    sub_filter '"/app' '"/${app_baseurl}/app';
+			    sub_filter "'/app" "'/${app_baseurl}/app";
+			    sub_filter '"/static/' '"/${app_baseurl}/static/';
+			    sub_filter '"/streaming_provider/' '"/${app_baseurl}/streaming_provider/';
+			    sub_filter '"/poster/' '"/${app_baseurl}/poster/';
+			    sub_filter '"/torznab' '"/${app_baseurl}/torznab';
+			    sub_filter '"/manifest.json' '"/${app_baseurl}/manifest.json';
+			    sub_filter 'href="/static/' 'href="/${app_baseurl}/static/';
+			    sub_filter 'src="/app/' 'src="/${app_baseurl}/app/';
+			    sub_filter 'href="/app/' 'href="/${app_baseurl}/app/';
 
 			    auth_basic "What's the password?";
 			    auth_basic_user_file /etc/htpasswd.d/htpasswd.${user};
