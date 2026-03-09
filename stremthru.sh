@@ -302,6 +302,7 @@ _nginx_stremthru() {
 			    proxy_set_header X-Forwarded-Host \$host;
 			    proxy_set_header X-Forwarded-Proto \$scheme;
 			    proxy_redirect / /${app_baseurl}/;
+			    proxy_cookie_path / /${app_baseurl}/;
 			    proxy_http_version 1.1;
 			    proxy_set_header Upgrade \$http_upgrade;
 			    proxy_set_header Connection \$http_connection;
