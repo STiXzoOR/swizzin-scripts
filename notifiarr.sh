@@ -9,6 +9,9 @@ set -euo pipefail
 #shellcheck source=sources/functions/utils
 . /etc/swizzin/sources/functions/utils
 
+# shellcheck source=lib/utils.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/utils.sh" 2>/dev/null || true
+
 # shellcheck source=lib/nginx-utils.sh
 . "$(dirname "${BASH_SOURCE[0]}")/lib/nginx-utils.sh" 2>/dev/null || true
 
@@ -118,7 +121,7 @@ _install_notifiarr() {
             API_KEY="$DN_API_KEY"
             echo_info "Using API Key from DN_API_KEY environment variable"
         else
-            echo_query "Paste your 'All' API Key from notifiarr.com profile page"
+            echo_query "Paste your 'All' API Key from notifiarr.com profile page" ""
             read -r API_KEY </dev/tty
 
             if [ -z "$API_KEY" ]; then

@@ -1,7 +1,7 @@
 ---
 title: "feat: Add StremThru Docker installer"
 type: feat
-status: active
+status: completed
 date: 2026-03-07
 deepened: 2026-03-07
 origin: docs/brainstorms/2026-03-07-stremthru-brainstorm.md
@@ -220,22 +220,22 @@ The auto-configure function should pass the auth credentials in the Prowlarr API
 
 ## Acceptance Criteria
 
-- [ ] `stremthru.sh` installs StremThru via Docker Compose
-- [ ] Interactive debrid provider + API key prompt during install
-- [ ] Debrid provider validated against known provider list
-- [ ] `stremthru.sh --update` pulls latest image and recreates container
-- [ ] `stremthru.sh --remove` cleanly removes container, image, configs
-- [ ] `stremthru.sh --remove` with purge securely removes data directory
-- [ ] Nginx subfolder at `/stremthru` proxies to StremThru (no sub_filter needed)
-- [ ] Torznab API accessible at `/stremthru/v0/torznab` without htpasswd auth
-- [ ] Prowlarr auto-configured (if installed) + manual instructions displayed
-- [ ] Panel registration works
-- [ ] `swizzin-app-info` updated
-- [ ] Debrid credentials stored securely (`chmod 600`, `chown root:root`)
-- [ ] Idempotent: re-running preserves existing debrid config
-- [ ] Unattended install via `STREMTHRU_PROVIDER` + `STREMTHRU_API_KEY` env vars
-- [ ] Bind mounts at `/opt/stremthru/` (not named volumes) for backup system compatibility
-- [ ] `network_mode: host` used (arr stack runs natively on host)
+- [x] `stremthru.sh` installs StremThru via Docker Compose
+- [x] Interactive debrid provider + API key prompt during install
+- [x] Debrid provider validated against known provider list
+- [x] `stremthru.sh --update` pulls latest image and recreates container
+- [x] `stremthru.sh --remove` cleanly removes container, image, configs
+- [x] `stremthru.sh --remove` with purge securely removes data directory
+- [x] Nginx subfolder at `/stremthru` proxies to StremThru (no sub_filter needed)
+- [x] Torznab API accessible at `/stremthru/v0/torznab` without htpasswd auth
+- [x] Prowlarr auto-configured (if installed) + manual instructions displayed
+- [x] Panel registration works
+- [x] `swizzin-app-info` updated
+- [x] Debrid credentials stored securely (`chmod 600`, `chown root:root`)
+- [x] Idempotent: re-running preserves existing debrid config
+- [x] Unattended install via `STREMTHRU_PROVIDER` + `STREMTHRU_API_KEY` env vars
+- [x] Bind mounts at `/opt/stremthru/` (not named volumes) for backup system compatibility
+- [x] `network_mode: host` used (arr stack runs natively on host)
 
 ## Implementation Plan
 

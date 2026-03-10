@@ -22,8 +22,8 @@ Each installer script follows this sequence:
 | Type                 | Location                                    | Examples                                   |
 | -------------------- | ------------------------------------------- | ------------------------------------------ |
 | Single-file binaries | `/usr/bin/<appname>`                        | decypharr, notifiarr, zurg                 |
-| Multi-file apps      | `/opt/<appname>/`                           | cleanuparr, seerr, byparr, huntarr, subgen |
-| Docker apps          | `/opt/<appname>/` with `docker-compose.yml` | lingarr, libretranslate                    |
+| Multi-file apps      | `/opt/<appname>/`                           | cleanuparr, seerr, byparr, huntarr, subgen, newtarr |
+| Docker apps          | `/opt/<appname>/` with `docker-compose.yml` | lingarr, libretranslate, stremthru, mediafusion, zilean, nzbdav |
 
 ## Files Overview
 
@@ -46,6 +46,11 @@ Each installer script follows this sequence:
 | `panel.sh`          | Swizzin panel subdomain support                             |
 | `sonarr.sh`         | Multi-instance Sonarr manager                               |
 | `radarr.sh`         | Multi-instance Radarr manager                               |
+| `stremthru.sh`      | Debrid streaming proxy with store management (Docker)        |
+| `mediafusion.sh`    | Stremio/Kodi add-on with Torznab API (Docker, 5 containers) |
+| `zilean.sh`         | DMM hashlist Torznab indexer for debrid content (Docker)     |
+| `nzbdav.sh`         | NZB-to-WebDAV bridge for debrid download clients (Docker)    |
+| `newtarr.sh`        | Media library search tool (uv + Python)                      |
 | `panel_helpers.sh`  | Shared panel registration utility                           |
 
 ## Shared Libraries
@@ -119,7 +124,7 @@ Most installers use `port 10000 12000` to find an available port.
 
 ## Python Apps (uv-based)
 
-Byparr, Huntarr, and Subgen use `uv` for Python management:
+Byparr, Huntarr, Subgen, and Newtarr use `uv` for Python management:
 
 - uv installed per-user at `~/.local/bin/uv`
 - Apps cloned to `/opt/<appname>`
@@ -136,6 +141,9 @@ Byparr, Huntarr, and Subgen use `uv` for Python management:
 | Seerr                                  | Dedicated vhost with frame-ancestors CSP                   |
 | Organizr                               | Dedicated vhost at `/etc/nginx/sites-available/organizr`   |
 | Plex/Emby/Jellyfin                     | Dedicated vhosts with panel meta urloverride               |
+| StremThru/MediaFusion/NzbDAV           | Subfolder with sub_filter + auth bypass for API endpoints  |
+| Zilean                                 | Subfolder at `/<appname>/`                                 |
+| Newtarr                                | Subfolder at `/<appname>/`                                 |
 | Byparr/Subgen/Zurg                     | No nginx (internal API/webhook services)                   |
 
 API endpoints bypass htpasswd authentication.

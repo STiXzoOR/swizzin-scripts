@@ -1,7 +1,7 @@
 ---
 title: "feat: Add NZBDav Docker installer"
 type: feat
-status: active
+status: completed
 date: 2026-03-07
 deepened: 2026-03-07
 origin: docs/brainstorms/2026-03-07-nzbdav-brainstorm.md
@@ -481,28 +481,28 @@ No auto-configuration — adding download clients via POST `/api/v3/downloadclie
 
 ## Acceptance Criteria
 
-- [ ] `nzbdav.sh` installs NZBDav via Docker Compose with bridge networking (`127.0.0.1:${app_port}:3000`)
-- [ ] `extra_hosts: ["host.docker.internal:host-gateway"]` for arr connectivity from container
-- [ ] `/mnt:/mnt:rslave` volume for mount propagation (symlink resolution + repairs)
-- [ ] rclone + fuse3 installed on host
-- [ ] User prompted for mount point (default `/mnt/nzbdav`, persisted in swizdb)
-- [ ] `rclone-nzbdav.service` created but NOT enabled on fresh install (chicken-and-egg)
-- [ ] Post-install instructions guide user through first-run config + re-run for rclone setup
-- [ ] Re-running installer detects missing rclone.conf and prompts for WebDAV password
-- [ ] `nzbdav.sh --update` pulls latest image, recreates container, restarts rclone mount only if it was active
-- [ ] `nzbdav.sh --remove` unmounts FUSE first, then stops Docker, cleans up both services
-- [ ] `nzbdav.sh --remove` with purge deletes `/opt/nzbdav/rclone.conf` and VFS cache directory
-- [ ] Nginx subfolder at `/nzbdav` with `sub_filter` rules and `auth_request off` for `/nzbdav/api`
-- [ ] Panel registration works
-- [ ] `swizzin-app-info` updated
-- [ ] Static connection info displayed (SABnzbd URL, arr setup steps with `host.docker.internal`)
-- [ ] Bind mounts at `/opt/nzbdav/` for backup system compatibility
-- [ ] `PUID`/`PGID` environment variables (not `user:` directive)
-- [ ] Container security: `no-new-privileges`, `cap_drop: ALL`
-- [ ] Credential security: `umask 077`, `rclone obscure -` via stdin, `unset` after use
-- [ ] `chmod 700 /opt/nzbdav/config` for SQLite database protection
-- [ ] Idempotent: re-running preserves existing config and rclone.conf
-- [ ] Unattended install via `NZBDAV_MOUNT_PATH`, `NZBDAV_PORT` env vars
+- [x] `nzbdav.sh` installs NZBDav via Docker Compose with bridge networking (`127.0.0.1:${app_port}:3000`)
+- [x] `extra_hosts: ["host.docker.internal:host-gateway"]` for arr connectivity from container
+- [x] `/mnt:/mnt:rslave` volume for mount propagation (symlink resolution + repairs)
+- [x] rclone + fuse3 installed on host
+- [x] User prompted for mount point (default `/mnt/nzbdav`, persisted in swizdb)
+- [x] `rclone-nzbdav.service` created but NOT enabled on fresh install (chicken-and-egg)
+- [x] Post-install instructions guide user through first-run config + re-run for rclone setup
+- [x] Re-running installer detects missing rclone.conf and prompts for WebDAV password
+- [x] `nzbdav.sh --update` pulls latest image, recreates container, restarts rclone mount only if it was active
+- [x] `nzbdav.sh --remove` unmounts FUSE first, then stops Docker, cleans up both services
+- [x] `nzbdav.sh --remove` with purge deletes `/opt/nzbdav/rclone.conf` and VFS cache directory
+- [x] Nginx subfolder at `/nzbdav` with `sub_filter` rules and `auth_request off` for `/nzbdav/api`
+- [x] Panel registration works
+- [x] `swizzin-app-info` updated
+- [x] Static connection info displayed (SABnzbd URL, arr setup steps with `host.docker.internal`)
+- [x] Bind mounts at `/opt/nzbdav/` for backup system compatibility
+- [x] `PUID`/`PGID` environment variables (not `user:` directive)
+- [x] Container security: `no-new-privileges`, `cap_drop: ALL`
+- [x] Credential security: `umask 077`, `rclone obscure -` via stdin, `unset` after use
+- [x] `chmod 700 /opt/nzbdav/config` for SQLite database protection
+- [x] Idempotent: re-running preserves existing config and rclone.conf
+- [x] Unattended install via `NZBDAV_MOUNT_PATH`, `NZBDAV_PORT` env vars
 
 ## Implementation Plan
 

@@ -1,7 +1,7 @@
 ---
 title: "feat: Add Zilean Docker installer"
 type: feat
-status: active
+status: completed
 date: 2026-03-07
 deepened: 2026-03-07
 origin: docs/brainstorms/2026-03-07-zilean-brainstorm.md
@@ -282,23 +282,23 @@ This produces a 32-character alphanumeric password. Avoid special characters in 
 
 ## Acceptance Criteria
 
-- [ ] `zilean.sh` installs Zilean + PostgreSQL via Docker Compose
-- [ ] `zilean.sh --update` pulls latest image and recreates container
-- [ ] `zilean.sh --remove` cleanly removes all containers, images, configs
-- [ ] `zilean.sh --remove` with purge removes all data volumes
-- [ ] Zilean health check passes at `/healthchecks/ping`
-- [ ] Nginx subfolder at `/zilean` proxies to Zilean API
-- [ ] Torznab API accessible at `/zilean/api/v1/search` without htpasswd auth (narrowed — not all /api)
-- [ ] Prowlarr auto-configured with Zilean as Torznab indexer (if installed)
-- [ ] Manual Prowlarr instructions displayed (always)
-- [ ] Panel registration works (`--register-panel`)
-- [ ] `swizzin-app-info` updated with Zilean entry
-- [ ] Systemd service starts/stops containers correctly
-- [ ] Idempotent: re-running doesn't break existing install
-- [ ] First-run IMDB indexing warning displayed
-- [ ] Port conflict handled gracefully (8181 or fallback)
-- [ ] Bind mounts at `/opt/zilean/` (not named volumes) for backup system compatibility
-- [ ] `network_mode: host` used for zilean container (arr stack runs natively on host)
+- [x] `zilean.sh` installs Zilean + PostgreSQL via Docker Compose
+- [x] `zilean.sh --update` pulls latest image and recreates container
+- [x] `zilean.sh --remove` cleanly removes all containers, images, configs
+- [x] `zilean.sh --remove` with purge removes all data volumes
+- [x] Zilean health check passes at `/healthchecks/ping`
+- [x] Nginx subfolder at `/zilean` proxies to Zilean API
+- [x] Torznab API accessible at `/zilean/api/v1/search` without htpasswd auth (narrowed — not all /api)
+- [x] Prowlarr auto-configured with Zilean as Torznab indexer (if installed)
+- [x] Manual Prowlarr instructions displayed (always)
+- [x] Panel registration works (`--register-panel`)
+- [x] `swizzin-app-info` updated with Zilean entry
+- [x] Systemd service starts/stops containers correctly
+- [x] Idempotent: re-running doesn't break existing install
+- [x] First-run IMDB indexing warning displayed
+- [x] Port conflict handled gracefully (8181 or fallback)
+- [x] Bind mounts at `/opt/zilean/` (not named volumes) for backup system compatibility
+- [x] `network_mode: host` used for zilean container (arr stack runs natively on host)
 
 ## Implementation Plan
 

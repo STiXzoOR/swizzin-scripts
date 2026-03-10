@@ -100,6 +100,13 @@ declare -A APP_PATHS=(
     ["zurg"]="home/*/.config/zurg"
     ["mdblist-sync"]="opt/swizzin-extras"
 
+    # Debrid Indexer Stack
+    ["stremthru"]="opt/stremthru/data"
+    ["mediafusion"]="opt/mediafusion"
+    ["zilean"]="opt/zilean"
+    ["nzbdav"]="opt/nzbdav/config"
+    ["newtarr"]="opt/newtarr"
+
     # Additional
     ["wireguard"]="etc/wireguard"
     ["rutorrent"]="srv/rutorrent"
@@ -135,6 +142,8 @@ declare -A SERVICE_TYPES=(
     ["cleanuparr"]="system" ["byparr"]="system" ["flaresolverr"]="system"
     ["subgen"]="system" ["lingarr"]="system" ["libretranslate"]="system"
     ["mdblistarr"]="system"
+    ["stremthru"]="system" ["mediafusion"]="system" ["zilean"]="system"
+    ["nzbdav"]="system" ["newtarr"]="system"
     ["zurg"]="system" ["rclone-zurg"]="system"
     ["netdata"]="system" ["organizr"]="system" ["nextcloud"]="system"
 )

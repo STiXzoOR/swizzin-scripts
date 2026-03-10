@@ -271,12 +271,12 @@ _discover_media_paths() {
     # Allow adding additional paths
     while true; do
         if [[ ${#MEDIA_PATHS[@]} -eq 0 ]]; then
-            echo_query "Enter a media path (e.g., /mnt/media/movies, or leave empty to cancel)"
+            echo_query "Enter a media path (e.g., /mnt/media/movies, or leave empty to cancel)" ""
         else
             if ! ask "Add another media path?" N; then
                 break
             fi
-            echo_query "Enter the media path (or leave empty to skip)"
+            echo_query "Enter the media path (or leave empty to skip)" ""
         fi
 
         local new_path
@@ -314,7 +314,7 @@ _prompt_gluetun_config() {
     # Provider selection
     if [[ -z "${VPN_PROVIDER:-}" ]]; then
         echo_info "Supported VPN providers: nordvpn, surfshark, protonvpn, mullvad, pia, expressvpn, ivpn, windscribe"
-        echo_query "Enter VPN provider"
+        echo_query "Enter VPN provider" ""
         read -r VPN_PROVIDER </dev/tty
         if [[ -z "$VPN_PROVIDER" ]]; then
             echo_error "VPN provider is required"
@@ -340,7 +340,7 @@ _prompt_gluetun_config() {
         nordvpn | surfshark)
             if [[ "$VPN_TYPE" == "wireguard" ]]; then
                 if [[ -z "${WIREGUARD_PRIVATE_KEY:-}" ]]; then
-                    echo_query "Enter WireGuard private key (from provider dashboard)"
+                    echo_query "Enter WireGuard private key (from provider dashboard)" ""
                     read -r WIREGUARD_PRIVATE_KEY </dev/tty
                     [[ -z "$WIREGUARD_PRIVATE_KEY" ]] && {
                         echo_error "WireGuard private key required"
@@ -349,7 +349,7 @@ _prompt_gluetun_config() {
                 fi
             else
                 if [[ -z "${OPENVPN_USER:-}" ]]; then
-                    echo_query "Enter OpenVPN username"
+                    echo_query "Enter OpenVPN username" ""
                     read -r OPENVPN_USER </dev/tty
                     [[ -z "$OPENVPN_USER" ]] && {
                         echo_error "OpenVPN username required"
@@ -357,7 +357,7 @@ _prompt_gluetun_config() {
                     }
                 fi
                 if [[ -z "${OPENVPN_PASSWORD:-}" ]]; then
-                    echo_query "Enter OpenVPN password"
+                    echo_query "Enter OpenVPN password" ""
                     read -rs OPENVPN_PASSWORD </dev/tty
                     echo
                     [[ -z "$OPENVPN_PASSWORD" ]] && {
@@ -370,7 +370,7 @@ _prompt_gluetun_config() {
         protonvpn)
             if [[ "$VPN_TYPE" == "wireguard" ]]; then
                 if [[ -z "${WIREGUARD_PRIVATE_KEY:-}" ]]; then
-                    echo_query "Enter WireGuard private key"
+                    echo_query "Enter WireGuard private key" ""
                     read -r WIREGUARD_PRIVATE_KEY </dev/tty
                     [[ -z "$WIREGUARD_PRIVATE_KEY" ]] && {
                         echo_error "WireGuard private key required"
@@ -379,7 +379,7 @@ _prompt_gluetun_config() {
                 fi
             else
                 if [[ -z "${OPENVPN_USER:-}" ]]; then
-                    echo_query "Enter OpenVPN username (OpenVPN/IKEv2 username from account)"
+                    echo_query "Enter OpenVPN username (OpenVPN/IKEv2 username from account)" ""
                     read -r OPENVPN_USER </dev/tty
                     [[ -z "$OPENVPN_USER" ]] && {
                         echo_error "OpenVPN username required"
@@ -387,7 +387,7 @@ _prompt_gluetun_config() {
                     }
                 fi
                 if [[ -z "${OPENVPN_PASSWORD:-}" ]]; then
-                    echo_query "Enter OpenVPN password"
+                    echo_query "Enter OpenVPN password" ""
                     read -rs OPENVPN_PASSWORD </dev/tty
                     echo
                     [[ -z "$OPENVPN_PASSWORD" ]] && {
@@ -400,7 +400,7 @@ _prompt_gluetun_config() {
         mullvad)
             if [[ "$VPN_TYPE" == "wireguard" ]]; then
                 if [[ -z "${WIREGUARD_PRIVATE_KEY:-}" ]]; then
-                    echo_query "Enter WireGuard private key"
+                    echo_query "Enter WireGuard private key" ""
                     read -r WIREGUARD_PRIVATE_KEY </dev/tty
                     [[ -z "$WIREGUARD_PRIVATE_KEY" ]] && {
                         echo_error "WireGuard private key required"
@@ -408,7 +408,7 @@ _prompt_gluetun_config() {
                     }
                 fi
                 if [[ -z "${WIREGUARD_ADDRESSES:-}" ]]; then
-                    echo_query "Enter WireGuard address (e.g., 10.x.x.x/32)"
+                    echo_query "Enter WireGuard address (e.g., 10.x.x.x/32)" ""
                     read -r WIREGUARD_ADDRESSES </dev/tty
                     [[ -z "$WIREGUARD_ADDRESSES" ]] && {
                         echo_error "WireGuard address required"
@@ -417,7 +417,7 @@ _prompt_gluetun_config() {
                 fi
             else
                 if [[ -z "${OPENVPN_USER:-}" ]]; then
-                    echo_query "Enter Mullvad account number"
+                    echo_query "Enter Mullvad account number" ""
                     read -r OPENVPN_USER </dev/tty
                     [[ -z "$OPENVPN_USER" ]] && {
                         echo_error "Account number required"
@@ -429,7 +429,7 @@ _prompt_gluetun_config() {
             ;;
         pia)
             if [[ -z "${OPENVPN_USER:-}" ]]; then
-                echo_query "Enter PIA username"
+                echo_query "Enter PIA username" ""
                 read -r OPENVPN_USER </dev/tty
                 [[ -z "$OPENVPN_USER" ]] && {
                     echo_error "Username required"
@@ -437,7 +437,7 @@ _prompt_gluetun_config() {
                 }
             fi
             if [[ -z "${OPENVPN_PASSWORD:-}" ]]; then
-                echo_query "Enter PIA password"
+                echo_query "Enter PIA password" ""
                 read -rs OPENVPN_PASSWORD </dev/tty
                 echo
                 [[ -z "$OPENVPN_PASSWORD" ]] && {
@@ -450,7 +450,7 @@ _prompt_gluetun_config() {
             # Generic provider - prompt for credentials
             if [[ "$VPN_TYPE" == "wireguard" ]]; then
                 if [[ -z "${WIREGUARD_PRIVATE_KEY:-}" ]]; then
-                    echo_query "Enter WireGuard private key"
+                    echo_query "Enter WireGuard private key" ""
                     read -r WIREGUARD_PRIVATE_KEY </dev/tty
                     [[ -z "$WIREGUARD_PRIVATE_KEY" ]] && {
                         echo_error "WireGuard private key required"
@@ -459,11 +459,11 @@ _prompt_gluetun_config() {
                 fi
             else
                 if [[ -z "${OPENVPN_USER:-}" ]]; then
-                    echo_query "Enter OpenVPN username"
+                    echo_query "Enter OpenVPN username" ""
                     read -r OPENVPN_USER </dev/tty
                 fi
                 if [[ -z "${OPENVPN_PASSWORD:-}" ]]; then
-                    echo_query "Enter OpenVPN password"
+                    echo_query "Enter OpenVPN password" ""
                     read -rs OPENVPN_PASSWORD </dev/tty
                     echo
                 fi
@@ -473,7 +473,7 @@ _prompt_gluetun_config() {
 
     # Optional server country
     if [[ -z "${SERVER_COUNTRIES:-}" ]]; then
-        echo_query "Enter server country (optional, e.g., Netherlands, leave empty for any)"
+        echo_query "Enter server country (optional, e.g., Netherlands, leave empty for any)" ""
         read -r SERVER_COUNTRIES </dev/tty
     fi
 }
@@ -487,7 +487,7 @@ _prompt_wireguard_config() {
     echo ""
 
     if [[ -z "${WG_RELAY_ENDPOINT:-}" ]]; then
-        echo_query "Enter WireGuard endpoint (e.g., vps.example.com:51820)"
+        echo_query "Enter WireGuard endpoint (e.g., vps.example.com:51820)" ""
         read -r WG_RELAY_ENDPOINT </dev/tty
         [[ -z "$WG_RELAY_ENDPOINT" ]] && {
             echo_error "Endpoint required"
@@ -496,7 +496,7 @@ _prompt_wireguard_config() {
     fi
 
     if [[ -z "${WG_RELAY_PUBKEY:-}" ]]; then
-        echo_query "Enter server public key"
+        echo_query "Enter server public key" ""
         read -r WG_RELAY_PUBKEY </dev/tty
         [[ -z "$WG_RELAY_PUBKEY" ]] && {
             echo_error "Server public key required"
@@ -505,7 +505,7 @@ _prompt_wireguard_config() {
     fi
 
     if [[ -z "${WG_RELAY_PRIVKEY:-}" ]]; then
-        echo_query "Enter client private key"
+        echo_query "Enter client private key" ""
         read -r WG_RELAY_PRIVKEY </dev/tty
         [[ -z "$WG_RELAY_PRIVKEY" ]] && {
             echo_error "Client private key required"
@@ -514,7 +514,7 @@ _prompt_wireguard_config() {
     fi
 
     if [[ -z "${WG_RELAY_ADDRESS:-}" ]]; then
-        echo_query "Enter client address (e.g., 10.13.13.2/24)"
+        echo_query "Enter client address (e.g., 10.13.13.2/24)" ""
         read -r WG_RELAY_ADDRESS </dev/tty
         [[ -z "$WG_RELAY_ADDRESS" ]] && {
             echo_error "Client address required"
@@ -523,7 +523,7 @@ _prompt_wireguard_config() {
     fi
 
     if [[ -z "${WG_RELAY_PRESHARED:-}" ]]; then
-        echo_query "Enter preshared key (optional, leave empty to skip)"
+        echo_query "Enter preshared key (optional, leave empty to skip)" ""
         read -r WG_RELAY_PRESHARED </dev/tty
     fi
 }
@@ -534,7 +534,7 @@ _prompt_wireguard_config() {
 _prompt_plex_claim() {
     if [[ -z "${PLEX_CLAIM:-}" ]]; then
         echo_info "Get a claim token from: https://www.plex.tv/claim/"
-        echo_query "Enter Plex claim token (optional for initial setup, required for linking)"
+        echo_query "Enter Plex claim token (optional for initial setup, required for linking)" ""
         read -r PLEX_CLAIM </dev/tty
     fi
 }

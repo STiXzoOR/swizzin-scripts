@@ -63,6 +63,101 @@ Machine translation API with GPU auto-detection and Lingarr integration.
 
 ---
 
+## StremThru
+
+Debrid streaming proxy with store management. Provides Torznab API for Prowlarr integration.
+
+### File Layout
+
+| Path                                   | Purpose                   |
+| -------------------------------------- | ------------------------- |
+| `/opt/stremthru/docker-compose.yml`    | Compose file              |
+| `/opt/stremthru/data/`                 | SQLite DB + hashlists     |
+| `/opt/stremthru/.env`                  | Credentials               |
+| `/etc/nginx/apps/stremthru.conf`       | Reverse proxy (subfolder) |
+| `/etc/systemd/system/stremthru.service`| Systemd wrapper           |
+| `/install/.stremthru.lock`             | Swizzin lock file         |
+
+### Features
+
+- Single container with SQLite database
+- Stores debrid credentials in `.env` file (chmod 600)
+- `proxy_cookie_path` for session cookie rewriting behind subfolder proxy
+- Torznab API endpoint bypasses auth for Prowlarr access
+
+---
+
+## MediaFusion
+
+Stremio/Kodi universal add-on with native Torznab API for Prowlarr. 5-container stack.
+
+### File Layout
+
+| Path                                      | Purpose                      |
+| ----------------------------------------- | ---------------------------- |
+| `/opt/mediafusion/docker-compose.yml`     | Compose file (5 services)    |
+| `/opt/mediafusion/pgdata/`               | PostgreSQL data              |
+| `/opt/mediafusion/redis/`                | Redis persistence            |
+| `/etc/nginx/apps/mediafusion.conf`       | Reverse proxy (subfolder)    |
+| `/etc/systemd/system/mediafusion.service`| Systemd wrapper              |
+| `/install/.mediafusion.lock`             | Swizzin lock file            |
+
+### Features
+
+- 5 containers: app, worker (Dramatiq), PostgreSQL, Redis, Browserless (headless Chrome)
+- Main container uses entrypoint sed to patch gunicorn bind port dynamically
+- `HOST_URL` env var set from Organizr domain detection chain
+- Comprehensive `sub_filter` rules for SPA JavaScript path rewriting
+- Custom Prowlarr Cardigann indexer definition deployed from `resources/prowlarr/mediafusion.yml`
+- Torznab and manifest endpoints bypass auth for Prowlarr/Stremio access
+
+---
+
+## Zilean
+
+DMM hashlist Torznab indexer. Indexes debrid-cached content from DebridMediaManager hashlists.
+
+### File Layout
+
+| Path                                  | Purpose                   |
+| ------------------------------------- | ------------------------- |
+| `/opt/zilean/docker-compose.yml`      | Compose file              |
+| `/opt/zilean/data/`                   | Config + IMDB title data  |
+| `/opt/zilean/pgdata/`                | PostgreSQL data           |
+| `/etc/nginx/apps/zilean.conf`        | Reverse proxy (subfolder) |
+| `/etc/systemd/system/zilean.service` | Systemd wrapper           |
+| `/install/.zilean.lock`              | Swizzin lock file         |
+
+### Features
+
+- 2 containers: app + PostgreSQL
+- Standard Torznab API compatible with Prowlarr Generic Torznab indexer
+- IMDB title data auto-downloaded on first run
+
+---
+
+## NzbDAV
+
+NZB-to-WebDAV bridge for using debrid services as download clients in arr apps.
+
+### File Layout
+
+| Path                                | Purpose                   |
+| ----------------------------------- | ------------------------- |
+| `/opt/nzbdav/docker-compose.yml`   | Compose file              |
+| `/opt/nzbdav/config/`             | SQLite DB + config        |
+| `/etc/nginx/apps/nzbdav.conf`     | Reverse proxy (subfolder) |
+| `/etc/systemd/system/nzbdav.service` | Systemd wrapper        |
+| `/install/.nzbdav.lock`           | Swizzin lock file         |
+
+### Features
+
+- Single container with SQLite database
+- React Router SSR frontend with `sub_filter` path rewriting
+- Bridges NZB protocol to WebDAV for debrid download clients
+
+---
+
 ## Common Docker Patterns
 
 ### Systemd Service Type

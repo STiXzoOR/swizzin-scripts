@@ -9,6 +9,9 @@ set -euo pipefail
 #shellcheck source=sources/functions/utils
 . /etc/swizzin/sources/functions/utils
 
+# shellcheck source=lib/utils.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/utils.sh" 2>/dev/null || true
+
 # shellcheck source=lib/nginx-utils.sh
 . "$(dirname "${BASH_SOURCE[0]}")/lib/nginx-utils.sh" 2>/dev/null || true
 
@@ -91,6 +94,44 @@ _ensure_base_panel_meta() {
 		PYTHON
         systemctl restart panel 2>/dev/null || true
         echo_progress_done
+    fi
+}
+
+# Deploy patched subtitle providers (survives Bazarr auto-updates)
+_deploy_provider_patches() {
+    local hook_script="/opt/swizzin-scripts/hooks/bazarr-apply-patches.sh"
+    local overlay_dir="/opt/swizzin-scripts/overlays/bazarr/providers"
+    local target_dir="/opt/bazarr/custom_libs/subliminal_patch/providers"
+
+    # Ensure overlay directory exists with provider fixes
+    if [[ ! -d "$overlay_dir" ]]; then
+        echo_info "No provider overlay directory found, skipping patches"
+        return 0
+    fi
+
+    # Make hook script executable
+    [[ -f "$hook_script" ]] && chmod +x "$hook_script"
+
+    # Add ExecStartPre to base service if not present
+    local base_service="/etc/systemd/system/${app_name}.service"
+    if [[ -f "$base_service" ]] && ! grep -q "bazarr-apply-patches" "$base_service" 2>/dev/null; then
+        sed -i "/\[Service\]/a ExecStartPre=+${hook_script}" "$base_service"
+    fi
+
+    # Add ExecStartPre to all instance services
+    for service_file in /etc/systemd/system/${app_name}-*.service; do
+        [[ -f "$service_file" ]] || continue
+        if ! grep -q "bazarr-apply-patches" "$service_file" 2>/dev/null; then
+            sed -i "/\[Service\]/a ExecStartPre=+${hook_script}" "$service_file"
+        fi
+    done
+
+    systemctl daemon-reload
+
+    # Apply patches immediately
+    if [[ -d "$target_dir" ]] && [[ -f "$hook_script" ]]; then
+        bash "$hook_script"
+        echo_info "Provider patches applied"
     fi
 }
 
@@ -230,6 +271,7 @@ _add_instance() {
 		UMask=0002
 		Type=simple
 		WorkingDirectory=/opt/bazarr
+		ExecStartPre=+/opt/swizzin-scripts/hooks/bazarr-apply-patches.sh
 		ExecStart=${app_python} ${app_script} --config ${config_dir}
 		Restart=on-failure
 		RestartSec=5
@@ -465,6 +507,9 @@ _ensure_base_installed() {
 
     # Ensure base app has panel meta override
     _ensure_base_panel_meta
+
+    # Deploy patched subtitle providers
+    _deploy_provider_patches
 }
 
 # Pre-flight checks
@@ -619,6 +664,9 @@ _migrate_all() {
     # Migrate instances
     _migrate_instances
 
+    # Deploy patched subtitle providers
+    _deploy_provider_patches
+
     echo ""
     echo_success "All migrations complete!"
 }
@@ -752,12 +800,15 @@ case "${1:-}" in
     "--migrate")
         _migrate_all
         ;;
+    "--patch-providers")
+        _deploy_provider_patches
+        ;;
     "")
         _ensure_base_installed
         _add_interactive
         ;;
     *)
-        echo "Usage: $0 [--add [name]|--remove [name] [--force]|--list|--register-panel|--migrate]"
+        echo "Usage: $0 [--add [name]|--remove [name] [--force]|--list|--register-panel|--migrate|--patch-providers]"
         echo ""
         echo "  (no args)              Install base if needed, then add instances"
         echo "  --add [name]           Add a new instance"
@@ -768,6 +819,7 @@ case "${1:-}" in
         echo "  --migrate              Run all migrations:"
         echo "                           - Move base data to ~/.config/bazarr/"
         echo "                           - Convert INI configs to YAML format"
+        echo "  --patch-providers      Re-apply Greek subtitle provider patches"
         exit 1
         ;;
 esac

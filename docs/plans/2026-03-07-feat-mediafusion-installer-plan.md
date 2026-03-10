@@ -1,7 +1,7 @@
 ---
 title: "feat: Add MediaFusion Docker installer"
 type: feat
-status: active
+status: completed
 date: 2026-03-07
 deepened: 2026-03-07
 origin: docs/brainstorms/2026-03-07-mediafusion-brainstorm.md
@@ -355,25 +355,25 @@ _configure_prowlarr_mediafusion() {
 
 ## Acceptance Criteria
 
-- [ ] `mediafusion.sh` installs all 5 containers via Docker Compose
-- [ ] Pre-install RAM check with warning if <4GB
-- [ ] Interactive debrid provider + API key prompt during install
-- [ ] All 5 containers healthy after install
-- [ ] `mediafusion.sh --update` pulls all images and recreates containers
-- [ ] `mediafusion.sh --remove` cleanly removes all 5 containers, images, volumes
-- [ ] Web UI accessible at `/mediafusion/` (no sub_filter needed with HOST_URL)
-- [ ] Torznab API accessible at `/mediafusion/torznab` without htpasswd auth
-- [ ] Prowlarr auto-configured as Generic Torznab (if installed)
-- [ ] Manual Prowlarr instructions displayed (always, including mediafusion.yaml advanced option)
-- [ ] Panel registration works
-- [ ] `swizzin-app-info` updated
-- [ ] SECRET_KEY exactly 32 chars, API_PASSWORD, DB password generated securely
-- [ ] Resource limits set on Browserless (1.5GB) and Dramatiq worker (1GB)
-- [ ] First-run messaging about scraper initialization delay
-- [ ] Idempotent: re-running preserves existing config and debrid credentials
-- [ ] Bind mounts at `/opt/mediafusion/` (not named volumes) for backup system compatibility
-- [ ] `network_mode: host` for app and worker containers (arr stack runs natively on host)
-- [ ] `cap_drop: ALL` on all containers
+- [x] `mediafusion.sh` installs all 5 containers via Docker Compose
+- [x] Pre-install RAM check with warning if <4GB
+- [x] Interactive debrid provider + API key prompt during install
+- [x] All 5 containers healthy after install
+- [x] `mediafusion.sh --update` pulls all images and recreates containers
+- [x] `mediafusion.sh --remove` cleanly removes all 5 containers, images, volumes
+- [x] Web UI accessible at `/mediafusion/` (no sub_filter needed with HOST_URL)
+- [x] Torznab API accessible at `/mediafusion/torznab` without htpasswd auth
+- [x] Prowlarr auto-configured as Generic Torznab (if installed)
+- [x] Manual Prowlarr instructions displayed (always, including mediafusion.yaml advanced option)
+- [x] Panel registration works
+- [x] `swizzin-app-info` updated
+- [x] SECRET_KEY exactly 32 chars, API_PASSWORD, DB password generated securely
+- [x] Resource limits set on Browserless (1.5GB) and Dramatiq worker (1GB)
+- [x] First-run messaging about scraper initialization delay
+- [x] Idempotent: re-running preserves existing config and debrid credentials
+- [x] Bind mounts at `/opt/mediafusion/` (not named volumes) for backup system compatibility
+- [x] `network_mode: host` for app and worker containers (arr stack runs natively on host)
+- [x] `cap_drop: ALL` on all containers
 
 ## Implementation Plan
 

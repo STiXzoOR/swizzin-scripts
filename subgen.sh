@@ -8,6 +8,9 @@
 #shellcheck source=sources/functions/utils
 . /etc/swizzin/sources/functions/utils
 
+# shellcheck source=lib/utils.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/utils.sh" 2>/dev/null || true
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PANEL_HELPER_CACHE="/opt/swizzin-extras/panel_helpers.sh"
 

@@ -28,7 +28,7 @@
 # STiXzoOR custom apps:
 #   Multi-instance sonarr/radarr, zurg, decypharr, notifiarr, byparr,
 #   flaresolverr, huntarr, subgen, lingarr, cleanuparr, seerr, overseerr, jellyseerr,
-#   mdblist-sync, mdblistarr
+#   mdblist-sync, mdblistarr, stremthru, mediafusion, zilean, nzbdav, newtarr
 #===============================================================================
 
 set -euo pipefail
@@ -171,6 +171,13 @@ declare -A SERVICE_TYPES=(
     # Real-Debrid
     ["zurg"]="system"
     ["rclone-zurg"]="system"
+
+    # Debrid Indexer Stack
+    ["stremthru"]="system"
+    ["mediafusion"]="system"
+    ["zilean"]="system"
+    ["nzbdav"]="system"
+    ["newtarr"]="system"
 )
 
 # Service name mappings (when systemd name differs from app name)
@@ -190,14 +197,14 @@ SERVICE_STOP_ORDER=(
     sonarr radarr lidarr prowlarr
     medusa mylar sickchill sickgear
     # Indexers/bypass
-    jackett nzbhydra byparr flaresolverr
+    jackett nzbhydra byparr flaresolverr stremthru mediafusion zilean nzbdav
     # Media servers
     emby jellyfin plex airsonic calibreweb mango navidrome
     # Download clients
     flood deluge deluged deluge-web qbittorrent rtorrent transmission
     nzbget sabnzbd
     # Utilities
-    filebrowser syncthing pyload netdata subgen lingarr libretranslate mdblistarr
+    filebrowser syncthing pyload netdata subgen lingarr libretranslate mdblistarr newtarr
     # Real-Debrid (stop last, start first)
     zurg decypharr
     # Never stop: rclone-zurg, organizr, nextcloud, nginx, panel
@@ -214,6 +221,8 @@ declare -A SERVICE_STOP_CRITICAL=(
     ["emby"]=1 ["jellyfin"]=1
     ["huntarr"]=1
     ["mdblistarr"]=1
+    ["stremthru"]=1
+    ["nzbdav"]=1
 )
 
 #===============================================================================

@@ -22,6 +22,11 @@ A collection of installer scripts for integrating additional applications into [
 | [subgen.sh](#subgen)                  | [Subgen](https://github.com/McCloudS/subgen)                 | Automatic subtitle generation using Whisper AI                   |
 | [zurg.sh](#zurg)                      | [Zurg](https://github.com/debridmediamanager/zurg-testing)   | Real-Debrid WebDAV server with rclone mount                      |
 | [lingarr.sh](#lingarr)                | [Lingarr](https://github.com/lingarr-translate/lingarr)      | Extended Lingarr installer with subdomain support (Docker-based) |
+| [stremthru.sh](#stremthru)            | [StremThru](https://github.com/MunifTanjim/stremthru)        | Debrid streaming proxy with store management                     |
+| [mediafusion.sh](#mediafusion)        | [MediaFusion](https://github.com/mhdzumair/MediaFusion)      | Stremio/Kodi add-on with Torznab API for Prowlarr               |
+| [zilean.sh](#zilean)                  | [Zilean](https://github.com/iPromKnight/zilean)              | DMM hashlist Torznab indexer for debrid content                  |
+| [nzbdav.sh](#nzbdav)                  | [NzbDav](https://github.com/nzbdav/nzbdav)                  | NZB-to-WebDAV bridge for debrid download clients                 |
+| [newtarr.sh](#newtarr)               | [Newtarr](https://github.com/plexguide/Newtarr)             | Media library search tool (ElfHosted Huntarr fork)               |
 | [dns-fix.sh](#dns-fix)                | -                                                            | Fix DNS issues for FlareSolverr/Byparr cookie validation         |
 | [watchdog/](#service-watchdog)        | -                                                            | Service watchdog with health checks and auto-restart             |
 | [backup/](#backup-system)             | -                                                            | BorgBackup-based backup system for any SSH borg server           |
