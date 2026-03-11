@@ -298,6 +298,8 @@ opt/stremthru/docker-compose.yml
 # === MEDIAFUSION ===
 # Keep pgdata and redis dirs, exclude docker-compose (recreated by installer)
 opt/mediafusion/docker-compose.yml
+# Redis AOF incremental files change constantly during backup (causes rc 1 warning)
+opt/mediafusion/redis/appendonlydir/appendonly.aof.*.incr.aof
 
 # === ZILEAN ===
 # Keep pgdata and data dirs, exclude docker-compose (recreated by installer)
@@ -319,6 +321,8 @@ opt/newtarr/frontend/node_modules/**
 # === ORGANIZR ===
 srv/organizr/api/logs
 srv/organizr/api/logs/**
+srv/organizr_db/logs
+srv/organizr_db/logs/**
 var/log/organizr
 var/log/organizr/**
 
