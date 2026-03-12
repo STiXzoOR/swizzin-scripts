@@ -97,7 +97,7 @@ app_mount_servicefile="rclone-nzbdav.service"
 app_icon_name="${app_name}"
 app_icon_url="https://cdn.jsdelivr.net/gh/selfhst/icons@main/png/nzb-dav.png"
 app_default_mount="/mnt/nzbdav"
-app_reqs=("curl" "fuse3")
+app_reqs=("curl" "fuse3" "sqlite3")
 
 # ==============================================================================
 # User/Owner Setup
@@ -236,6 +236,40 @@ _get_mount_point() {
 }
 
 # ==============================================================================
+# NZBDav Health Check & Internal API
+# ==============================================================================
+_wait_for_health() {
+    local max_wait="${1:-60}"
+    local interval=2
+    local elapsed=0
+    while (( elapsed < max_wait )); do
+        if curl -sf "http://127.0.0.1:${app_port}/health" >/dev/null 2>&1; then
+            return 0
+        fi
+        sleep "$interval"
+        (( elapsed += interval )) || true
+    done
+    return 1
+}
+
+# POST config updates to NZBDav's internal API
+# Usage: _nzbdav_api_post "config.key" "value" ["key2" "value2" ...]
+_nzbdav_api_post() {
+    local api_key
+    api_key=$(docker exec nzbdav printenv FRONTEND_BACKEND_API_KEY 2>/dev/null) || return 1
+
+    local form_args=()
+    while [[ $# -gt 0 ]]; do
+        form_args+=(-F "configName=$1" -F "configValue=$2")
+        shift 2
+    done
+
+    curl -sf -X POST "http://127.0.0.1:${app_port}/api/update-config" \
+        -H "x-api-key: ${api_key}" \
+        "${form_args[@]}" >/dev/null 2>&1
+}
+
+# ==============================================================================
 # Docker Compose / Container
 # ==============================================================================
 _install_nzbdav() {
@@ -257,18 +291,16 @@ services:
     image: ${app_image}
     container_name: nzbdav
     restart: unless-stopped
-    ports:
-      - "127.0.0.1:${app_port}:3000"
+    network_mode: host
     environment:
       - PUID=${uid}
       - PGID=${gid}
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - PORT=${app_port}
     volumes:
       - ${app_configdir}:/config
       - /mnt:/mnt:rslave
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:${app_port}/health"]
       interval: 1m
       timeout: 5s
       retries: 3
@@ -524,7 +556,7 @@ _nginx_nzbdav() {
 }
 
 # ==============================================================================
-# rclone Setup (deferred — requires NZBDav web UI configuration first)
+# rclone Setup (auto-configures WebDAV credentials via internal API)
 # ==============================================================================
 _setup_rclone() {
     echo_info "Setting up rclone WebDAV mount for ${app_pretty}..."
@@ -533,27 +565,44 @@ _setup_rclone() {
     _get_mount_point
     swizdb set "${app_name}/mount_point" "$app_mount_point"
 
-    # Prompt for WebDAV password
-    echo_query "Enter NZBDav WebDAV password (configured in the web UI)" ""
-    read -rs webdav_pass </dev/tty
-    echo ""
+    local webdav_pass="" api_setup=false
 
-    if [[ -z "$webdav_pass" ]]; then
-        echo_error "WebDAV password cannot be empty"
-        exit 1
+    # Try automated setup via internal API
+    if _wait_for_health 60; then
+        webdav_pass=$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 24)
+
+        if _nzbdav_api_post "webdav.user" "admin" "webdav.pass" "${webdav_pass}"; then
+            api_setup=true
+            echo_info "WebDAV credentials configured automatically"
+
+            # Tell NZBDav where the rclone mount lives (Phase 3)
+            _nzbdav_api_post "rclone.mount-dir" "${app_mount_point}" || true
+        fi
+    fi
+
+    # Fallback: manual prompt (re-run path or API failure)
+    if [[ "$api_setup" == "false" ]]; then
+        echo_warn "Automatic WebDAV setup unavailable — falling back to manual configuration."
+        echo_query "Enter NZBDav WebDAV password (configured in the web UI)" ""
+        read -rs webdav_pass </dev/tty
+        echo ""
+
+        if [[ -z "$webdav_pass" ]]; then
+            echo_error "WebDAV password cannot be empty"
+            exit 1
+        fi
     fi
 
     # Obscure the password for rclone config
-    echo_progress_start "Obscuring WebDAV password"
+    echo_progress_start "Configuring rclone"
     local obscured
     obscured=$(echo "$webdav_pass" | rclone obscure -) || {
         echo_error "Failed to obscure password"
         exit 1
     }
-    echo_progress_done "Password obscured"
+    unset webdav_pass
 
     # Write rclone.conf with restricted permissions
-    echo_progress_start "Writing rclone configuration"
     (
         umask 077
         cat >"${app_dir}/rclone.conf" <<RCLONE
@@ -566,7 +615,7 @@ pass = ${obscured}
 RCLONE
     )
     chown "${user}:${user}" "${app_dir}/rclone.conf"
-    echo_progress_done "rclone configuration written"
+    echo_progress_done "rclone configured"
 
     # Create mount point
     if [[ ! -d "$app_mount_point" ]]; then
@@ -582,10 +631,7 @@ RCLONE
     systemctl enable --now -q "${app_mount_servicefile}"
     echo_progress_done "rclone mount started"
 
-    echo ""
-    echo_success "rclone WebDAV mount configured and started"
-    echo_info "Mount point: $app_mount_point"
-    echo_info "rclone config: ${app_dir}/rclone.conf"
+    echo_success "rclone WebDAV mount configured at ${app_mount_point}"
 }
 
 # ==============================================================================
@@ -594,58 +640,29 @@ RCLONE
 _post_install_message() {
     echo ""
     echo_info "============================================"
-    echo_info " ${app_pretty} First-Run Setup"
+    echo_info " ${app_pretty} Installation Complete"
     echo_info "============================================"
     echo ""
-    echo_info "1. Open the NZBDav web UI at: https://your-server/${app_baseurl}/"
-    echo_info "2. Configure your Usenet provider and WebDAV password"
-    echo_info "3. Re-run this script to set up the rclone mount:"
-    echo_info "     bash ${SCRIPT_DIR}/${app_name}.sh"
-    echo ""
-    echo_info "The rclone mount service has been created but NOT enabled."
-    echo_info "It will be enabled when you re-run after configuring the web UI."
-    echo ""
 
-    # Detect SABnzbd port from its config
-    local sab_port=""
-    local sab_ini="/opt/sabnzbd/sabnzbd.ini"
-    if [[ -f "$sab_ini" ]]; then
-        sab_port=$(grep -oP '^port\s*=\s*\K\d+' "$sab_ini" 2>/dev/null | head -1) || true
-    fi
-    echo_info "SABnzbd API URL (from inside Docker):"
-    echo_info "  http://host.docker.internal:${sab_port:-<port>}/sabnzbd/api"
-
-    # Detect Sonarr/Radarr ports from their XML configs
-    local arr_examples=()
-    local sonarr_config radarr_config arr_port
-    for sonarr_config in /home/*/.config/Sonarr/config.xml /home/*/.config/sonarr/config.xml; do
-        if [[ -f "$sonarr_config" ]]; then
-            arr_port=$(grep -oP '<Port>\K[^<]+' "$sonarr_config" 2>/dev/null | head -1) || true
-            if [[ -n "$arr_port" ]]; then
-                arr_examples+=("Sonarr:  http://host.docker.internal:${arr_port}")
-            fi
-            break
-        fi
-    done
-    for radarr_config in /home/*/.config/Radarr/config.xml /home/*/.config/radarr/config.xml; do
-        if [[ -f "$radarr_config" ]]; then
-            arr_port=$(grep -oP '<Port>\K[^<]+' "$radarr_config" 2>/dev/null | head -1) || true
-            if [[ -n "$arr_port" ]]; then
-                arr_examples+=("Radarr:  http://host.docker.internal:${arr_port}")
-            fi
-            break
-        fi
-    done
-
-    echo ""
-    echo_info "Arr connections (from inside Docker):"
-    if [[ ${#arr_examples[@]} -gt 0 ]]; then
-        for example in "${arr_examples[@]}"; do
-            echo_info "  ${example}"
-        done
+    if [[ -f "${app_dir}/rclone.conf" ]]; then
+        echo_info "Auto-configured:"
+        echo_info "  WebDAV credentials (admin / random password)"
+        echo_info "  rclone mount at ${app_mount_point}"
+        echo_info "  rclone config at ${app_dir}/rclone.conf"
     else
-        echo_info "  http://host.docker.internal:<arr_port>"
+        echo_info "rclone mount not yet configured."
+        echo_info "Re-run: bash ${SCRIPT_DIR}/${app_name}.sh"
     fi
+
+    echo ""
+    echo_warn "REMAINING SETUP (web UI required):"
+    echo_info "  1. Open: https://your-server/${app_baseurl}/"
+    echo_info "  2. Configure your Usenet provider in Settings > Usenet"
+    echo_info "  3. Review SABnzbd settings in Settings > SABnzbd"
+    echo ""
+    echo_info "SABnzbd API: http://127.0.0.1:${app_port}/api"
+    echo_info "API Key: check NZBDav Settings > SABnzbd after first-run setup"
+    echo_info "Arr connections use: http://127.0.0.1:<arr_port>"
     echo ""
 }
 
@@ -662,20 +679,26 @@ _install_fresh() {
     echo_info "Setting ${app_pretty} owner = ${user}"
     swizdb set "${app_name}/owner" "$user"
 
-    # Get mount point for later rclone setup
-    _get_mount_point
-    swizdb set "${app_name}/mount_point" "$app_mount_point"
-
     _install_docker
     _install_rclone
     _configure_fuse
     _install_nzbdav
     _systemd_nzbdav
-
-    # Create rclone mount systemd service (but do NOT enable — deferred setup)
-    _systemd_rclone_nzbdav
-
     _nginx_nzbdav
+
+    # Mark v0.6.0 migration as complete (fresh installs don't need it)
+    touch "${app_configdir}/.v060-migrated"
+
+    # Wait for container health before auto-configuration
+    echo_progress_start "Waiting for ${app_pretty} to be ready"
+    if _wait_for_health 60; then
+        echo_progress_done "${app_pretty} is ready"
+    else
+        echo_warn "${app_pretty} health check timed out"
+    fi
+
+    # Auto-configure WebDAV credentials + rclone mount
+    _setup_rclone
 
     # Panel registration
     _load_panel_helper
@@ -710,6 +733,11 @@ _update_nzbdav() {
 
     echo_info "Updating ${app_pretty}..."
 
+    # Back up config before update
+    local backup_dir="${app_configdir}.bak.$(date +%Y%m%d%H%M%S)"
+    cp -a "${app_configdir}" "$backup_dir" 2>/dev/null && \
+        echo_info "Config backed up to ${backup_dir}" || true
+
     # Save rclone mount state before update
     local rclone_was_active
     rclone_was_active=$(systemctl is-active "${app_mount_servicefile}" 2>/dev/null) || rclone_was_active="inactive"
@@ -721,6 +749,46 @@ _update_nzbdav() {
         echo_progress_done "rclone mount stopped"
     fi
 
+    # Regenerate compose file (picks up host networking/PORT changes from installer updates)
+    local uid gid
+    uid=$(id -u "$user")
+    gid=$(id -g "$user")
+
+    echo_progress_start "Updating Docker Compose configuration"
+    cat >"${app_dir}/docker-compose.yml" <<COMPOSE
+services:
+  nzbdav:
+    image: ${app_image}
+    container_name: nzbdav
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      - PUID=${uid}
+      - PGID=${gid}
+      - PORT=${app_port}
+    volumes:
+      - ${app_configdir}:/config
+      - /mnt:/mnt:rslave
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${app_port}/health"]
+      interval: 1m
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
+COMPOSE
+    chmod 600 "${app_dir}/docker-compose.yml"
+    chown root:root "${app_dir}/docker-compose.yml"
+    echo_progress_done "Docker Compose configuration updated"
+
     echo_progress_start "Pulling latest ${app_pretty} image"
     _verbose "Running: docker compose -f ${app_dir}/docker-compose.yml pull"
     docker compose -f "${app_dir}/docker-compose.yml" pull >>"$log" 2>&1 || {
@@ -728,6 +796,24 @@ _update_nzbdav() {
         exit 1
     }
     echo_progress_done "Latest image pulled"
+
+    # Handle v0.6.0 migration (one-time, irreversible DB migration)
+    if [[ ! -f "${app_configdir}/.v060-migrated" ]]; then
+        echo_warn "Applying v0.6.0 database migration (one-time, irreversible)..."
+        # Temporarily add UPGRADE env var
+        sed -i '/- PGID=/a\      - UPGRADE=0.6.0' "${app_dir}/docker-compose.yml"
+
+        docker compose -f "${app_dir}/docker-compose.yml" up -d >>"$log" 2>&1 || {
+            echo_error "Failed to start v0.6.0 migration"
+            exit 1
+        }
+        _wait_for_health 120 || echo_warn "Health check timed out during migration"
+
+        # Remove UPGRADE env var and recreate cleanly
+        sed -i '/- UPGRADE=0.6.0/d' "${app_dir}/docker-compose.yml"
+        touch "${app_configdir}/.v060-migrated"
+        echo_info "v0.6.0 migration complete"
+    fi
 
     echo_progress_start "Recreating ${app_pretty} container"
     _verbose "Running: docker compose up -d"
