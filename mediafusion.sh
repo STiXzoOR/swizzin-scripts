@@ -225,8 +225,12 @@ _install_mediafusion() {
     swizdb set "${app_name}/redis_port" "$redis_port"
     swizdb set "${app_name}/browser_port" "$browser_port"
 
-    # Auto-detect Prowlarr/Jackett for feed scraper integration
-    local prowlarr_env="" jackett_env=""
+    # ==========================================================================
+    # Auto-detect local services (Prowlarr, Jackett, Zilean)
+    # ==========================================================================
+    local prowlarr_env="" jackett_env="" zilean_env=""
+    local detected_prowlarr=false detected_jackett=false detected_zilean=false
+
     if [[ -f /install/.prowlarr.lock ]]; then
         local pr_port pr_apikey pr_baseurl
         for cfg in /home/*/.config/Prowlarr/config.xml; do
@@ -239,9 +243,11 @@ _install_mediafusion() {
         if [[ -n "$pr_port" && -n "$pr_apikey" ]]; then
             prowlarr_env="      PROWLARR_URL: \"http://127.0.0.1:${pr_port}${pr_baseurl:-}\"
       PROWLARR_API_KEY: \"${pr_apikey}\""
-            echo_info "Detected Prowlarr — feed scraper integration enabled"
+            detected_prowlarr=true
+            echo_info "Detected Prowlarr on port ${pr_port}"
         fi
     fi
+
     if [[ -f /install/.jackett.lock ]]; then
         local jk_port jk_apikey jk_baseurl
         for cfg in /home/*/.config/Jackett/ServerConfig.json; do
@@ -254,9 +260,145 @@ _install_mediafusion() {
         if [[ -n "$jk_port" && -n "$jk_apikey" ]]; then
             jackett_env="      JACKETT_URL: \"http://127.0.0.1:${jk_port}${jk_baseurl:-}\"
       JACKETT_API_KEY: \"${jk_apikey}\""
-            echo_info "Detected Jackett — feed scraper integration enabled"
+            detected_jackett=true
+            echo_info "Detected Jackett on port ${jk_port}"
         fi
     fi
+
+    if [[ -f /install/.zilean.lock ]]; then
+        local zl_port
+        zl_port=$(swizdb get "zilean/port" 2>/dev/null) || true
+        if [[ -z "$zl_port" ]]; then
+            # Fallback: parse healthcheck URL which contains the actual app port
+            zl_port=$(grep -oP 'http://127\.0\.0\.1:\K\d+' /opt/zilean/docker-compose.yml 2>/dev/null | head -1)
+        fi
+        if [[ -n "$zl_port" ]]; then
+            zilean_env="      zilean_url: \"http://127.0.0.1:${zl_port}\""
+            detected_zilean=true
+            echo_info "Detected Zilean on port ${zl_port}"
+        fi
+    fi
+
+    # ==========================================================================
+    # Interactive: Scraper/Indexer Selection
+    # ==========================================================================
+    # Env var override for unattended install: MEDIAFUSION_SCRAPERS="prowlarr,zilean,yts,bt4g"
+    local scrap_prowlarr="False" scrap_jackett="False" scrap_zilean="False"
+    local scrap_torrentio="False" scrap_yts="True" scrap_bt4g="True"
+
+    if [[ -n "${MEDIAFUSION_SCRAPERS:-}" ]]; then
+        # Unattended: parse comma-separated list
+        scrap_yts="False"; scrap_bt4g="False"
+        IFS=',' read -ra _scrapers <<< "$MEDIAFUSION_SCRAPERS"
+        for s in "${_scrapers[@]}"; do
+            case "${s,,}" in
+                prowlarr)  scrap_prowlarr="True" ;;
+                jackett)   scrap_jackett="True" ;;
+                zilean)    scrap_zilean="True" ;;
+                torrentio) scrap_torrentio="True" ;;
+                yts)       scrap_yts="True" ;;
+                bt4g)      scrap_bt4g="True" ;;
+            esac
+        done
+    else
+        echo ""
+        echo_info "Configure scrapers/indexers for MediaFusion"
+        echo_info "Detected services are pre-selected. Press Enter to accept defaults."
+        echo ""
+
+        # Auto-enable detected local services by default
+        if [[ "$detected_prowlarr" == "true" ]]; then
+            if ask "Enable Prowlarr scraper? (detected locally)" Y; then
+                scrap_prowlarr="True"
+            fi
+        else
+            if ask "Enable Prowlarr scraper?" N; then
+                scrap_prowlarr="True"
+            fi
+        fi
+
+        if [[ "$detected_jackett" == "true" ]]; then
+            if ask "Enable Jackett scraper? (detected locally)" Y; then
+                scrap_jackett="True"
+            fi
+        else
+            if ask "Enable Jackett scraper?" N; then
+                scrap_jackett="True"
+            fi
+        fi
+
+        if [[ "$detected_zilean" == "true" ]]; then
+            if ask "Enable Zilean scraper? (detected locally)" Y; then
+                scrap_zilean="True"
+            fi
+        else
+            if ask "Enable Zilean scraper?" N; then
+                scrap_zilean="True"
+            fi
+        fi
+
+        if ask "Enable Torrentio scraper? (external, public tracker)" N; then
+            scrap_torrentio="True"
+        fi
+
+        if ask "Enable YTS scraper?" Y; then
+            scrap_yts="True"
+        else
+            scrap_yts="False"
+        fi
+
+        if ask "Enable BT4G scraper?" Y; then
+            scrap_bt4g="True"
+        else
+            scrap_bt4g="False"
+        fi
+    fi
+
+    # ==========================================================================
+    # Interactive: Streaming Provider Selection
+    # ==========================================================================
+    # All providers enabled by default; user can disable ones they don't use.
+    # Env var override: MEDIAFUSION_DISABLED_PROVIDERS="p2p,pikpak"
+    local disabled_providers_env=""
+
+    if [[ -n "${MEDIAFUSION_DISABLED_PROVIDERS:-}" ]]; then
+        disabled_providers_env="      disabled_providers: \"[${MEDIAFUSION_DISABLED_PROVIDERS}]\""
+    else
+        echo ""
+        echo_info "Configure streaming providers (debrid services)"
+        echo_info "All providers are enabled by default. Disable any you don't use."
+        echo ""
+
+        local _disabled=()
+        if ! ask "Enable Real-Debrid?" Y; then _disabled+=("realdebrid"); fi
+        if ! ask "Enable AllDebrid?" Y; then _disabled+=("alldebrid"); fi
+        if ! ask "Enable Premiumize?" Y; then _disabled+=("premiumize"); fi
+        if ! ask "Enable Debrid-Link?" Y; then _disabled+=("debridlink"); fi
+        if ! ask "Enable TorBox?" Y; then _disabled+=("torbox"); fi
+        if ! ask "Enable PikPak?" N; then _disabled+=("pikpak"); fi
+        if ! ask "Enable P2P (direct torrents)?" N; then _disabled+=("p2p"); fi
+
+        if [[ ${#_disabled[@]} -gt 0 ]]; then
+            local _joined
+            _joined=$(printf ',"%s"' "${_disabled[@]}")
+            _joined="[${_joined:1}]"
+            disabled_providers_env="      disabled_providers: '${_joined}'"
+        fi
+    fi
+
+    # Build scraper env block
+    local scraper_env=""
+    scraper_env+="      is_scrap_from_prowlarr: \"${scrap_prowlarr}\"
+"
+    scraper_env+="      is_scrap_from_jackett: \"${scrap_jackett}\"
+"
+    scraper_env+="      is_scrap_from_zilean: \"${scrap_zilean}\"
+"
+    scraper_env+="      is_scrap_from_torrentio: \"${scrap_torrentio}\"
+"
+    scraper_env+="      is_scrap_from_yts: \"${scrap_yts}\"
+"
+    scraper_env+="      is_scrap_from_bt4g: \"${scrap_bt4g}\""
 
     echo_progress_start "Generating Docker Compose configuration"
 
@@ -282,6 +424,9 @@ services:
       PLAYWRIGHT_CDP_URL: "ws://127.0.0.1:${browser_port}?blockAds=true&stealth=true"
 ${prowlarr_env:+${prowlarr_env}
 }${jackett_env:+${jackett_env}
+}${zilean_env:+${zilean_env}
+}${scraper_env}
+${disabled_providers_env:+${disabled_providers_env}
 }      CONTACT_EMAIL: "admin@localhost"
     depends_on:
       mediafusion-postgres:
@@ -309,6 +454,9 @@ ${prowlarr_env:+${prowlarr_env}
       PLAYWRIGHT_CDP_URL: "ws://127.0.0.1:${browser_port}?blockAds=true&stealth=true"
 ${prowlarr_env:+${prowlarr_env}
 }${jackett_env:+${jackett_env}
+}${zilean_env:+${zilean_env}
+}${scraper_env}
+${disabled_providers_env:+${disabled_providers_env}
 }      CONTACT_EMAIL: "admin@localhost"
     depends_on:
       - mediafusion
@@ -569,6 +717,18 @@ _post_install_info() {
     echo_info "Web UI: https://your-server/mediafusion/"
     echo_info "API Password: ${_mediafusion_api_password:-<see compose file>}"
     echo_info "Torznab URL: http://127.0.0.1:${app_port}/torznab"
+
+    # Show enabled scrapers summary
+    local _enabled_scrapers=()
+    grep -q 'is_scrap_from_prowlarr: "True"' "${app_dir}/docker-compose.yml" 2>/dev/null && _enabled_scrapers+=("Prowlarr")
+    grep -q 'is_scrap_from_jackett: "True"' "${app_dir}/docker-compose.yml" 2>/dev/null && _enabled_scrapers+=("Jackett")
+    grep -q 'is_scrap_from_zilean: "True"' "${app_dir}/docker-compose.yml" 2>/dev/null && _enabled_scrapers+=("Zilean")
+    grep -q 'is_scrap_from_torrentio: "True"' "${app_dir}/docker-compose.yml" 2>/dev/null && _enabled_scrapers+=("Torrentio")
+    grep -q 'is_scrap_from_yts: "True"' "${app_dir}/docker-compose.yml" 2>/dev/null && _enabled_scrapers+=("YTS")
+    grep -q 'is_scrap_from_bt4g: "True"' "${app_dir}/docker-compose.yml" 2>/dev/null && _enabled_scrapers+=("BT4G")
+    if [[ ${#_enabled_scrapers[@]} -gt 0 ]]; then
+        echo_info "Enabled scrapers: ${_enabled_scrapers[*]}"
+    fi
     echo ""
     echo_info "To manually trigger scrapers, visit the web UI scraper control page"
     echo ""
