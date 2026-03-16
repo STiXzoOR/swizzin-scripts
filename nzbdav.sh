@@ -346,6 +346,7 @@ _systemd_nzbdav() {
 Description=${app_pretty} (WebDAV server for Usenet streaming)
 Requires=docker.service
 After=docker.service
+Wants=${app_mount_servicefile}
 
 [Service]
 Type=oneshot
