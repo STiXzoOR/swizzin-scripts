@@ -378,7 +378,7 @@ _systemd_rclone_nzbdav() {
 [Unit]
 Description=rclone NZBDav WebDAV mount
 After=nzbdav.service
-Requires=nzbdav.service
+BindsTo=nzbdav.service
 
 [Service]
 Type=notify
@@ -500,8 +500,12 @@ _nginx_nzbdav() {
 			    sub_filter 'from "/' 'from "/${app_baseurl}/';
 			    sub_filter 'import("/' 'import("/${app_baseurl}/';
 
-			    # Asset paths in JSON manifests
+			    # Asset and API paths in JSON manifests / bundled JS
 			    sub_filter '"/assets/' '"/${app_baseurl}/assets/';
+			    sub_filter '"/api/' '"/${app_baseurl}/api/';
+			    sub_filter '"/settings/' '"/${app_baseurl}/settings/';
+			    sub_filter '"/data/' '"/${app_baseurl}/data/';
+			    sub_filter '"/explore/' '"/${app_baseurl}/explore/';
 
 			    # WebSocket URL (connects to origin root without this)
 			    sub_filter '.origin.replace(/^http/,"ws")' '.origin.replace(/^http/,"ws")+"/${app_baseurl}/"';

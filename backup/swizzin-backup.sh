@@ -177,6 +177,7 @@ declare -A SERVICE_TYPES=(
     ["mediafusion"]="system"
     ["zilean"]="system"
     ["nzbdav"]="system"
+    ["rclone-nzbdav"]="system"
     ["newtarr"]="system"
 )
 
@@ -197,7 +198,7 @@ SERVICE_STOP_ORDER=(
     sonarr radarr lidarr prowlarr
     medusa mylar sickchill sickgear
     # Indexers/bypass
-    jackett nzbhydra byparr flaresolverr stremthru mediafusion zilean nzbdav
+    jackett nzbhydra byparr flaresolverr stremthru mediafusion zilean rclone-nzbdav nzbdav
     # Media servers
     emby jellyfin plex airsonic calibreweb mango navidrome
     # Download clients
@@ -223,6 +224,7 @@ declare -A SERVICE_STOP_CRITICAL=(
     ["mdblistarr"]=1
     ["stremthru"]=1
     ["nzbdav"]=1
+    ["rclone-nzbdav"]=1
 )
 
 #===============================================================================
