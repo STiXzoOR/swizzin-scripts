@@ -928,6 +928,11 @@ case "${1:-}" in
         cmd_check
         ;;
     --verify)
+        exec 200>"$LOCKFILE"
+        flock -n 200 || {
+            log "ERROR: Another backup/verify running"
+            exit 1
+        }
         cmd_verify
         ;;
     --services)

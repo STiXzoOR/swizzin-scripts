@@ -1,6 +1,6 @@
 [Unit]
 Description=Borg backup data verification
-After=network-online.target
+After=network-online.target swizzin-backup.service
 Wants=network-online.target
 
 [Service]
