@@ -52,6 +52,8 @@ DEFAULTS = {
     "MIN_LIKES": "20",
     # Discovery: minimum items in a list
     "MIN_ITEMS": "5",
+    # Discovery: minimum likes for anime lists (lower bar, default: MIN_LIKES / 4)
+    "MIN_LIKES_ANIME": "5",
     # Maximum number of lists to manage per app type (movie/show)
     "MAX_LISTS_MOVIES": "20",
     "MAX_LISTS_SHOWS": "20",
@@ -660,11 +662,12 @@ def discover_lists(mdb: MDBListAPI, config: Dict[str, str], has_anime_instance: 
         is_pinned = lst.get("_pinned", False)
         anime = is_anime_list(lst)
 
-        # Anime show lists bypass likes threshold when an anime instance exists
-        # (anime lists on MDBList tend to have very few likes)
+        # Anime show lists use a lower likes threshold when an anime instance exists
+        # (anime lists on MDBList tend to have fewer likes than mainstream lists)
+        min_likes_anime = int(config.get("MIN_LIKES_ANIME", max(1, min_likes // 4)))
         if not is_pinned:
             if anime and has_anime_instance:
-                if items < min_items:
+                if likes < min_likes_anime or items < min_items:
                     continue
             elif likes < min_likes or items < min_items:
                 continue

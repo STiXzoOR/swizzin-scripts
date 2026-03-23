@@ -109,7 +109,7 @@ _rotate_log() {
 		local size
 		size=$(stat -c%s "$LOG_FILE" 2>/dev/null || stat -f%z "$LOG_FILE" 2>/dev/null || echo 0)
 		if [[ "$size" -gt "$LOG_MAX_SIZE" ]]; then
-			mv "$LOG_FILE" "${LOG_FILE}.1"
+			mv "$LOG_FILE" "${LOG_FILE}.1" 2>/dev/null || truncate -s 0 "$LOG_FILE" 2>/dev/null || true
 		fi
 	fi
 }
