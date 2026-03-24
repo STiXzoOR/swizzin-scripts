@@ -274,7 +274,7 @@ _install_rclone() {
 # Prompt for mount point or use default/env
 _get_mount_point() {
     # Skip if already set (e.g., from migration)
-    if [ -n "$app_mount_point" ]; then
+    if [ -n "${app_mount_point:-}" ]; then
         echo_info "Using mount point: $app_mount_point"
         return
     fi
@@ -1383,6 +1383,7 @@ for arg in "$@"; do
     case "$arg" in
         --verbose) verbose=true ;;
         --latest) ZURG_USE_LATEST_TAG="true" ;;
+        --upgrade) set -- "--update" "${@:2}" ;;
     esac
 done
 
