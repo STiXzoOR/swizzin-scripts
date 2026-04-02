@@ -541,3 +541,98 @@ COMPOSE
 
 	echo_progress_done "Docker Compose configuration generated"
 }
+
+# ==============================================================================
+# Systemd Service
+# ==============================================================================
+_systemd_autopulse() {
+	echo_progress_start "Installing systemd service"
+
+	cat >"/etc/systemd/system/${app_servicefile}" <<EOF
+[Unit]
+Description=${app_pretty} (Media Server Library Notifier)
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+Restart=on-failure
+RestartSec=10
+WorkingDirectory=${app_dir}
+ExecStart=/usr/bin/docker compose up -d
+ExecStop=/usr/bin/docker compose down
+TimeoutStartSec=120
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+	_systemd_unit_written="$app_servicefile"
+	systemctl -q daemon-reload
+	systemctl enable -q "$app_servicefile"
+	echo_progress_done "Systemd service installed and enabled"
+}
+
+# ==============================================================================
+# Nginx Reverse Proxy
+# ==============================================================================
+_nginx_autopulse() {
+	if [[ -f /install/.nginx.lock ]]; then
+		echo_progress_start "Configuring nginx"
+
+		cat >"/etc/nginx/apps/${app_name}.conf" <<-NGX
+			location /${app_baseurl} {
+			    return 301 /${app_baseurl}/;
+			}
+
+			location ^~ /${app_baseurl}/ {
+			    proxy_pass http://127.0.0.1:${app_ui_port}/${app_baseurl}/;
+			    proxy_set_header Host \$host;
+			    proxy_set_header X-Real-IP \$remote_addr;
+			    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+			    proxy_set_header X-Forwarded-Host \$host;
+			    proxy_set_header X-Forwarded-Proto \$scheme;
+			    proxy_http_version 1.1;
+			    proxy_set_header Upgrade \$http_upgrade;
+			    proxy_set_header Connection \$http_connection;
+
+			    auth_basic "What's the password?";
+			    auth_basic_user_file /etc/htpasswd.d/htpasswd.${user};
+			}
+
+			location ^~ /${app_baseurl}/triggers/ {
+			    auth_request off;
+			    proxy_pass http://127.0.0.1:${app_port}/triggers/;
+			    proxy_set_header Host \$host;
+			    proxy_set_header X-Real-IP \$remote_addr;
+			    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+			    proxy_set_header X-Forwarded-Proto \$scheme;
+			}
+		NGX
+
+		_nginx_config_written="/etc/nginx/apps/${app_name}.conf"
+		_reload_nginx
+		echo_progress_done "Nginx configured"
+	else
+		echo_info "${app_pretty} API running on port ${app_port}, UI on port ${app_ui_port}"
+	fi
+}
+
+# ==============================================================================
+# Panel Registration
+# ==============================================================================
+_panel_autopulse() {
+	_load_panel_helper
+	if command -v panel_register_app >/dev/null 2>&1; then
+		panel_register_app \
+			"$app_name" \
+			"$app_pretty" \
+			"/${app_baseurl}" \
+			"" \
+			"$app_name" \
+			"$app_icon_name" \
+			"$app_icon_url" \
+			"true"
+	fi
+}
