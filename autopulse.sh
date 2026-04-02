@@ -268,3 +268,136 @@ _discover_arrs() {
 		echo_progress_done "Found ${#ARR_NAMES[@]} arr instance(s): ${ARR_NAMES[*]}"
 	fi
 }
+
+# ==============================================================================
+# Media Server Auto-Discovery
+# ==============================================================================
+
+# Parallel arrays populated by _discover_media_servers
+MS_NAMES=()
+MS_TYPES=()    # "emby" or "jellyfin" or "plex"
+MS_URLS=()
+MS_TOKENS=()
+
+_discover_media_servers() {
+	echo_progress_start "Discovering media servers"
+
+	# --- Emby ---
+	if [[ -f /install/.emby.lock ]]; then
+		local emby_port="8096"
+		local emby_token=""
+
+		# Try to find existing API key from Emby
+		if [[ -f /var/lib/emby/config/system.xml ]]; then
+			# Check if there's an existing Autopulse API key we created before
+			emby_token=$(swizdb get "${app_name}/emby_token" 2>/dev/null) || true
+		fi
+
+		# If no stored token, create one via Emby API
+		if [[ -z "$emby_token" ]]; then
+			_verbose "Creating Emby API key for Autopulse"
+			local create_response
+			create_response=$(curl -s -X POST \
+				"http://127.0.0.1:${emby_port}/emby/Auth/Keys" \
+				-H "Content-Type: application/x-www-form-urlencoded" \
+				-d "App=Autopulse" 2>/dev/null) || true
+
+			# Read back the keys to find ours
+			local keys_json
+			keys_json=$(curl -s "http://127.0.0.1:${emby_port}/emby/Auth/Keys" 2>/dev/null) || true
+			if [[ -n "$keys_json" ]]; then
+				emby_token=$(echo "$keys_json" | jq -r '.Items[]? | select(.AppName == "Autopulse") | .AccessToken' 2>/dev/null | head -1) || true
+			fi
+
+			if [[ -z "$emby_token" ]]; then
+				echo_warn "Could not auto-create Emby API key. You may need to create one manually."
+				echo_query "Enter Emby API key (or leave empty to skip):" ""
+				read -r emby_token </dev/tty
+			fi
+		fi
+
+		if [[ -n "$emby_token" ]]; then
+			MS_NAMES+=("emby")
+			MS_TYPES+=("emby")
+			MS_URLS+=("http://127.0.0.1:${emby_port}")
+			MS_TOKENS+=("$emby_token")
+			swizdb set "${app_name}/emby_token" "$emby_token"
+			_verbose "Found Emby on port ${emby_port}"
+		fi
+	fi
+
+	# --- Jellyfin ---
+	if [[ -f /install/.jellyfin.lock ]]; then
+		local jf_port="8096"
+		local jf_token=""
+
+		# Check for stored token
+		jf_token=$(swizdb get "${app_name}/jellyfin_token" 2>/dev/null) || true
+
+		# Try to find port from Jellyfin config
+		local jf_network_xml
+		for jf_network_xml in /var/lib/jellyfin/config/network.xml /home/*/.config/jellyfin/network.xml; do
+			if [[ -f "$jf_network_xml" ]]; then
+				local jf_cfg_port
+				jf_cfg_port=$(grep -oP '(?<=<HttpServerPortNumber>)[^<]+' "$jf_network_xml" 2>/dev/null) || true
+				[[ -n "$jf_cfg_port" ]] && jf_port="$jf_cfg_port"
+				break
+			fi
+		done
+
+		# If no stored token, create one via Jellyfin API
+		if [[ -z "$jf_token" ]]; then
+			_verbose "Creating Jellyfin API key for Autopulse"
+			# Jellyfin requires an existing admin API key to create new keys
+			# Try to find one from existing config or prompt
+			echo_query "Enter Jellyfin API key (Settings > API Keys > Add):" ""
+			read -r jf_token </dev/tty
+		fi
+
+		if [[ -n "$jf_token" ]]; then
+			MS_NAMES+=("jellyfin")
+			MS_TYPES+=("jellyfin")
+			MS_URLS+=("http://127.0.0.1:${jf_port}")
+			MS_TOKENS+=("$jf_token")
+			swizdb set "${app_name}/jellyfin_token" "$jf_token"
+			_verbose "Found Jellyfin on port ${jf_port}"
+		fi
+	fi
+
+	# --- Plex ---
+	if [[ -f /install/.plex.lock ]]; then
+		local plex_port="32400"
+		local plex_token=""
+
+		# Read token from Preferences.xml
+		local plex_prefs
+		for plex_prefs in "/var/lib/plexmediaserver/Library/Application Support/Plex Media Server/Preferences.xml" \
+			/home/*/.config/plexmediaserver/Preferences.xml; do
+			if [[ -f "$plex_prefs" ]]; then
+				plex_token=$(grep -oP 'PlexOnlineToken="[^"]*"' "$plex_prefs" 2>/dev/null \
+					| head -1 | sed 's/PlexOnlineToken="//;s/"//') || true
+				break
+			fi
+		done
+
+		if [[ -z "$plex_token" ]]; then
+			echo_query "Enter Plex token (from Preferences.xml or plex.tv/claim):" ""
+			read -r plex_token </dev/tty
+		fi
+
+		if [[ -n "$plex_token" ]]; then
+			MS_NAMES+=("plex")
+			MS_TYPES+=("plex")
+			MS_URLS+=("http://127.0.0.1:${plex_port}")
+			MS_TOKENS+=("$plex_token")
+			_verbose "Found Plex on port ${plex_port}"
+		fi
+	fi
+
+	if [[ ${#MS_NAMES[@]} -eq 0 ]]; then
+		echo_warn "No media servers found. Autopulse needs at least one target."
+		echo_info "You can manually edit ${app_dir}/config.yaml after install."
+	else
+		echo_progress_done "Found ${#MS_NAMES[@]} media server(s): ${MS_NAMES[*]}"
+	fi
+}
