@@ -171,3 +171,100 @@ _ensure_jq() {
 	apt_install jq
 	echo_progress_done "jq installed"
 }
+
+# ==============================================================================
+# Arr Instance Auto-Discovery
+# ==============================================================================
+
+# Parallel arrays populated by _discover_arrs
+ARR_NAMES=()
+ARR_TYPES=()    # "sonarr" or "radarr" or "lidarr" or "readarr"
+ARR_PORTS=()
+ARR_APIKEYS=()
+ARR_URLBASES=()
+
+_discover_arrs() {
+	echo_progress_start "Discovering arr instances"
+
+	local lock_basename config_dir_name arr_type instance_name
+	local cfg port apikey urlbase
+
+	for lock in /install/.sonarr.lock /install/.sonarr_*.lock \
+		/install/.radarr.lock /install/.radarr_*.lock \
+		/install/.lidarr.lock /install/.lidarr_*.lock \
+		/install/.readarr.lock /install/.readarr_*.lock; do
+		[[ -f "$lock" ]] || continue
+
+		lock_basename=$(basename "$lock" .lock)
+		lock_basename="${lock_basename#.}" # Remove leading dot
+
+		# Determine arr type and config directory name
+		case "$lock_basename" in
+			sonarr)
+				arr_type="sonarr"
+				config_dir_name="Sonarr"
+				instance_name="sonarr"
+				;;
+			sonarr_*)
+				arr_type="sonarr"
+				instance_name="${lock_basename/sonarr_/sonarr-}"
+				config_dir_name="${instance_name}"
+				;;
+			radarr)
+				arr_type="radarr"
+				config_dir_name="Radarr"
+				instance_name="radarr"
+				;;
+			radarr_*)
+				arr_type="radarr"
+				instance_name="${lock_basename/radarr_/radarr-}"
+				config_dir_name="${instance_name}"
+				;;
+			lidarr)
+				arr_type="lidarr"
+				config_dir_name="Lidarr"
+				instance_name="lidarr"
+				;;
+			lidarr_*)
+				arr_type="lidarr"
+				instance_name="${lock_basename/lidarr_/lidarr-}"
+				config_dir_name="${instance_name}"
+				;;
+			readarr)
+				arr_type="readarr"
+				config_dir_name="Readarr"
+				instance_name="readarr"
+				;;
+			readarr_*)
+				arr_type="readarr"
+				instance_name="${lock_basename/readarr_/readarr-}"
+				config_dir_name="${instance_name}"
+				;;
+			*) continue ;;
+		esac
+
+		# Find config.xml
+		for cfg in /home/*/.config/"${config_dir_name}"/config.xml; do
+			[[ -f "$cfg" ]] || continue
+
+			port=$(grep -oP '(?<=<Port>)[^<]+' "$cfg" 2>/dev/null) || continue
+			apikey=$(grep -oP '(?<=<ApiKey>)[^<]+' "$cfg" 2>/dev/null) || continue
+			urlbase=$(grep -oP '(?<=<UrlBase>)[^<]+' "$cfg" 2>/dev/null) || true
+
+			ARR_NAMES+=("$instance_name")
+			ARR_TYPES+=("$arr_type")
+			ARR_PORTS+=("$port")
+			ARR_APIKEYS+=("$apikey")
+			ARR_URLBASES+=("${urlbase:-}")
+
+			_verbose "Found ${instance_name} on port ${port} (urlbase: ${urlbase:-none})"
+			break
+		done
+	done
+
+	if [[ ${#ARR_NAMES[@]} -eq 0 ]]; then
+		echo_warn "No arr instances found"
+	else
+		echo_progress_done "Found ${#ARR_NAMES[@]} arr instance(s): ${ARR_NAMES[*]}"
+	fi
+}
