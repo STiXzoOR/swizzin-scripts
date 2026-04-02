@@ -787,3 +787,257 @@ _disable_arr_media_connects() {
 
 	echo_info "Existing media server Connect entries disabled"
 }
+
+# ==============================================================================
+# Fresh Install Orchestration
+# ==============================================================================
+_install_fresh() {
+	if [[ -f "/install/.${app_lockname}.lock" ]]; then
+		echo_error "${app_pretty} is already installed. Use --update to update."
+		exit 1
+	fi
+
+	_cleanup_needed=true
+
+	echo_info "Installing ${app_pretty}..."
+
+	_install_docker
+	_ensure_jq
+	_discover_arrs
+	_discover_media_servers
+	_generate_config
+	_generate_compose
+
+	echo_progress_start "Pulling ${app_pretty} Docker images"
+	docker compose -f "${app_dir}/docker-compose.yml" pull >>"$log" 2>&1 || {
+		echo_error "Failed to pull Docker images"
+		exit 1
+	}
+	echo_progress_done "Docker images pulled"
+
+	echo_progress_start "Starting ${app_pretty} containers"
+	docker compose -f "${app_dir}/docker-compose.yml" up -d >>"$log" 2>&1 || {
+		echo_error "Failed to start containers"
+		exit 1
+	}
+	echo_progress_done "${app_pretty} containers started"
+
+	_systemd_autopulse
+	_nginx_autopulse
+	_panel_autopulse
+
+	# Wait briefly for API to be ready before configuring webhooks
+	sleep 3
+
+	_configure_arr_webhooks
+	_disable_arr_media_connects
+
+	# Create lock file
+	touch "/install/.${app_lockname}.lock"
+	_lock_file_created="/install/.${app_lockname}.lock"
+
+	_cleanup_needed=false
+
+	echo_success "${app_pretty} installed successfully!"
+	echo_info "Dashboard: https://$(hostname -f)/autopulse/"
+	echo_info "Auth: ${user} / $(swizdb get "${app_name}/auth_password" 2>/dev/null)"
+	if [[ ${#ARR_NAMES[@]} -gt 0 ]]; then
+		echo_info "Webhooks configured for: ${ARR_NAMES[*]}"
+	fi
+}
+
+# ==============================================================================
+# Update
+# ==============================================================================
+_update_autopulse() {
+	if [[ ! -f "/install/.${app_lockname}.lock" ]]; then
+		echo_error "${app_pretty} is not installed"
+		exit 1
+	fi
+
+	echo_info "Updating ${app_pretty}..."
+
+	_ensure_jq
+
+	# Re-discover and regenerate config (picks up new arr instances / media servers)
+	_discover_arrs
+	_discover_media_servers
+	_generate_config
+	_generate_compose
+
+	echo_progress_start "Pulling latest ${app_pretty} images"
+	_verbose "Running: docker compose -f ${app_dir}/docker-compose.yml pull"
+	docker compose -f "${app_dir}/docker-compose.yml" pull >>"$log" 2>&1 || {
+		echo_error "Failed to pull latest images"
+		exit 1
+	}
+	echo_progress_done "Latest images pulled"
+
+	echo_progress_start "Recreating ${app_pretty} containers"
+	_verbose "Running: docker compose up -d"
+	docker compose -f "${app_dir}/docker-compose.yml" up -d >>"$log" 2>&1 || {
+		echo_error "Failed to recreate containers"
+		exit 1
+	}
+	echo_progress_done "Containers recreated"
+
+	_verbose "Pruning unused images"
+	docker image prune -f >>"$log" 2>&1 || true
+
+	# Re-configure webhooks for any new arr instances
+	_configure_arr_webhooks
+
+	echo_success "${app_pretty} has been updated"
+	exit 0
+}
+
+# ==============================================================================
+# Remove
+# ==============================================================================
+_remove_autopulse() {
+	local force="${1:-}"
+
+	if [[ "$force" != "--force" ]] && [[ ! -f "/install/.${app_lockname}.lock" ]]; then
+		echo_error "${app_pretty} is not installed (use --force to override)"
+		exit 1
+	fi
+
+	echo_info "Removing ${app_pretty}..."
+
+	# Ask about purging configuration
+	local purgeconfig="false"
+	if [[ "$force" == "--force" ]]; then
+		purgeconfig="true"
+	elif ask "Would you like to purge the configuration?" N; then
+		purgeconfig="true"
+	fi
+
+	# Stop and remove containers
+	echo_progress_start "Stopping ${app_pretty} containers"
+	if [[ -f "${app_dir}/docker-compose.yml" ]]; then
+		docker compose -f "${app_dir}/docker-compose.yml" down >>"$log" 2>&1 || true
+	fi
+	echo_progress_done "Containers stopped"
+
+	# Remove Docker images
+	echo_progress_start "Removing Docker images"
+	docker rmi "$app_image_api" >>"$log" 2>&1 || true
+	docker rmi "$app_image_ui" >>"$log" 2>&1 || true
+	echo_progress_done "Docker images removed"
+
+	# Remove systemd service
+	echo_progress_start "Removing systemd service"
+	systemctl stop "$app_servicefile" 2>/dev/null || true
+	systemctl disable "$app_servicefile" 2>/dev/null || true
+	rm -f "/etc/systemd/system/${app_servicefile}"
+	systemctl daemon-reload
+	echo_progress_done "Service removed"
+
+	# Remove nginx config
+	if [[ -f "/etc/nginx/apps/${app_name}.conf" ]]; then
+		echo_progress_start "Removing nginx configuration"
+		rm -f "/etc/nginx/apps/${app_name}.conf"
+		_reload_nginx 2>/dev/null || true
+		echo_progress_done "Nginx configuration removed"
+	fi
+
+	# Remove from panel
+	_load_panel_helper
+	if command -v panel_unregister_app >/dev/null 2>&1; then
+		echo_progress_start "Removing from panel"
+		panel_unregister_app "$app_name"
+		echo_progress_done "Removed from panel"
+	fi
+
+	# Remove webhooks from arr instances
+	_ensure_jq 2>/dev/null || true
+	_discover_arrs 2>/dev/null || true
+	if [[ ${#ARR_NAMES[@]} -gt 0 ]]; then
+		echo_progress_start "Removing Autopulse webhooks from arr instances"
+		local i
+		for ((i = 0; i < ${#ARR_NAMES[@]}; i++)); do
+			local name="${ARR_NAMES[$i]}"
+			local port="${ARR_PORTS[$i]}"
+			local apikey="${ARR_APIKEYS[$i]}"
+			local urlbase="${ARR_URLBASES[$i]}"
+			local base_url="http://127.0.0.1:${port}"
+			[[ -n "$urlbase" ]] && base_url="${base_url}/${urlbase#/}"
+
+			local notifications
+			notifications=$(curl -s --config <(printf 'header = "X-Api-Key: %s"' "$apikey") \
+				"${base_url}/api/v3/notification" 2>/dev/null) || continue
+
+			local nid
+			nid=$(echo "$notifications" | jq -r '.[] | select(.name == "Autopulse") | .id' 2>/dev/null) || continue
+
+			if [[ -n "$nid" ]]; then
+				curl -s -o /dev/null \
+					--config <(printf 'header = "X-Api-Key: %s"' "$apikey") \
+					-X DELETE "${base_url}/api/v3/notification/${nid}" 2>/dev/null || true
+				_verbose "Removed webhook from ${name}"
+			fi
+		done
+		echo_progress_done "Webhooks removed"
+	fi
+
+	# Purge or keep config
+	if [[ "$purgeconfig" = "true" ]]; then
+		echo_progress_start "Purging configuration and data"
+		rm -f "${app_dir}/config.yaml" "${app_dir}/docker-compose.yml"
+		rm -f "${app_dir}/data/autopulse.db" 2>/dev/null || true
+		rmdir "${app_dir}/data" 2>/dev/null || true
+		rmdir "${app_dir}" 2>/dev/null || true
+		echo_progress_done "Files purged"
+		swizdb clear "${app_name}/owner" 2>/dev/null || true
+		swizdb clear "${app_name}/port" 2>/dev/null || true
+		swizdb clear "${app_name}/ui_port" 2>/dev/null || true
+		swizdb clear "${app_name}/auth_password" 2>/dev/null || true
+		swizdb clear "${app_name}/ui_secret" 2>/dev/null || true
+		swizdb clear "${app_name}/emby_token" 2>/dev/null || true
+		swizdb clear "${app_name}/jellyfin_token" 2>/dev/null || true
+	else
+		echo_info "Configuration kept at: ${app_dir}"
+	fi
+
+	# Remove lock file
+	rm -f "/install/.${app_lockname}.lock"
+
+	echo_success "${app_pretty} has been removed"
+	exit 0
+}
+
+# ==============================================================================
+# Main Entry Point
+# ==============================================================================
+
+# Parse global flags
+for arg in "$@"; do
+	case "$arg" in
+		--verbose) verbose=true ;;
+	esac
+done
+
+case "${1:-}" in
+	"--update")
+		_update_autopulse
+		;;
+	"--remove")
+		_remove_autopulse "${2:-}"
+		;;
+	"--register-panel")
+		if [[ ! -f "/install/.${app_lockname}.lock" ]]; then
+			echo_error "${app_pretty} is not installed"
+			exit 1
+		fi
+		_panel_autopulse
+		systemctl restart panel 2>/dev/null || true
+		echo_success "Panel registration updated for ${app_pretty}"
+		;;
+	"")
+		_install_fresh
+		;;
+	*)
+		echo "Usage: $0 [--update [--verbose]|--remove [--force]|--register-panel]"
+		exit 1
+		;;
+esac
