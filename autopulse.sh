@@ -432,25 +432,23 @@ _generate_config() {
 	swizdb set "${app_name}/ui_port" "$app_ui_port"
 	swizdb set "${app_name}/owner" "$user"
 
-	# Generate or reuse auth password
-	local auth_password
-	if auth_password="$(swizdb get "${app_name}/auth_password" 2>/dev/null)" && [[ -n "$auth_password" ]]; then
+	# Generate or reuse auth password (module-level for _generate_compose)
+	if _auth_password="$(swizdb get "${app_name}/auth_password" 2>/dev/null)" && [[ -n "$_auth_password" ]]; then
 		_verbose "Reusing existing auth password"
 	elif [[ -n "${AUTOPULSE_AUTH_PASSWORD:-}" ]]; then
-		auth_password="$AUTOPULSE_AUTH_PASSWORD"
+		_auth_password="$AUTOPULSE_AUTH_PASSWORD"
 	else
-		auth_password=$(openssl rand -base64 16 | tr -dc 'A-Za-z0-9' | cut -c -16)
+		_auth_password=$(openssl rand -base64 16 | tr -dc 'A-Za-z0-9' | cut -c -16)
 	fi
-	swizdb set "${app_name}/auth_password" "$auth_password"
+	swizdb set "${app_name}/auth_password" "$_auth_password"
 
-	# Generate or reuse UI secret
-	local ui_secret
-	if ui_secret="$(swizdb get "${app_name}/ui_secret" 2>/dev/null)" && [[ -n "$ui_secret" ]]; then
+	# Generate or reuse UI secret (module-level for _generate_compose)
+	if _ui_secret="$(swizdb get "${app_name}/ui_secret" 2>/dev/null)" && [[ -n "$_ui_secret" ]]; then
 		_verbose "Reusing existing UI secret"
 	else
-		ui_secret=$(openssl rand -hex 32)
+		_ui_secret=$(openssl rand -hex 32)
 	fi
-	swizdb set "${app_name}/ui_secret" "$ui_secret"
+	swizdb set "${app_name}/ui_secret" "$_ui_secret"
 
 	# --- Build config.yaml ---
 	{
@@ -462,7 +460,7 @@ _generate_config() {
 
 		auth:
 		  username: ${user}
-		  password: ${auth_password}
+		  password: ${_auth_password}
 
 		YAML
 
@@ -507,10 +505,7 @@ _generate_compose() {
 	uid=$(id -u "$user")
 	gid=$(id -g "$user")
 
-	local auth_password
-	auth_password=$(swizdb get "${app_name}/auth_password" 2>/dev/null) || true
-	local ui_secret
-	ui_secret=$(swizdb get "${app_name}/ui_secret" 2>/dev/null) || true
+	# Use module-level _auth_password and _ui_secret set by _generate_config
 
 	cat >"${app_dir}/docker-compose.yml" <<COMPOSE
 services:
@@ -542,8 +537,8 @@ services:
       FORCE_AUTH: "true"
       FORCE_SERVER_URL: http://localhost:${app_port}
       FORCE_USERNAME: ${user}
-      FORCE_PASSWORD: ${auth_password}
-      SECRET: ${ui_secret}
+      FORCE_PASSWORD: ${_auth_password}
+      SECRET: ${_ui_secret}
     depends_on:
       - autopulse
     security_opt:
