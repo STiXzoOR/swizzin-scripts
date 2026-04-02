@@ -177,6 +177,11 @@ APP_CONFIGS = {
             "bindaddress": "BindAddress",
         },
     },
+    "autopulse": {
+        "config_paths": ["/opt/autopulse/config.yaml"],
+        "format": "yaml",
+        "keys": ["app.port", "auth.username"],
+    },
     "bazarr": {
         "config_paths": [
             "/opt/bazarr/data/config/config.yaml",
