@@ -296,23 +296,39 @@ _discover_media_servers() {
 		# If no stored token, create one via Emby API
 		if [[ -z "$emby_token" ]]; then
 			_verbose "Creating Emby API key for Autopulse"
-			local create_response
-			create_response=$(curl -s -X POST \
-				"http://127.0.0.1:${emby_port}/emby/Auth/Keys" \
-				-H "Content-Type: application/x-www-form-urlencoded" \
-				-d "App=Autopulse" 2>/dev/null) || true
 
-			# Read back the keys to find ours
-			local keys_json
-			keys_json=$(curl -s "http://127.0.0.1:${emby_port}/emby/Auth/Keys" 2>/dev/null) || true
-			if [[ -n "$keys_json" ]]; then
-				emby_token=$(echo "$keys_json" | jq -r '.Items[]? | select(.AppName == "Autopulse") | .AccessToken' 2>/dev/null | head -1) || true
+			# Need an existing admin token to create new API keys
+			# Read one from Emby's authentication database
+			local admin_token=""
+			local emby_auth_db="/var/lib/emby/data/authentication.db"
+			if [[ -f "$emby_auth_db" ]] && command -v sqlite3 >/dev/null 2>&1; then
+				admin_token=$(sqlite3 "$emby_auth_db" \
+					"SELECT AccessToken FROM Tokens_2 WHERE IsActive=1 ORDER BY DateLastActivityInt DESC LIMIT 1;" 2>/dev/null) || true
+			fi
+
+			if [[ -n "$admin_token" ]]; then
+				# Create a dedicated Autopulse API key
+				curl -s -X POST \
+					"http://127.0.0.1:${emby_port}/emby/Auth/Keys" \
+					-H "X-Emby-Token: ${admin_token}" \
+					-H "Content-Type: application/x-www-form-urlencoded" \
+					-d "App=Autopulse" 2>/dev/null || true
+
+				# Read back the keys to find ours
+				local keys_json
+				keys_json=$(curl -s -H "X-Emby-Token: ${admin_token}" \
+					"http://127.0.0.1:${emby_port}/emby/Auth/Keys" 2>/dev/null) || true
+				if [[ -n "$keys_json" ]]; then
+					emby_token=$(echo "$keys_json" | jq -r \
+						'.Items[]? | select(.AppName == "Autopulse") | .AccessToken' 2>/dev/null | head -1) || true
+				fi
 			fi
 
 			if [[ -z "$emby_token" ]]; then
-				echo_warn "Could not auto-create Emby API key. You may need to create one manually."
+				echo_warn "Could not auto-create Emby API key."
+				echo_info "Create one manually: Emby Dashboard > API Keys > New"
 				echo_query "Enter Emby API key (or leave empty to skip):" ""
-				read -r emby_token </dev/tty
+				read -r emby_token </dev/tty 2>/dev/null || true
 			fi
 		fi
 
@@ -351,7 +367,7 @@ _discover_media_servers() {
 			# Jellyfin requires an existing admin API key to create new keys
 			# Try to find one from existing config or prompt
 			echo_query "Enter Jellyfin API key (Settings > API Keys > Add):" ""
-			read -r jf_token </dev/tty
+			read -r jf_token </dev/tty 2>/dev/null || true
 		fi
 
 		if [[ -n "$jf_token" ]]; then
@@ -382,7 +398,7 @@ _discover_media_servers() {
 
 		if [[ -z "$plex_token" ]]; then
 			echo_query "Enter Plex token (from Preferences.xml or plex.tv/claim):" ""
-			read -r plex_token </dev/tty
+			read -r plex_token </dev/tty 2>/dev/null || true
 		fi
 
 		if [[ -n "$plex_token" ]]; then
@@ -475,8 +491,8 @@ _generate_config() {
 		fi
 	} >"${app_dir}/config.yaml"
 
-	chmod 600 "${app_dir}/config.yaml"
-	chown root:root "${app_dir}/config.yaml"
+	chmod 640 "${app_dir}/config.yaml"
+	chown "root:${app_group}" "${app_dir}/config.yaml"
 
 	echo_progress_done "Configuration generated"
 }
@@ -492,9 +508,9 @@ _generate_compose() {
 	gid=$(id -g "$user")
 
 	local auth_password
-	auth_password=$(swizdb get "${app_name}/auth_password" 2>/dev/null)
+	auth_password=$(swizdb get "${app_name}/auth_password" 2>/dev/null) || true
 	local ui_secret
-	ui_secret=$(swizdb get "${app_name}/ui_secret" 2>/dev/null)
+	ui_secret=$(swizdb get "${app_name}/ui_secret" 2>/dev/null) || true
 
 	cat >"${app_dir}/docker-compose.yml" <<COMPOSE
 services:
@@ -656,7 +672,10 @@ _configure_arr_webhooks() {
 		local base_url="http://127.0.0.1:${port}"
 		[[ -n "$urlbase" ]] && base_url="${base_url}/${urlbase#/}"
 
-		local webhook_url="http://localhost:${app_port}/triggers/${name}"
+		local webhook_url="http://127.0.0.1:${app_port}/triggers/${name}"
+		local autopulse_user="$user"
+		local autopulse_pass
+		autopulse_pass=$(swizdb get "${app_name}/auth_password" 2>/dev/null) || true
 
 		_verbose "Configuring webhook for ${name} -> ${webhook_url}"
 
@@ -711,7 +730,9 @@ _configure_arr_webhooks() {
 		  "supportsOnBookFileDelete": true,
 		  "fields": [
 		    {"name": "url", "value": "${webhook_url}"},
-		    {"name": "method", "value": 1}
+		    {"name": "method", "value": 1},
+		    {"name": "username", "value": "${autopulse_user}"},
+		    {"name": "password", "value": "${autopulse_pass}"}
 		  ],
 		  "tags": []
 		}
@@ -721,7 +742,7 @@ _configure_arr_webhooks() {
 		local http_code
 		http_code=$(curl -s -o /dev/null -w '%{http_code}' \
 			--config <(printf 'header = "X-Api-Key: %s"' "$apikey") \
-			-X POST "${base_url}/api/v3/notification" \
+			-X POST "${base_url}/api/v3/notification?forceSave=true" \
 			-H "Content-Type: application/json" \
 			-d "$payload" 2>/dev/null) || true
 
@@ -740,6 +761,12 @@ _configure_arr_webhooks() {
 # ==============================================================================
 _disable_arr_media_connects() {
 	if [[ ${#ARR_NAMES[@]} -eq 0 ]]; then
+		return 0
+	fi
+
+	# Skip prompt if non-interactive (no tty)
+	if [[ ! -t 0 ]]; then
+		_verbose "Non-interactive mode, skipping media connect disable prompt"
 		return 0
 	fi
 
@@ -826,8 +853,17 @@ _install_fresh() {
 	_nginx_autopulse
 	_panel_autopulse
 
-	# Wait briefly for API to be ready before configuring webhooks
-	sleep 3
+	# Wait for Autopulse API to be ready before configuring webhooks
+	echo_progress_start "Waiting for ${app_pretty} API"
+	local attempts=0
+	while [[ $attempts -lt 30 ]]; do
+		if curl -s -o /dev/null "http://127.0.0.1:${app_port}/" 2>/dev/null; then
+			break
+		fi
+		sleep 1
+		((attempts++)) || true
+	done
+	echo_progress_done "${app_pretty} API ready"
 
 	_configure_arr_webhooks
 	_disable_arr_media_connects
