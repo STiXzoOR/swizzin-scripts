@@ -2,6 +2,29 @@
 
 Docker Compose apps wrapped by systemd for lifecycle management.
 
+## Autopulse
+
+Media server library notifier. Receives Sonarr/Radarr webhooks and sends targeted library update notifications to Emby/Jellyfin/Plex via path-specific API calls (replaces slow full-library scans).
+
+**Install:** `bash autopulse.sh`
+**Update:** `bash autopulse.sh --update`
+**Remove:** `bash autopulse.sh --remove`
+
+**Auto-discovery:** The installer automatically discovers all Sonarr/Radarr/Lidarr/Readarr instances and Emby/Jellyfin/Plex servers. It configures Autopulse triggers/targets and adds webhook notifications to each arr instance.
+
+**Ports:** Two dynamic ports (API + UI) allocated from 10000-12000 range.
+
+**Nginx:** Exposed at `/autopulse` subfolder. Trigger API endpoints at `/autopulse/triggers/` bypass basic auth for Sonarr/Radarr webhook access.
+
+**Environment overrides** (unattended install):
+- `AUTOPULSE_PORT` — API port
+- `AUTOPULSE_UI_PORT` — UI port
+- `AUTOPULSE_AUTH_PASSWORD` — Auth password
+
+**Upstream:** [dan-online/autopulse](https://github.com/dan-online/autopulse)
+
+---
+
 ## Lingarr
 
 Subtitle translation service that auto-discovers Sonarr/Radarr installations.
