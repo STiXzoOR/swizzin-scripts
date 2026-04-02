@@ -116,3 +116,58 @@ elif [[ -n "${AUTOPULSE_UI_PORT:-}" ]]; then
 else
 	app_ui_port=$(port 10000 12000)
 fi
+
+# ==============================================================================
+# Docker Installation
+# ==============================================================================
+_install_docker() {
+	if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
+		echo_info "Docker and Docker Compose already installed"
+		return 0
+	fi
+
+	echo_progress_start "Installing Docker"
+
+	apt_install ca-certificates curl gnupg
+
+	. /etc/os-release
+
+	install -m 0755 -d /etc/apt/keyrings
+	if [[ ! -f /etc/apt/keyrings/docker.gpg ]]; then
+		curl -fsSL "https://download.docker.com/linux/${ID}/gpg" \
+			| gpg --dearmor -o /etc/apt/keyrings/docker.gpg >>"$log" 2>&1
+		chmod a+r /etc/apt/keyrings/docker.gpg
+	fi
+
+	echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/${ID} ${VERSION_CODENAME} stable" \
+		| tee /etc/apt/sources.list.d/docker.list >/dev/null
+
+	apt-get update >>"$log" 2>&1
+
+	DEBIAN_FRONTEND=noninteractive apt-get install -y \
+		docker-ce docker-ce-cli containerd.io docker-compose-plugin >>"$log" 2>&1 || {
+		echo_error "Failed to install Docker packages"
+		exit 1
+	}
+
+	systemctl enable --now docker >>"$log" 2>&1
+
+	if ! docker info >/dev/null 2>&1; then
+		echo_error "Docker failed to start"
+		exit 1
+	fi
+
+	echo_progress_done "Docker installed"
+}
+
+# ==============================================================================
+# Ensure jq is available (needed for API interactions)
+# ==============================================================================
+_ensure_jq() {
+	if command -v jq >/dev/null 2>&1; then
+		return 0
+	fi
+	echo_progress_start "Installing jq"
+	apt_install jq
+	echo_progress_done "jq installed"
+}
