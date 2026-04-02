@@ -1,0 +1,1353 @@
+# Autopulse Installer Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Create a Swizzin installer script for Autopulse that auto-discovers all arr instances and media servers, configures webhooks, and exposes the UI behind nginx.
+
+**Architecture:** Single bash installer script (`autopulse.sh`) following the existing Docker app template (modeled on `stremthru.sh`). Two Docker containers (API + UI) in one compose file, systemd oneshot wrapper, nginx subfolder reverse proxy. Auto-discovery reads arr `config.xml` files and media server configs to generate Autopulse YAML config and configure webhooks via arr APIs.
+
+**Tech Stack:** Bash, Docker Compose, nginx, Sonarr/Radarr/Emby/Jellyfin/Plex REST APIs, jq
+
+---
+
+### Task 1: Script Skeleton — Header, Sources, Traps, App Config
+
+**Files:**
+- Create: `autopulse.sh`
+
+- [ ] **Step 1: Create the script with header, sources, cleanup trap, and app config**
+
+```bash
+#!/bin/bash
+set -euo pipefail
+# autopulse installer
+# STiXzoOR 2026
+# Usage: bash autopulse.sh [--update [--verbose]|--remove [--force]|--register-panel]
+
+. /etc/swizzin/sources/globals.sh
+
+#shellcheck source=sources/functions/utils
+. /etc/swizzin/sources/functions/utils
+
+# shellcheck source=lib/utils.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/utils.sh" 2>/dev/null || true
+
+# shellcheck source=lib/nginx-utils.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/nginx-utils.sh" 2>/dev/null || true
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PANEL_HELPER_CACHE="/opt/swizzin-extras/panel_helpers.sh"
+
+_load_panel_helper() {
+	if [[ -f "${SCRIPT_DIR}/panel_helpers.sh" ]]; then
+		. "${SCRIPT_DIR}/panel_helpers.sh"
+		return
+	fi
+	if [[ -f "$PANEL_HELPER_CACHE" ]]; then
+		. "$PANEL_HELPER_CACHE"
+		return
+	fi
+	echo_info "panel_helpers.sh not found; skipping panel integration"
+}
+
+# Log to Swizzin.log
+export log=/root/logs/swizzin.log
+touch "$log"
+
+# ==============================================================================
+# Cleanup Trap (rollback partial install on failure)
+# ==============================================================================
+_cleanup_needed=false
+_nginx_config_written=""
+_systemd_unit_written=""
+_lock_file_created=""
+
+cleanup() {
+	local exit_code=$?
+	if [[ "$_cleanup_needed" == "true" && $exit_code -ne 0 ]]; then
+		echo_error "Installation failed (exit $exit_code). Cleaning up..."
+		[[ -n "$_nginx_config_written" ]] && rm -f "$_nginx_config_written"
+		[[ -n "$_systemd_unit_written" ]] && {
+			systemctl stop "${_systemd_unit_written}" 2>/dev/null || true
+			systemctl disable "${_systemd_unit_written}" 2>/dev/null || true
+			rm -f "/etc/systemd/system/${_systemd_unit_written}"
+		}
+		[[ -n "$_lock_file_created" ]] && rm -f "$_lock_file_created"
+		_reload_nginx 2>/dev/null || true
+	fi
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+trap '' PIPE
+
+# ==============================================================================
+# Verbose Mode
+# ==============================================================================
+verbose=false
+
+_verbose() {
+	if [[ "$verbose" == "true" ]]; then
+		echo_info "  $*"
+	fi
+}
+
+# ==============================================================================
+# App Configuration
+# ==============================================================================
+
+app_name="autopulse"
+app_pretty="Autopulse"
+app_lockname="${app_name}"
+app_baseurl="${app_name}"
+app_image_api="ghcr.io/dan-online/autopulse:latest"
+app_image_ui="ghcr.io/dan-online/autopulse:ui-dynamic"
+
+app_dir="/opt/${app_name}"
+app_servicefile="${app_name}.service"
+
+app_icon_name="${app_name}"
+app_icon_url="https://raw.githubusercontent.com/dan-online/autopulse/main/ui/static/favicon.png"
+
+# ==============================================================================
+# User/Owner Setup
+# ==============================================================================
+
+if ! app_owner="$(swizdb get "${app_name}/owner" 2>/dev/null)"; then
+	app_owner="$(_get_master_username)"
+fi
+user="${app_owner}"
+app_group="${user}"
+
+# Port persistence — API port
+if _existing_port="$(swizdb get "${app_name}/port" 2>/dev/null)" && [[ -n "$_existing_port" ]]; then
+	app_port="$_existing_port"
+elif [[ -n "${AUTOPULSE_PORT:-}" ]]; then
+	app_port="$AUTOPULSE_PORT"
+else
+	app_port=$(port 10000 12000)
+fi
+
+# Port persistence — UI port
+if _existing_ui_port="$(swizdb get "${app_name}/ui_port" 2>/dev/null)" && [[ -n "$_existing_ui_port" ]]; then
+	app_ui_port="$_existing_ui_port"
+elif [[ -n "${AUTOPULSE_UI_PORT:-}" ]]; then
+	app_ui_port="$AUTOPULSE_UI_PORT"
+else
+	app_ui_port=$(port 10000 12000)
+fi
+```
+
+- [ ] **Step 2: Verify script parses without errors**
+
+Run: `bash -n autopulse.sh`
+Expected: No output (clean parse). Will fail at runtime due to missing Swizzin globals, but syntax is valid.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add autopulse.sh
+git commit -m "feat(autopulse): add script skeleton with header, sources, traps, app config"
+```
+
+---
+
+### Task 2: Docker Installation + Dependency Check
+
+**Files:**
+- Modify: `autopulse.sh`
+
+- [ ] **Step 1: Add _install_docker and _ensure_jq functions after the app config section**
+
+```bash
+# ==============================================================================
+# Docker Installation
+# ==============================================================================
+_install_docker() {
+	if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
+		echo_info "Docker and Docker Compose already installed"
+		return 0
+	fi
+
+	echo_progress_start "Installing Docker"
+
+	apt_install ca-certificates curl gnupg
+
+	. /etc/os-release
+
+	install -m 0755 -d /etc/apt/keyrings
+	if [[ ! -f /etc/apt/keyrings/docker.gpg ]]; then
+		curl -fsSL "https://download.docker.com/linux/${ID}/gpg" \
+			| gpg --dearmor -o /etc/apt/keyrings/docker.gpg >>"$log" 2>&1
+		chmod a+r /etc/apt/keyrings/docker.gpg
+	fi
+
+	echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/${ID} ${VERSION_CODENAME} stable" \
+		| tee /etc/apt/sources.list.d/docker.list >/dev/null
+
+	apt-get update >>"$log" 2>&1
+
+	DEBIAN_FRONTEND=noninteractive apt-get install -y \
+		docker-ce docker-ce-cli containerd.io docker-compose-plugin >>"$log" 2>&1 || {
+		echo_error "Failed to install Docker packages"
+		exit 1
+	}
+
+	systemctl enable --now docker >>"$log" 2>&1
+
+	if ! docker info >/dev/null 2>&1; then
+		echo_error "Docker failed to start"
+		exit 1
+	fi
+
+	echo_progress_done "Docker installed"
+}
+
+# ==============================================================================
+# Ensure jq is available (needed for API interactions)
+# ==============================================================================
+_ensure_jq() {
+	if command -v jq >/dev/null 2>&1; then
+		return 0
+	fi
+	echo_progress_start "Installing jq"
+	apt_install jq
+	echo_progress_done "jq installed"
+}
+```
+
+- [ ] **Step 2: Verify syntax**
+
+Run: `bash -n autopulse.sh`
+Expected: No output (clean parse)
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add autopulse.sh
+git commit -m "feat(autopulse): add Docker installation and jq dependency check"
+```
+
+---
+
+### Task 3: Arr Instance Auto-Discovery
+
+**Files:**
+- Modify: `autopulse.sh`
+
+- [ ] **Step 1: Add the arr discovery function**
+
+This function populates parallel arrays with discovered instance data. Add after `_ensure_jq`:
+
+```bash
+# ==============================================================================
+# Arr Instance Auto-Discovery
+# ==============================================================================
+
+# Parallel arrays populated by _discover_arrs
+ARR_NAMES=()
+ARR_TYPES=()    # "sonarr" or "radarr" or "lidarr" or "readarr"
+ARR_PORTS=()
+ARR_APIKEYS=()
+ARR_URLBASES=()
+
+_discover_arrs() {
+	echo_progress_start "Discovering arr instances"
+
+	local lock_basename config_dir_name arr_type instance_name
+	local cfg port apikey urlbase
+
+	for lock in /install/.sonarr.lock /install/.sonarr_*.lock \
+		/install/.radarr.lock /install/.radarr_*.lock \
+		/install/.lidarr.lock /install/.lidarr_*.lock \
+		/install/.readarr.lock /install/.readarr_*.lock; do
+		[[ -f "$lock" ]] || continue
+
+		lock_basename=$(basename "$lock" .lock)
+		lock_basename="${lock_basename#.}" # Remove leading dot
+
+		# Determine arr type and config directory name
+		case "$lock_basename" in
+			sonarr)
+				arr_type="sonarr"
+				config_dir_name="Sonarr"
+				instance_name="sonarr"
+				;;
+			sonarr_*)
+				arr_type="sonarr"
+				instance_name="${lock_basename/sonarr_/sonarr-}"
+				config_dir_name="${instance_name}"
+				;;
+			radarr)
+				arr_type="radarr"
+				config_dir_name="Radarr"
+				instance_name="radarr"
+				;;
+			radarr_*)
+				arr_type="radarr"
+				instance_name="${lock_basename/radarr_/radarr-}"
+				config_dir_name="${instance_name}"
+				;;
+			lidarr)
+				arr_type="lidarr"
+				config_dir_name="Lidarr"
+				instance_name="lidarr"
+				;;
+			lidarr_*)
+				arr_type="lidarr"
+				instance_name="${lock_basename/lidarr_/lidarr-}"
+				config_dir_name="${instance_name}"
+				;;
+			readarr)
+				arr_type="readarr"
+				config_dir_name="Readarr"
+				instance_name="readarr"
+				;;
+			readarr_*)
+				arr_type="readarr"
+				instance_name="${lock_basename/readarr_/readarr-}"
+				config_dir_name="${instance_name}"
+				;;
+			*) continue ;;
+		esac
+
+		# Find config.xml
+		for cfg in /home/*/.config/"${config_dir_name}"/config.xml; do
+			[[ -f "$cfg" ]] || continue
+
+			port=$(grep -oP '(?<=<Port>)[^<]+' "$cfg" 2>/dev/null) || continue
+			apikey=$(grep -oP '(?<=<ApiKey>)[^<]+' "$cfg" 2>/dev/null) || continue
+			urlbase=$(grep -oP '(?<=<UrlBase>)[^<]+' "$cfg" 2>/dev/null) || true
+
+			ARR_NAMES+=("$instance_name")
+			ARR_TYPES+=("$arr_type")
+			ARR_PORTS+=("$port")
+			ARR_APIKEYS+=("$apikey")
+			ARR_URLBASES+=("${urlbase:-}")
+
+			_verbose "Found ${instance_name} on port ${port} (urlbase: ${urlbase:-none})"
+			break
+		done
+	done
+
+	if [[ ${#ARR_NAMES[@]} -eq 0 ]]; then
+		echo_warn "No arr instances found"
+	else
+		echo_progress_done "Found ${#ARR_NAMES[@]} arr instance(s): ${ARR_NAMES[*]}"
+	fi
+}
+```
+
+- [ ] **Step 2: Verify syntax**
+
+Run: `bash -n autopulse.sh`
+Expected: No output (clean parse)
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add autopulse.sh
+git commit -m "feat(autopulse): add arr instance auto-discovery"
+```
+
+---
+
+### Task 4: Media Server Auto-Discovery
+
+**Files:**
+- Modify: `autopulse.sh`
+
+- [ ] **Step 1: Add media server discovery function**
+
+Add after `_discover_arrs`:
+
+```bash
+# ==============================================================================
+# Media Server Auto-Discovery
+# ==============================================================================
+
+# Parallel arrays populated by _discover_media_servers
+MS_NAMES=()
+MS_TYPES=()    # "emby" or "jellyfin" or "plex"
+MS_URLS=()
+MS_TOKENS=()
+
+_discover_media_servers() {
+	echo_progress_start "Discovering media servers"
+
+	# --- Emby ---
+	if [[ -f /install/.emby.lock ]]; then
+		local emby_port="8096"
+		local emby_token=""
+
+		# Try to find existing API key from Emby
+		if [[ -f /var/lib/emby/config/system.xml ]]; then
+			# Check if there's an existing Autopulse API key we created before
+			emby_token=$(swizdb get "${app_name}/emby_token" 2>/dev/null) || true
+		fi
+
+		# If no stored token, create one via Emby API
+		if [[ -z "$emby_token" ]]; then
+			_verbose "Creating Emby API key for Autopulse"
+			local create_response
+			create_response=$(curl -s -X POST \
+				"http://127.0.0.1:${emby_port}/emby/Auth/Keys" \
+				-H "Content-Type: application/x-www-form-urlencoded" \
+				-d "App=Autopulse" 2>/dev/null) || true
+
+			# Read back the keys to find ours
+			local keys_json
+			keys_json=$(curl -s "http://127.0.0.1:${emby_port}/emby/Auth/Keys" 2>/dev/null) || true
+			if [[ -n "$keys_json" ]]; then
+				emby_token=$(echo "$keys_json" | jq -r '.Items[]? | select(.AppName == "Autopulse") | .AccessToken' 2>/dev/null | head -1) || true
+			fi
+
+			if [[ -z "$emby_token" ]]; then
+				echo_warn "Could not auto-create Emby API key. You may need to create one manually."
+				echo_query "Enter Emby API key (or leave empty to skip):" ""
+				read -r emby_token </dev/tty
+			fi
+		fi
+
+		if [[ -n "$emby_token" ]]; then
+			MS_NAMES+=("emby")
+			MS_TYPES+=("emby")
+			MS_URLS+=("http://127.0.0.1:${emby_port}")
+			MS_TOKENS+=("$emby_token")
+			swizdb set "${app_name}/emby_token" "$emby_token"
+			_verbose "Found Emby on port ${emby_port}"
+		fi
+	fi
+
+	# --- Jellyfin ---
+	if [[ -f /install/.jellyfin.lock ]]; then
+		local jf_port="8096"
+		local jf_token=""
+
+		# Check for stored token
+		jf_token=$(swizdb get "${app_name}/jellyfin_token" 2>/dev/null) || true
+
+		# Try to find port from Jellyfin config
+		local jf_network_xml
+		for jf_network_xml in /var/lib/jellyfin/config/network.xml /home/*/.config/jellyfin/network.xml; do
+			if [[ -f "$jf_network_xml" ]]; then
+				local jf_cfg_port
+				jf_cfg_port=$(grep -oP '(?<=<HttpServerPortNumber>)[^<]+' "$jf_network_xml" 2>/dev/null) || true
+				[[ -n "$jf_cfg_port" ]] && jf_port="$jf_cfg_port"
+				break
+			fi
+		done
+
+		# If no stored token, create one via Jellyfin API
+		if [[ -z "$jf_token" ]]; then
+			_verbose "Creating Jellyfin API key for Autopulse"
+			# Jellyfin requires an existing admin API key to create new keys
+			# Try to find one from existing config or prompt
+			echo_query "Enter Jellyfin API key (Settings > API Keys > Add):" ""
+			read -r jf_token </dev/tty
+		fi
+
+		if [[ -n "$jf_token" ]]; then
+			MS_NAMES+=("jellyfin")
+			MS_TYPES+=("jellyfin")
+			MS_URLS+=("http://127.0.0.1:${jf_port}")
+			MS_TOKENS+=("$jf_token")
+			swizdb set "${app_name}/jellyfin_token" "$jf_token"
+			_verbose "Found Jellyfin on port ${jf_port}"
+		fi
+	fi
+
+	# --- Plex ---
+	if [[ -f /install/.plex.lock ]]; then
+		local plex_port="32400"
+		local plex_token=""
+
+		# Read token from Preferences.xml
+		local plex_prefs
+		for plex_prefs in "/var/lib/plexmediaserver/Library/Application Support/Plex Media Server/Preferences.xml" \
+			/home/*/.config/plexmediaserver/Preferences.xml; do
+			if [[ -f "$plex_prefs" ]]; then
+				plex_token=$(grep -oP 'PlexOnlineToken="[^"]*"' "$plex_prefs" 2>/dev/null \
+					| head -1 | sed 's/PlexOnlineToken="//;s/"//') || true
+				break
+			fi
+		done
+
+		if [[ -z "$plex_token" ]]; then
+			echo_query "Enter Plex token (from Preferences.xml or plex.tv/claim):" ""
+			read -r plex_token </dev/tty
+		fi
+
+		if [[ -n "$plex_token" ]]; then
+			MS_NAMES+=("plex")
+			MS_TYPES+=("plex")
+			MS_URLS+=("http://127.0.0.1:${plex_port}")
+			MS_TOKENS+=("$plex_token")
+			_verbose "Found Plex on port ${plex_port}"
+		fi
+	fi
+
+	if [[ ${#MS_NAMES[@]} -eq 0 ]]; then
+		echo_warn "No media servers found. Autopulse needs at least one target."
+		echo_info "You can manually edit ${app_dir}/config.yaml after install."
+	else
+		echo_progress_done "Found ${#MS_NAMES[@]} media server(s): ${MS_NAMES[*]}"
+	fi
+}
+```
+
+- [ ] **Step 2: Verify syntax**
+
+Run: `bash -n autopulse.sh`
+Expected: No output (clean parse)
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add autopulse.sh
+git commit -m "feat(autopulse): add media server auto-discovery (Emby, Jellyfin, Plex)"
+```
+
+---
+
+### Task 5: Config Generation (config.yaml + docker-compose.yml)
+
+**Files:**
+- Modify: `autopulse.sh`
+
+- [ ] **Step 1: Add config and compose generation functions**
+
+Add after `_discover_media_servers`:
+
+```bash
+# ==============================================================================
+# Config Generation
+# ==============================================================================
+_generate_config() {
+	echo_progress_start "Generating Autopulse configuration"
+
+	mkdir -p "${app_dir}/data"
+	chown -R "${user}:${user}" "$app_dir"
+
+	# Persist ports
+	swizdb set "${app_name}/port" "$app_port"
+	swizdb set "${app_name}/ui_port" "$app_ui_port"
+	swizdb set "${app_name}/owner" "$user"
+
+	# Generate or reuse auth password
+	local auth_password
+	if auth_password="$(swizdb get "${app_name}/auth_password" 2>/dev/null)" && [[ -n "$auth_password" ]]; then
+		_verbose "Reusing existing auth password"
+	elif [[ -n "${AUTOPULSE_AUTH_PASSWORD:-}" ]]; then
+		auth_password="$AUTOPULSE_AUTH_PASSWORD"
+	else
+		auth_password=$(openssl rand -base64 16 | tr -dc 'A-Za-z0-9' | cut -c -16)
+	fi
+	swizdb set "${app_name}/auth_password" "$auth_password"
+
+	# Generate or reuse UI secret
+	local ui_secret
+	if ui_secret="$(swizdb get "${app_name}/ui_secret" 2>/dev/null)" && [[ -n "$ui_secret" ]]; then
+		_verbose "Reusing existing UI secret"
+	else
+		ui_secret=$(openssl rand -hex 32)
+	fi
+	swizdb set "${app_name}/ui_secret" "$ui_secret"
+
+	# --- Build config.yaml ---
+	{
+		cat <<-YAML
+		app:
+		  hostname: 0.0.0.0
+		  port: ${app_port}
+		  log_level: info
+
+		auth:
+		  username: ${user}
+		  password: ${auth_password}
+
+		YAML
+
+		# Triggers section
+		if [[ ${#ARR_NAMES[@]} -gt 0 ]]; then
+			echo "triggers:"
+			local i
+			for ((i = 0; i < ${#ARR_NAMES[@]}; i++)); do
+				echo "  ${ARR_NAMES[$i]}:"
+				echo "    type: ${ARR_TYPES[$i]}"
+			done
+			echo ""
+		fi
+
+		# Targets section
+		if [[ ${#MS_NAMES[@]} -gt 0 ]]; then
+			echo "targets:"
+			local i
+			for ((i = 0; i < ${#MS_NAMES[@]}; i++)); do
+				echo "  ${MS_NAMES[$i]}:"
+				echo "    type: ${MS_TYPES[$i]}"
+				echo "    url: ${MS_URLS[$i]}"
+				echo "    token: ${MS_TOKENS[$i]}"
+			done
+			echo ""
+		fi
+	} >"${app_dir}/config.yaml"
+
+	chmod 600 "${app_dir}/config.yaml"
+	chown root:root "${app_dir}/config.yaml"
+
+	echo_progress_done "Configuration generated"
+}
+
+# ==============================================================================
+# Docker Compose Generation
+# ==============================================================================
+_generate_compose() {
+	echo_progress_start "Generating Docker Compose configuration"
+
+	local uid gid
+	uid=$(id -u "$user")
+	gid=$(id -g "$user")
+
+	local auth_password
+	auth_password=$(swizdb get "${app_name}/auth_password" 2>/dev/null)
+	local ui_secret
+	ui_secret=$(swizdb get "${app_name}/ui_secret" 2>/dev/null)
+
+	cat >"${app_dir}/docker-compose.yml" <<COMPOSE
+services:
+  autopulse:
+    image: ${app_image_api}
+    container_name: autopulse
+    restart: unless-stopped
+    network_mode: host
+    user: "${uid}:${gid}"
+    environment:
+      AUTOPULSE__APP__DATABASE_URL: sqlite://data/autopulse.db
+    volumes:
+      - ${app_dir}/config.yaml:/app/config.yaml:ro
+      - ${app_dir}/data:/app/data
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+  autopulse-ui:
+    image: ${app_image_ui}
+    container_name: autopulse-ui
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      BASE_PATH: /autopulse
+      ORIGIN: http://localhost:${app_ui_port}
+      PORT: "${app_ui_port}"
+      FORCE_AUTH: "true"
+      FORCE_SERVER_URL: http://localhost:${app_port}
+      FORCE_USERNAME: ${user}
+      FORCE_PASSWORD: ${auth_password}
+      SECRET: ${ui_secret}
+    depends_on:
+      - autopulse
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+COMPOSE
+
+	chmod 600 "${app_dir}/docker-compose.yml"
+	chown root:root "${app_dir}/docker-compose.yml"
+
+	echo_progress_done "Docker Compose configuration generated"
+}
+```
+
+- [ ] **Step 2: Verify syntax**
+
+Run: `bash -n autopulse.sh`
+Expected: No output (clean parse)
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add autopulse.sh
+git commit -m "feat(autopulse): add config.yaml and docker-compose.yml generation"
+```
+
+---
+
+### Task 6: Systemd, Nginx, Panel Registration
+
+**Files:**
+- Modify: `autopulse.sh`
+
+- [ ] **Step 1: Add systemd, nginx, and panel functions**
+
+Add after `_generate_compose`:
+
+```bash
+# ==============================================================================
+# Systemd Service
+# ==============================================================================
+_systemd_autopulse() {
+	echo_progress_start "Installing systemd service"
+
+	cat >"/etc/systemd/system/${app_servicefile}" <<EOF
+[Unit]
+Description=${app_pretty} (Media Server Library Notifier)
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+Restart=on-failure
+RestartSec=10
+WorkingDirectory=${app_dir}
+ExecStart=/usr/bin/docker compose up -d
+ExecStop=/usr/bin/docker compose down
+TimeoutStartSec=120
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+	_systemd_unit_written="$app_servicefile"
+	systemctl -q daemon-reload
+	systemctl enable -q "$app_servicefile"
+	echo_progress_done "Systemd service installed and enabled"
+}
+
+# ==============================================================================
+# Nginx Reverse Proxy
+# ==============================================================================
+_nginx_autopulse() {
+	if [[ -f /install/.nginx.lock ]]; then
+		echo_progress_start "Configuring nginx"
+
+		cat >"/etc/nginx/apps/${app_name}.conf" <<-NGX
+			location /${app_baseurl} {
+			    return 301 /${app_baseurl}/;
+			}
+
+			location ^~ /${app_baseurl}/ {
+			    proxy_pass http://127.0.0.1:${app_ui_port}/${app_baseurl}/;
+			    proxy_set_header Host \$host;
+			    proxy_set_header X-Real-IP \$remote_addr;
+			    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+			    proxy_set_header X-Forwarded-Host \$host;
+			    proxy_set_header X-Forwarded-Proto \$scheme;
+			    proxy_http_version 1.1;
+			    proxy_set_header Upgrade \$http_upgrade;
+			    proxy_set_header Connection \$http_connection;
+
+			    auth_basic "What's the password?";
+			    auth_basic_user_file /etc/htpasswd.d/htpasswd.${user};
+			}
+
+			location ^~ /${app_baseurl}/triggers/ {
+			    auth_request off;
+			    proxy_pass http://127.0.0.1:${app_port}/triggers/;
+			    proxy_set_header Host \$host;
+			    proxy_set_header X-Real-IP \$remote_addr;
+			    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+			    proxy_set_header X-Forwarded-Proto \$scheme;
+			}
+		NGX
+
+		_nginx_config_written="/etc/nginx/apps/${app_name}.conf"
+		_reload_nginx
+		echo_progress_done "Nginx configured"
+	else
+		echo_info "${app_pretty} API running on port ${app_port}, UI on port ${app_ui_port}"
+	fi
+}
+
+# ==============================================================================
+# Panel Registration
+# ==============================================================================
+_panel_autopulse() {
+	_load_panel_helper
+	if command -v panel_register_app >/dev/null 2>&1; then
+		panel_register_app \
+			"$app_name" \
+			"$app_pretty" \
+			"/${app_baseurl}" \
+			"" \
+			"$app_name" \
+			"$app_icon_name" \
+			"$app_icon_url" \
+			"true"
+	fi
+}
+```
+
+- [ ] **Step 2: Verify syntax**
+
+Run: `bash -n autopulse.sh`
+Expected: No output (clean parse)
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add autopulse.sh
+git commit -m "feat(autopulse): add systemd, nginx, and panel registration"
+```
+
+---
+
+### Task 7: Arr Webhook Auto-Configuration
+
+**Files:**
+- Modify: `autopulse.sh`
+
+- [ ] **Step 1: Add webhook configuration functions**
+
+Add after `_panel_autopulse`:
+
+```bash
+# ==============================================================================
+# Arr Webhook Auto-Configuration
+# ==============================================================================
+_configure_arr_webhooks() {
+	if [[ ${#ARR_NAMES[@]} -eq 0 ]]; then
+		return 0
+	fi
+
+	echo_progress_start "Configuring arr webhooks"
+
+	local i
+	for ((i = 0; i < ${#ARR_NAMES[@]}; i++)); do
+		local name="${ARR_NAMES[$i]}"
+		local port="${ARR_PORTS[$i]}"
+		local apikey="${ARR_APIKEYS[$i]}"
+		local urlbase="${ARR_URLBASES[$i]}"
+		local base_url="http://127.0.0.1:${port}"
+		[[ -n "$urlbase" ]] && base_url="${base_url}/${urlbase#/}"
+
+		local webhook_url="http://localhost:${app_port}/triggers/${name}"
+
+		_verbose "Configuring webhook for ${name} -> ${webhook_url}"
+
+		# Check for existing Autopulse notification
+		local existing
+		existing=$(curl -s --config <(printf 'header = "X-Api-Key: %s"' "$apikey") \
+			"${base_url}/api/v3/notification" 2>/dev/null) || true
+
+		local already_exists=false
+		if [[ -n "$existing" ]] && echo "$existing" | jq -e '.[] | select(.name == "Autopulse")' >/dev/null 2>&1; then
+			already_exists=true
+		fi
+
+		if [[ "$already_exists" == "true" ]]; then
+			_verbose "Autopulse webhook already configured in ${name}, skipping"
+			continue
+		fi
+
+		# Determine event field names based on arr type
+		local payload
+		payload=$(cat <<-JSONEOF
+		{
+		  "name": "Autopulse",
+		  "implementation": "Webhook",
+		  "implementationName": "Webhook",
+		  "configContract": "WebhookSettings",
+		  "enable": true,
+		  "onGrab": false,
+		  "onDownload": true,
+		  "onUpgrade": true,
+		  "onRename": true,
+		  "onSeriesDelete": true,
+		  "onEpisodeFileDelete": true,
+		  "onMovieDelete": true,
+		  "onMovieFileDelete": true,
+		  "onAlbumDelete": true,
+		  "onTrackFileDelete": true,
+		  "onBookDelete": true,
+		  "onBookFileDelete": true,
+		  "onHealthIssue": false,
+		  "supportsOnGrab": true,
+		  "supportsOnDownload": true,
+		  "supportsOnUpgrade": true,
+		  "supportsOnRename": true,
+		  "supportsOnSeriesDelete": true,
+		  "supportsOnEpisodeFileDelete": true,
+		  "supportsOnMovieDelete": true,
+		  "supportsOnMovieFileDelete": true,
+		  "supportsOnAlbumDelete": true,
+		  "supportsOnTrackFileDelete": true,
+		  "supportsOnBookDelete": true,
+		  "supportsOnBookFileDelete": true,
+		  "fields": [
+		    {"name": "url", "value": "${webhook_url}"},
+		    {"name": "method", "value": 1}
+		  ],
+		  "tags": []
+		}
+		JSONEOF
+		)
+
+		local http_code
+		http_code=$(curl -s -o /dev/null -w '%{http_code}' \
+			--config <(printf 'header = "X-Api-Key: %s"' "$apikey") \
+			-X POST "${base_url}/api/v3/notification" \
+			-H "Content-Type: application/json" \
+			-d "$payload" 2>/dev/null) || true
+
+		if [[ "$http_code" == "201" ]]; then
+			_verbose "Webhook added to ${name}"
+		else
+			echo_warn "Failed to add webhook to ${name} (HTTP ${http_code})"
+		fi
+	done
+
+	echo_progress_done "Arr webhooks configured"
+}
+
+# ==============================================================================
+# Optionally disable existing media server Connect entries
+# ==============================================================================
+_disable_arr_media_connects() {
+	if [[ ${#ARR_NAMES[@]} -eq 0 ]]; then
+		return 0
+	fi
+
+	if ! ask "Disable existing Emby/Jellyfin/Plex Connect entries in arr instances?\n(These trigger slow full library scans that Autopulse replaces)" Y; then
+		return 0
+	fi
+
+	local i
+	for ((i = 0; i < ${#ARR_NAMES[@]}; i++)); do
+		local name="${ARR_NAMES[$i]}"
+		local port="${ARR_PORTS[$i]}"
+		local apikey="${ARR_APIKEYS[$i]}"
+		local urlbase="${ARR_URLBASES[$i]}"
+		local base_url="http://127.0.0.1:${port}"
+		[[ -n "$urlbase" ]] && base_url="${base_url}/${urlbase#/}"
+
+		local notifications
+		notifications=$(curl -s --config <(printf 'header = "X-Api-Key: %s"' "$apikey") \
+			"${base_url}/api/v3/notification" 2>/dev/null) || continue
+
+		# Find Emby/Jellyfin/Plex connect entries and disable them
+		local ids_to_disable
+		ids_to_disable=$(echo "$notifications" | jq -r \
+			'.[] | select(.implementation == "Emby" or .implementation == "Jellyfin" or .implementation == "PlexServer" or .implementation == "Plex") | select(.enable == true) | .id' 2>/dev/null) || continue
+
+		for nid in $ids_to_disable; do
+			local existing_notification
+			existing_notification=$(echo "$notifications" | jq ".[] | select(.id == $nid)" 2>/dev/null) || continue
+
+			# Set enable=false
+			local updated
+			updated=$(echo "$existing_notification" | jq '.enable = false' 2>/dev/null) || continue
+
+			curl -s -o /dev/null \
+				--config <(printf 'header = "X-Api-Key: %s"' "$apikey") \
+				-X PUT "${base_url}/api/v3/notification/${nid}" \
+				-H "Content-Type: application/json" \
+				-d "$updated" 2>/dev/null || true
+
+			local impl_name
+			impl_name=$(echo "$existing_notification" | jq -r '.implementation' 2>/dev/null) || impl_name="unknown"
+			_verbose "Disabled ${impl_name} connect in ${name} (id=${nid})"
+		done
+	done
+
+	echo_info "Existing media server Connect entries disabled"
+}
+```
+
+- [ ] **Step 2: Verify syntax**
+
+Run: `bash -n autopulse.sh`
+Expected: No output (clean parse)
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add autopulse.sh
+git commit -m "feat(autopulse): add arr webhook auto-configuration and media connect disabling"
+```
+
+---
+
+### Task 8: Install, Update, Remove, and Main Entry Point
+
+**Files:**
+- Modify: `autopulse.sh`
+
+- [ ] **Step 1: Add the install, update, remove orchestration and main case statement**
+
+Add at the end of the script:
+
+```bash
+# ==============================================================================
+# Fresh Install Orchestration
+# ==============================================================================
+_install_fresh() {
+	if [[ -f "/install/.${app_lockname}.lock" ]]; then
+		echo_error "${app_pretty} is already installed. Use --update to update."
+		exit 1
+	fi
+
+	_cleanup_needed=true
+
+	echo_info "Installing ${app_pretty}..."
+
+	_install_docker
+	_ensure_jq
+	_discover_arrs
+	_discover_media_servers
+	_generate_config
+	_generate_compose
+
+	echo_progress_start "Pulling ${app_pretty} Docker images"
+	docker compose -f "${app_dir}/docker-compose.yml" pull >>"$log" 2>&1 || {
+		echo_error "Failed to pull Docker images"
+		exit 1
+	}
+	echo_progress_done "Docker images pulled"
+
+	echo_progress_start "Starting ${app_pretty} containers"
+	docker compose -f "${app_dir}/docker-compose.yml" up -d >>"$log" 2>&1 || {
+		echo_error "Failed to start containers"
+		exit 1
+	}
+	echo_progress_done "${app_pretty} containers started"
+
+	_systemd_autopulse
+	_nginx_autopulse
+	_panel_autopulse
+
+	# Wait briefly for API to be ready before configuring webhooks
+	sleep 3
+
+	_configure_arr_webhooks
+	_disable_arr_media_connects
+
+	# Create lock file
+	touch "/install/.${app_lockname}.lock"
+	_lock_file_created="/install/.${app_lockname}.lock"
+
+	_cleanup_needed=false
+
+	echo_success "${app_pretty} installed successfully!"
+	echo_info "Dashboard: https://$(hostname -f)/autopulse/"
+	echo_info "Auth: ${user} / $(swizdb get "${app_name}/auth_password" 2>/dev/null)"
+	if [[ ${#ARR_NAMES[@]} -gt 0 ]]; then
+		echo_info "Webhooks configured for: ${ARR_NAMES[*]}"
+	fi
+}
+
+# ==============================================================================
+# Update
+# ==============================================================================
+_update_autopulse() {
+	if [[ ! -f "/install/.${app_lockname}.lock" ]]; then
+		echo_error "${app_pretty} is not installed"
+		exit 1
+	fi
+
+	echo_info "Updating ${app_pretty}..."
+
+	_ensure_jq
+
+	# Re-discover and regenerate config (picks up new arr instances / media servers)
+	_discover_arrs
+	_discover_media_servers
+	_generate_config
+	_generate_compose
+
+	echo_progress_start "Pulling latest ${app_pretty} images"
+	_verbose "Running: docker compose -f ${app_dir}/docker-compose.yml pull"
+	docker compose -f "${app_dir}/docker-compose.yml" pull >>"$log" 2>&1 || {
+		echo_error "Failed to pull latest images"
+		exit 1
+	}
+	echo_progress_done "Latest images pulled"
+
+	echo_progress_start "Recreating ${app_pretty} containers"
+	_verbose "Running: docker compose up -d"
+	docker compose -f "${app_dir}/docker-compose.yml" up -d >>"$log" 2>&1 || {
+		echo_error "Failed to recreate containers"
+		exit 1
+	}
+	echo_progress_done "Containers recreated"
+
+	_verbose "Pruning unused images"
+	docker image prune -f >>"$log" 2>&1 || true
+
+	# Re-configure webhooks for any new arr instances
+	_configure_arr_webhooks
+
+	echo_success "${app_pretty} has been updated"
+	exit 0
+}
+
+# ==============================================================================
+# Remove
+# ==============================================================================
+_remove_autopulse() {
+	local force="${1:-}"
+
+	if [[ "$force" != "--force" ]] && [[ ! -f "/install/.${app_lockname}.lock" ]]; then
+		echo_error "${app_pretty} is not installed (use --force to override)"
+		exit 1
+	fi
+
+	echo_info "Removing ${app_pretty}..."
+
+	# Ask about purging configuration
+	local purgeconfig="false"
+	if [[ "$force" == "--force" ]]; then
+		purgeconfig="true"
+	elif ask "Would you like to purge the configuration?" N; then
+		purgeconfig="true"
+	fi
+
+	# Stop and remove containers
+	echo_progress_start "Stopping ${app_pretty} containers"
+	if [[ -f "${app_dir}/docker-compose.yml" ]]; then
+		docker compose -f "${app_dir}/docker-compose.yml" down >>"$log" 2>&1 || true
+	fi
+	echo_progress_done "Containers stopped"
+
+	# Remove Docker images
+	echo_progress_start "Removing Docker images"
+	docker rmi "$app_image_api" >>"$log" 2>&1 || true
+	docker rmi "$app_image_ui" >>"$log" 2>&1 || true
+	echo_progress_done "Docker images removed"
+
+	# Remove systemd service
+	echo_progress_start "Removing systemd service"
+	systemctl stop "$app_servicefile" 2>/dev/null || true
+	systemctl disable "$app_servicefile" 2>/dev/null || true
+	rm -f "/etc/systemd/system/${app_servicefile}"
+	systemctl daemon-reload
+	echo_progress_done "Service removed"
+
+	# Remove nginx config
+	if [[ -f "/etc/nginx/apps/${app_name}.conf" ]]; then
+		echo_progress_start "Removing nginx configuration"
+		rm -f "/etc/nginx/apps/${app_name}.conf"
+		_reload_nginx 2>/dev/null || true
+		echo_progress_done "Nginx configuration removed"
+	fi
+
+	# Remove from panel
+	_load_panel_helper
+	if command -v panel_unregister_app >/dev/null 2>&1; then
+		echo_progress_start "Removing from panel"
+		panel_unregister_app "$app_name"
+		echo_progress_done "Removed from panel"
+	fi
+
+	# Remove webhooks from arr instances
+	_ensure_jq 2>/dev/null || true
+	_discover_arrs 2>/dev/null || true
+	if [[ ${#ARR_NAMES[@]} -gt 0 ]]; then
+		echo_progress_start "Removing Autopulse webhooks from arr instances"
+		local i
+		for ((i = 0; i < ${#ARR_NAMES[@]}; i++)); do
+			local name="${ARR_NAMES[$i]}"
+			local port="${ARR_PORTS[$i]}"
+			local apikey="${ARR_APIKEYS[$i]}"
+			local urlbase="${ARR_URLBASES[$i]}"
+			local base_url="http://127.0.0.1:${port}"
+			[[ -n "$urlbase" ]] && base_url="${base_url}/${urlbase#/}"
+
+			local notifications
+			notifications=$(curl -s --config <(printf 'header = "X-Api-Key: %s"' "$apikey") \
+				"${base_url}/api/v3/notification" 2>/dev/null) || continue
+
+			local nid
+			nid=$(echo "$notifications" | jq -r '.[] | select(.name == "Autopulse") | .id' 2>/dev/null) || continue
+
+			if [[ -n "$nid" ]]; then
+				curl -s -o /dev/null \
+					--config <(printf 'header = "X-Api-Key: %s"' "$apikey") \
+					-X DELETE "${base_url}/api/v3/notification/${nid}" 2>/dev/null || true
+				_verbose "Removed webhook from ${name}"
+			fi
+		done
+		echo_progress_done "Webhooks removed"
+	fi
+
+	# Purge or keep config
+	if [[ "$purgeconfig" = "true" ]]; then
+		echo_progress_start "Purging configuration and data"
+		rm -f "${app_dir}/config.yaml" "${app_dir}/docker-compose.yml"
+		rm -f "${app_dir}/data/autopulse.db" 2>/dev/null || true
+		rmdir "${app_dir}/data" 2>/dev/null || true
+		rmdir "${app_dir}" 2>/dev/null || true
+		echo_progress_done "Files purged"
+		swizdb clear "${app_name}/owner" 2>/dev/null || true
+		swizdb clear "${app_name}/port" 2>/dev/null || true
+		swizdb clear "${app_name}/ui_port" 2>/dev/null || true
+		swizdb clear "${app_name}/auth_password" 2>/dev/null || true
+		swizdb clear "${app_name}/ui_secret" 2>/dev/null || true
+		swizdb clear "${app_name}/emby_token" 2>/dev/null || true
+		swizdb clear "${app_name}/jellyfin_token" 2>/dev/null || true
+	else
+		echo_info "Configuration kept at: ${app_dir}"
+	fi
+
+	# Remove lock file
+	rm -f "/install/.${app_lockname}.lock"
+
+	echo_success "${app_pretty} has been removed"
+	exit 0
+}
+
+# ==============================================================================
+# Main Entry Point
+# ==============================================================================
+
+# Parse global flags
+for arg in "$@"; do
+	case "$arg" in
+		--verbose) verbose=true ;;
+	esac
+done
+
+case "${1:-}" in
+	"--update")
+		_update_autopulse
+		;;
+	"--remove")
+		_remove_autopulse "${2:-}"
+		;;
+	"--register-panel")
+		if [[ ! -f "/install/.${app_lockname}.lock" ]]; then
+			echo_error "${app_pretty} is not installed"
+			exit 1
+		fi
+		_panel_autopulse
+		systemctl restart panel 2>/dev/null || true
+		echo_success "Panel registration updated for ${app_pretty}"
+		;;
+	"")
+		_install_fresh
+		;;
+	*)
+		echo "Usage: $0 [--update [--verbose]|--remove [--force]|--register-panel]"
+		exit 1
+		;;
+esac
+```
+
+- [ ] **Step 2: Verify complete script syntax**
+
+Run: `bash -n autopulse.sh`
+Expected: No output (clean parse)
+
+- [ ] **Step 3: Make executable**
+
+Run: `chmod +x autopulse.sh`
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add autopulse.sh
+git commit -m "feat(autopulse): add install/update/remove orchestration and main entry point"
+```
+
+---
+
+### Task 9: Update swizzin-app-info Registry
+
+**Files:**
+- Modify: `swizzin-app-info`
+
+- [ ] **Step 1: Read the current swizzin-app-info to find where APP_CONFIGS is defined**
+
+Read `swizzin-app-info` and locate the `APP_CONFIGS` dict to understand the format.
+
+- [ ] **Step 2: Add autopulse entry to APP_CONFIGS**
+
+Add the following entry in alphabetical order within the `APP_CONFIGS` dictionary:
+
+```python
+"autopulse": {
+    "config_paths": ["/opt/autopulse/config.yaml"],
+    "format": "yaml",
+    "keys": ["app.port", "auth.username"],
+},
+```
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add swizzin-app-info
+git commit -m "feat(autopulse): register in swizzin-app-info"
+```
+
+---
+
+### Task 10: Documentation
+
+**Files:**
+- Modify: `docs/apps/docker-apps.md`
+
+- [ ] **Step 1: Add Autopulse section to the docker apps documentation**
+
+Add in alphabetical order among the existing app entries:
+
+```markdown
+## Autopulse
+
+Media server library notifier. Receives Sonarr/Radarr webhooks and sends targeted library update notifications to Emby/Jellyfin/Plex via path-specific API calls (replaces slow full-library scans).
+
+**Install:** `bash autopulse.sh`
+**Update:** `bash autopulse.sh --update`
+**Remove:** `bash autopulse.sh --remove`
+
+**Auto-discovery:** The installer automatically discovers all Sonarr/Radarr/Lidarr/Readarr instances and Emby/Jellyfin/Plex servers. It configures Autopulse triggers/targets and adds webhook notifications to each arr instance.
+
+**Ports:** Two dynamic ports (API + UI) allocated from 10000-12000 range.
+
+**Nginx:** Exposed at `/autopulse` subfolder. Trigger API endpoints at `/autopulse/triggers/` bypass basic auth for Sonarr/Radarr webhook access.
+
+**Environment overrides** (unattended install):
+- `AUTOPULSE_PORT` — API port
+- `AUTOPULSE_UI_PORT` — UI port
+- `AUTOPULSE_AUTH_PASSWORD` — Auth password
+
+**Upstream:** [dan-online/autopulse](https://github.com/dan-online/autopulse)
+```
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add docs/apps/docker-apps.md
+git commit -m "docs(autopulse): add to docker apps documentation"
+```
+
+---
+
+### Task 11: Final Verification
+
+- [ ] **Step 1: Full syntax check**
+
+Run: `bash -n autopulse.sh`
+Expected: No output
+
+- [ ] **Step 2: Verify script structure matches template**
+
+Run: `head -5 autopulse.sh && echo "---" && grep -c "^_" autopulse.sh && echo "functions defined" && grep "case.*\$.*in" autopulse.sh`
+Expected: Shows shebang, function count, and case statement
+
+- [ ] **Step 3: Verify no shellcheck critical issues**
+
+Run: `shellcheck -S error autopulse.sh 2>&1 | head -20`
+Expected: No errors (warnings are ok since Swizzin globals aren't available)
+
+- [ ] **Step 4: Final commit with all files**
+
+```bash
+git status
+git add -A
+git diff --cached --stat
+```
+
+Verify only expected files are staged. If clean, no action needed.
