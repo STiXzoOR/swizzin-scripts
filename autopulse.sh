@@ -87,7 +87,7 @@ app_dir="/opt/${app_name}"
 app_servicefile="${app_name}.service"
 
 app_icon_name="${app_name}"
-app_icon_url="https://raw.githubusercontent.com/dan-online/autopulse/main/ui/static/favicon.png"
+app_icon_url="https://cdn.jsdelivr.net/gh/selfhst/icons@main/png/autopulse.png"
 
 # ==============================================================================
 # User/Owner Setup
