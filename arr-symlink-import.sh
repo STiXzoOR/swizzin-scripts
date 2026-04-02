@@ -53,52 +53,82 @@ fi
 LOG_MAX_SIZE="${ARR_IMPORT_LOG_MAX_SIZE:-10485760}" # 10MB default
 
 # ==============================================================================
-# Auto-detect Zurg mount base path
+# Auto-detect FUSE mount base paths (zurg, nzbdav, torbox, etc.)
 # ==============================================================================
 
-_detect_zurg_base() {
-	# Priority 1: Environment variable (from config or caller)
-	if [[ -n "${ARR_ZURG_BASE:-}" ]]; then
-		echo "$ARR_ZURG_BASE"
-		return 0
-	fi
+FUSE_MOUNTS=()
 
-	# Priority 2: swizdb (set by zurg.sh installer)
-	if command -v swizdb &>/dev/null; then
-		local swizdb_mount
-		swizdb_mount=$(swizdb get "zurg/mount_point" 2>/dev/null) || true
-		if [[ -n "$swizdb_mount" ]]; then
-			echo "$swizdb_mount"
-			return 0
+_detect_fuse_mounts() {
+	# Collect all rclone FUSE mounts from /proc/mounts
+	while IFS= read -r mount_path; do
+		FUSE_MOUNTS+=("$mount_path")
+	done < <(awk '$3 == "fuse.rclone" {print $2}' /proc/mounts 2>/dev/null)
+
+	# Fallback: if no rclone mounts found, use config-based detection
+	if [[ ${#FUSE_MOUNTS[@]} -eq 0 ]]; then
+		# Try swizdb for zurg mount
+		if command -v swizdb &>/dev/null; then
+			local swizdb_mount
+			swizdb_mount=$(swizdb get "zurg/mount_point" 2>/dev/null) || true
+			[[ -n "$swizdb_mount" ]] && FUSE_MOUNTS+=("$swizdb_mount")
 		fi
-	fi
 
-	# Priority 3: Decypharr config.json (parses realdebrid folder path)
-	local decypharr_config
-	for decypharr_config in /home/*/.config/Decypharr/config.json; do
-		if [[ -f "$decypharr_config" ]]; then
-			if command -v jq &>/dev/null; then
-				local folder
-				folder=$(jq -r '.debrids[]? | select(.name == "realdebrid") | .folder // empty' "$decypharr_config" 2>/dev/null) || true
-				if [[ -n "$folder" ]]; then
-					# Strip trailing /__all__/ to get mount base
-					local base="${folder%/__all__/}"
+		# Try Decypharr config for debrid mount paths
+		local decypharr_config
+		for decypharr_config in /home/*/.config/Decypharr/config.json; do
+			if [[ -f "$decypharr_config" ]] && command -v jq &>/dev/null; then
+				while IFS= read -r folder; do
+					[[ -n "$folder" ]] && FUSE_MOUNTS+=("$folder")
+				done < <(jq -r '.debrids[]? | .rclone_mount_path // empty' "$decypharr_config" 2>/dev/null)
+
+				local rd_folder
+				rd_folder=$(jq -r '.debrids[]? | select(.name == "realdebrid") | .folder // empty' "$decypharr_config" 2>/dev/null) || true
+				if [[ -n "$rd_folder" ]]; then
+					local base="${rd_folder%/__all__/}"
 					base="${base%/__all__}"
-					if [[ -n "$base" ]]; then
-						echo "$base"
-						return 0
-					fi
+					[[ -n "$base" ]] && FUSE_MOUNTS+=("$base")
 				fi
 			fi
-		fi
-	done
+		done
 
-	# Priority 4: Default
-	echo "/mnt/zurg"
-	return 0
+		# Last resort default
+		[[ ${#FUSE_MOUNTS[@]} -eq 0 ]] && FUSE_MOUNTS+=("/mnt/zurg")
+	fi
+
+	# Also honor ARR_ZURG_BASE env var for backward compat
+	if [[ -n "${ARR_ZURG_BASE:-}" ]]; then
+		local already=false
+		for m in "${FUSE_MOUNTS[@]}"; do
+			[[ "$m" == "$ARR_ZURG_BASE" ]] && already=true
+		done
+		[[ "$already" == "false" ]] && FUSE_MOUNTS+=("$ARR_ZURG_BASE")
+	fi
 }
 
-ZURG_BASE="$(_detect_zurg_base)"
+_detect_fuse_mounts
+
+# Check if a path is on any known FUSE mount
+# Sets MATCHED_MOUNT to the mount path if found
+_is_on_fuse_mount() {
+	local path="$1"
+	for mount in "${FUSE_MOUNTS[@]}"; do
+		if [[ "$path" == "$mount"* ]]; then
+			MATCHED_MOUNT="$mount"
+			return 0
+		fi
+	done
+	return 1
+}
+
+# Backward compat: set ZURG_BASE to the first detected zurg mount
+ZURG_BASE=""
+for m in "${FUSE_MOUNTS[@]}"; do
+	if [[ "$m" == *zurg* ]]; then
+		ZURG_BASE="$m"
+		break
+	fi
+done
+[[ -z "$ZURG_BASE" ]] && ZURG_BASE="${FUSE_MOUNTS[0]:-/mnt/zurg}"
 
 # ==============================================================================
 # Logging
@@ -222,7 +252,7 @@ fi
 log "=== $APP Import Request ==="
 log "Source: $SOURCE_PATH"
 log "Destination: $DEST_PATH"
-log "Zurg base: $ZURG_BASE"
+log "FUSE mounts: ${FUSE_MOUNTS[*]}"
 
 # ==============================================================================
 # Validate source
@@ -245,12 +275,12 @@ if [[ -L "$SOURCE_PATH" ]]; then
 	# Check if symlink target is accessible
 	if [[ ! -e "$REAL_TARGET" ]]; then
 		log "WARN: Symlink target not accessible (possibly stale mount): $REAL_TARGET"
-		# Still proceed - the target path is on the zurg mount, we just need to
+		# Still proceed if target is on a known FUSE mount - we just need to
 		# create a new symlink pointing to the same target
-		if [[ "$REAL_TARGET" == "$ZURG_BASE"* ]]; then
-			log "INFO: Target is on zurg mount, will create symlink even though target is currently inaccessible"
+		if _is_on_fuse_mount "$REAL_TARGET"; then
+			log "INFO: Target is on FUSE mount ($MATCHED_MOUNT), will create symlink even though target is currently inaccessible"
 		else
-			log "ERROR: Symlink target is inaccessible and not on zurg mount"
+			log "ERROR: Symlink target is inaccessible and not on any known FUSE mount"
 			exit 1
 		fi
 	fi
@@ -264,12 +294,12 @@ fi
 # Handle import
 # ==============================================================================
 
-if [[ "$REAL_TARGET" == "$ZURG_BASE"* ]]; then
-	log "Target is on zurg mount - creating symlink"
+if _is_on_fuse_mount "$REAL_TARGET"; then
+	log "Target is on FUSE mount ($MATCHED_MOUNT) - creating symlink"
 
 	# Verify mount health before proceeding
-	if ! _check_mount "$ZURG_BASE"; then
-		log "ERROR: Zurg mount is not healthy, cannot proceed"
+	if ! _check_mount "$MATCHED_MOUNT"; then
+		log "ERROR: FUSE mount $MATCHED_MOUNT is not healthy, cannot proceed"
 		exit 1
 	fi
 
@@ -306,8 +336,8 @@ if [[ "$REAL_TARGET" == "$ZURG_BASE"* ]]; then
 		exit 1
 	fi
 else
-	# Not on zurg mount - do a regular move
-	log "Target not on zurg mount - performing regular move"
+	# Not on any FUSE mount - do a regular move
+	log "Target not on FUSE mount - performing regular move"
 
 	# Ensure destination directory exists
 	DEST_DIR=$(dirname "$DEST_PATH")
