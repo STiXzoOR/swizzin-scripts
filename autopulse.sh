@@ -517,6 +517,7 @@ services:
     user: "${uid}:${gid}"
     environment:
       AUTOPULSE__APP__DATABASE_URL: sqlite://data/autopulse.db
+      AUTOPULSE__APP__PORT: "${app_port}"
     volumes:
       - ${app_dir}/config.yaml:/app/config.yaml:ro
       - ${app_dir}/data:/app/data

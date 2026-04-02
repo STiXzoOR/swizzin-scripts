@@ -221,6 +221,7 @@ _check_mount() {
 APP=""
 SOURCE_PATH=""
 DEST_PATH=""
+ARR_USER=""
 
 # Method 1: Positional arguments (always passed by Sonarr/Radarr)
 if [[ -n "${1:-}" ]] && [[ -n "${2:-}" ]]; then
@@ -249,10 +250,21 @@ else
 	exit 1
 fi
 
+# Detect the arr service user from the destination path owner
+# The library root (e.g. /mnt/symlinks/series) is owned by the correct user
+DEST_LIB_ROOT="$DEST_PATH"
+for _ in 1 2 3 4; do
+	parent="$(dirname "$DEST_LIB_ROOT")"
+	[[ "$parent" == "/mnt/symlinks" || "$parent" == "/" ]] && break
+	DEST_LIB_ROOT="$parent"
+done
+ARR_USER="$(stat -c '%U' "$DEST_LIB_ROOT" 2>/dev/null)" || ARR_USER=""
+
 log "=== $APP Import Request ==="
 log "Source: $SOURCE_PATH"
 log "Destination: $DEST_PATH"
 log "FUSE mounts: ${FUSE_MOUNTS[*]}"
+[[ -n "$ARR_USER" ]] && log "Arr user: $ARR_USER"
 
 # ==============================================================================
 # Validate source
@@ -303,7 +315,7 @@ if _is_on_fuse_mount "$REAL_TARGET"; then
 		exit 1
 	fi
 
-	# Ensure destination directory exists
+	# Ensure destination directory exists with correct ownership
 	DEST_DIR=$(dirname "$DEST_PATH")
 	if [[ ! -d "$DEST_DIR" ]]; then
 		log "Creating destination directory: $DEST_DIR"
@@ -311,6 +323,7 @@ if _is_on_fuse_mount "$REAL_TARGET"; then
 			log "ERROR: Failed to create directory: $DEST_DIR"
 			exit 1
 		fi
+		[[ -n "$ARR_USER" ]] && chown "$ARR_USER":"$ARR_USER" "$DEST_DIR"
 	fi
 
 	# Handle existing destination (upgrade scenario)
@@ -325,8 +338,9 @@ if _is_on_fuse_mount "$REAL_TARGET"; then
 		rm -f "$DEST_PATH"
 	fi
 
-	# Create symlink
+	# Create symlink with correct ownership
 	if ln -s "$REAL_TARGET" "$DEST_PATH"; then
+		[[ -n "$ARR_USER" ]] && chown -h "$ARR_USER":"$ARR_USER" "$DEST_PATH"
 		log "SUCCESS: Created symlink: $DEST_PATH -> $REAL_TARGET"
 		# Signal to Sonarr/Radarr that the import is complete
 		echo "[MoveStatus]MoveComplete"
@@ -339,11 +353,12 @@ else
 	# Not on any FUSE mount - do a regular move
 	log "Target not on FUSE mount - performing regular move"
 
-	# Ensure destination directory exists
+	# Ensure destination directory exists with correct ownership
 	DEST_DIR=$(dirname "$DEST_PATH")
 	if [[ ! -d "$DEST_DIR" ]]; then
 		log "Creating destination directory: $DEST_DIR"
 		mkdir -p "$DEST_DIR"
+		[[ -n "$ARR_USER" ]] && chown "$ARR_USER":"$ARR_USER" "$DEST_DIR"
 	fi
 
 	# Try to move
