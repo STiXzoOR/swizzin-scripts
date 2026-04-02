@@ -401,3 +401,143 @@ _discover_media_servers() {
 		echo_progress_done "Found ${#MS_NAMES[@]} media server(s): ${MS_NAMES[*]}"
 	fi
 }
+
+# ==============================================================================
+# Config Generation
+# ==============================================================================
+_generate_config() {
+	echo_progress_start "Generating Autopulse configuration"
+
+	mkdir -p "${app_dir}/data"
+	chown -R "${user}:${user}" "$app_dir"
+
+	# Persist ports
+	swizdb set "${app_name}/port" "$app_port"
+	swizdb set "${app_name}/ui_port" "$app_ui_port"
+	swizdb set "${app_name}/owner" "$user"
+
+	# Generate or reuse auth password
+	local auth_password
+	if auth_password="$(swizdb get "${app_name}/auth_password" 2>/dev/null)" && [[ -n "$auth_password" ]]; then
+		_verbose "Reusing existing auth password"
+	elif [[ -n "${AUTOPULSE_AUTH_PASSWORD:-}" ]]; then
+		auth_password="$AUTOPULSE_AUTH_PASSWORD"
+	else
+		auth_password=$(openssl rand -base64 16 | tr -dc 'A-Za-z0-9' | cut -c -16)
+	fi
+	swizdb set "${app_name}/auth_password" "$auth_password"
+
+	# Generate or reuse UI secret
+	local ui_secret
+	if ui_secret="$(swizdb get "${app_name}/ui_secret" 2>/dev/null)" && [[ -n "$ui_secret" ]]; then
+		_verbose "Reusing existing UI secret"
+	else
+		ui_secret=$(openssl rand -hex 32)
+	fi
+	swizdb set "${app_name}/ui_secret" "$ui_secret"
+
+	# --- Build config.yaml ---
+	{
+		cat <<-YAML
+		app:
+		  hostname: 0.0.0.0
+		  port: ${app_port}
+		  log_level: info
+
+		auth:
+		  username: ${user}
+		  password: ${auth_password}
+
+		YAML
+
+		# Triggers section
+		if [[ ${#ARR_NAMES[@]} -gt 0 ]]; then
+			echo "triggers:"
+			local i
+			for ((i = 0; i < ${#ARR_NAMES[@]}; i++)); do
+				echo "  ${ARR_NAMES[$i]}:"
+				echo "    type: ${ARR_TYPES[$i]}"
+			done
+			echo ""
+		fi
+
+		# Targets section
+		if [[ ${#MS_NAMES[@]} -gt 0 ]]; then
+			echo "targets:"
+			local i
+			for ((i = 0; i < ${#MS_NAMES[@]}; i++)); do
+				echo "  ${MS_NAMES[$i]}:"
+				echo "    type: ${MS_TYPES[$i]}"
+				echo "    url: ${MS_URLS[$i]}"
+				echo "    token: ${MS_TOKENS[$i]}"
+			done
+			echo ""
+		fi
+	} >"${app_dir}/config.yaml"
+
+	chmod 600 "${app_dir}/config.yaml"
+	chown root:root "${app_dir}/config.yaml"
+
+	echo_progress_done "Configuration generated"
+}
+
+# ==============================================================================
+# Docker Compose Generation
+# ==============================================================================
+_generate_compose() {
+	echo_progress_start "Generating Docker Compose configuration"
+
+	local uid gid
+	uid=$(id -u "$user")
+	gid=$(id -g "$user")
+
+	local auth_password
+	auth_password=$(swizdb get "${app_name}/auth_password" 2>/dev/null)
+	local ui_secret
+	ui_secret=$(swizdb get "${app_name}/ui_secret" 2>/dev/null)
+
+	cat >"${app_dir}/docker-compose.yml" <<COMPOSE
+services:
+  autopulse:
+    image: ${app_image_api}
+    container_name: autopulse
+    restart: unless-stopped
+    network_mode: host
+    user: "${uid}:${gid}"
+    environment:
+      AUTOPULSE__APP__DATABASE_URL: sqlite://data/autopulse.db
+    volumes:
+      - ${app_dir}/config.yaml:/app/config.yaml:ro
+      - ${app_dir}/data:/app/data
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+  autopulse-ui:
+    image: ${app_image_ui}
+    container_name: autopulse-ui
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      BASE_PATH: /autopulse
+      ORIGIN: http://localhost:${app_ui_port}
+      PORT: "${app_ui_port}"
+      FORCE_AUTH: "true"
+      FORCE_SERVER_URL: http://localhost:${app_port}
+      FORCE_USERNAME: ${user}
+      FORCE_PASSWORD: ${auth_password}
+      SECRET: ${ui_secret}
+    depends_on:
+      - autopulse
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+COMPOSE
+
+	chmod 600 "${app_dir}/docker-compose.yml"
+	chown root:root "${app_dir}/docker-compose.yml"
+
+	echo_progress_done "Docker Compose configuration generated"
+}
