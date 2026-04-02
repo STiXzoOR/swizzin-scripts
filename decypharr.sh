@@ -441,6 +441,32 @@ _rollback_decypharr() {
 }
 
 # ==============================================================================
+# Patch existing service file
+# ==============================================================================
+_patch_service() {
+    local service_file="/etc/systemd/system/${app_servicefile}"
+    [[ -f "$service_file" ]] || return 0
+
+    local changed=false
+
+    # Fix KillMode=process → control-group (prevents orphaned rclone on restart)
+    if grep -q 'KillMode=process' "$service_file" 2>/dev/null; then
+        sed -i 's/KillMode=process/KillMode=control-group/' "$service_file"
+        changed=true
+    fi
+
+    # Add KillMode if missing entirely
+    if ! grep -q 'KillMode=' "$service_file" 2>/dev/null; then
+        sed -i '/TimeoutStopSec=/a KillMode=control-group' "$service_file"
+        changed=true
+    fi
+
+    if [[ "$changed" == "true" ]]; then
+        systemctl daemon-reload
+        echo_info "Patched ${app_name^} service (KillMode=control-group)"
+    fi
+}
+
 # Update
 # ==============================================================================
 _update_decypharr() {
@@ -450,6 +476,9 @@ _update_decypharr() {
         echo_error "${app_name^} is not installed"
         exit 1
     fi
+
+    # Patch service file if needed (prevents orphaned rclone)
+    _patch_service
 
     # Full reinstall
     if [[ "$full_reinstall" == "true" ]]; then
