@@ -180,7 +180,10 @@ APP_CONFIGS = {
     "autopulse": {
         "config_paths": ["/opt/autopulse/config.yaml"],
         "format": "yaml",
-        "keys": ["app.port", "auth.username"],
+        "keys": {
+            "port": "app.port",
+            "apikey": "auth.password",
+        },
     },
     "bazarr": {
         "config_paths": [

@@ -305,6 +305,10 @@ opt/mediafusion/redis/appendonlydir/appendonly.aof.*.incr.aof
 # Keep pgdata and data dirs, exclude docker-compose (recreated by installer)
 opt/zilean/docker-compose.yml
 
+# === AUTOPULSE ===
+# Keep config.yaml and data dir (SQLite DB), exclude docker-compose (recreated by installer)
+opt/autopulse/docker-compose.yml
+
 # === NZBDAV ===
 # Keep config dir (SQLite DB), exclude docker-compose (recreated by installer)
 opt/nzbdav/docker-compose.yml

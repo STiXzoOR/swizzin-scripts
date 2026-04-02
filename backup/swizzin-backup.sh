@@ -172,6 +172,9 @@ declare -A SERVICE_TYPES=(
     ["zurg"]="system"
     ["rclone-zurg"]="system"
 
+    # Media Server Notifier
+    ["autopulse"]="system"
+
     # Debrid Indexer Stack
     ["stremthru"]="system"
     ["mediafusion"]="system"
@@ -205,7 +208,7 @@ SERVICE_STOP_ORDER=(
     flood deluge deluged deluge-web qbittorrent rtorrent transmission
     nzbget sabnzbd
     # Utilities
-    filebrowser syncthing pyload netdata subgen lingarr libretranslate mdblistarr newtarr
+    filebrowser syncthing pyload netdata subgen lingarr libretranslate mdblistarr newtarr autopulse
     # Real-Debrid (stop last, start first)
     zurg decypharr
     # Never stop: rclone-zurg, organizr, nextcloud, nginx, panel
@@ -222,7 +225,7 @@ declare -A SERVICE_STOP_CRITICAL=(
     ["emby"]=1 ["jellyfin"]=1
     ["huntarr"]=1
     ["mdblistarr"]=1
-    ["stremthru"]=1
+    ["stremthru"]=1 ["autopulse"]=1
     ["nzbdav"]=1
     ["rclone-nzbdav"]=1
 )

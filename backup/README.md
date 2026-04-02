@@ -48,6 +48,7 @@ This backup system works with any SSH-accessible borg repository:
 | **zilean**                     | DMM hashlist Torznab indexer (Postgres) |
 | **nzbdav**                     | NZB-to-WebDAV bridge (SQLite)          |
 | **newtarr**                    | Media library search tool              |
+| **autopulse**                  | Media server library notifier (SQLite) |
 
 ---
 

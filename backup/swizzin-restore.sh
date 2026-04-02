@@ -100,6 +100,9 @@ declare -A APP_PATHS=(
     ["zurg"]="home/*/.config/zurg"
     ["mdblist-sync"]="opt/swizzin-extras"
 
+    # Media Server Notifier
+    ["autopulse"]="opt/autopulse"
+
     # Debrid Indexer Stack
     ["stremthru"]="opt/stremthru/data"
     ["mediafusion"]="opt/mediafusion"
@@ -142,6 +145,7 @@ declare -A SERVICE_TYPES=(
     ["cleanuparr"]="system" ["byparr"]="system" ["flaresolverr"]="system"
     ["subgen"]="system" ["lingarr"]="system" ["libretranslate"]="system"
     ["mdblistarr"]="system"
+    ["autopulse"]="system"
     ["stremthru"]="system" ["mediafusion"]="system" ["zilean"]="system"
     ["nzbdav"]="system" ["newtarr"]="system"
     ["zurg"]="system" ["rclone-zurg"]="system"
