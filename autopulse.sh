@@ -636,3 +636,154 @@ _panel_autopulse() {
 			"true"
 	fi
 }
+
+# ==============================================================================
+# Arr Webhook Auto-Configuration
+# ==============================================================================
+_configure_arr_webhooks() {
+	if [[ ${#ARR_NAMES[@]} -eq 0 ]]; then
+		return 0
+	fi
+
+	echo_progress_start "Configuring arr webhooks"
+
+	local i
+	for ((i = 0; i < ${#ARR_NAMES[@]}; i++)); do
+		local name="${ARR_NAMES[$i]}"
+		local port="${ARR_PORTS[$i]}"
+		local apikey="${ARR_APIKEYS[$i]}"
+		local urlbase="${ARR_URLBASES[$i]}"
+		local base_url="http://127.0.0.1:${port}"
+		[[ -n "$urlbase" ]] && base_url="${base_url}/${urlbase#/}"
+
+		local webhook_url="http://localhost:${app_port}/triggers/${name}"
+
+		_verbose "Configuring webhook for ${name} -> ${webhook_url}"
+
+		# Check for existing Autopulse notification
+		local existing
+		existing=$(curl -s --config <(printf 'header = "X-Api-Key: %s"' "$apikey") \
+			"${base_url}/api/v3/notification" 2>/dev/null) || true
+
+		local already_exists=false
+		if [[ -n "$existing" ]] && echo "$existing" | jq -e '.[] | select(.name == "Autopulse")' >/dev/null 2>&1; then
+			already_exists=true
+		fi
+
+		if [[ "$already_exists" == "true" ]]; then
+			_verbose "Autopulse webhook already configured in ${name}, skipping"
+			continue
+		fi
+
+		# Determine event field names based on arr type
+		local payload
+		payload=$(cat <<-JSONEOF
+		{
+		  "name": "Autopulse",
+		  "implementation": "Webhook",
+		  "implementationName": "Webhook",
+		  "configContract": "WebhookSettings",
+		  "enable": true,
+		  "onGrab": false,
+		  "onDownload": true,
+		  "onUpgrade": true,
+		  "onRename": true,
+		  "onSeriesDelete": true,
+		  "onEpisodeFileDelete": true,
+		  "onMovieDelete": true,
+		  "onMovieFileDelete": true,
+		  "onAlbumDelete": true,
+		  "onTrackFileDelete": true,
+		  "onBookDelete": true,
+		  "onBookFileDelete": true,
+		  "onHealthIssue": false,
+		  "supportsOnGrab": true,
+		  "supportsOnDownload": true,
+		  "supportsOnUpgrade": true,
+		  "supportsOnRename": true,
+		  "supportsOnSeriesDelete": true,
+		  "supportsOnEpisodeFileDelete": true,
+		  "supportsOnMovieDelete": true,
+		  "supportsOnMovieFileDelete": true,
+		  "supportsOnAlbumDelete": true,
+		  "supportsOnTrackFileDelete": true,
+		  "supportsOnBookDelete": true,
+		  "supportsOnBookFileDelete": true,
+		  "fields": [
+		    {"name": "url", "value": "${webhook_url}"},
+		    {"name": "method", "value": 1}
+		  ],
+		  "tags": []
+		}
+		JSONEOF
+		)
+
+		local http_code
+		http_code=$(curl -s -o /dev/null -w '%{http_code}' \
+			--config <(printf 'header = "X-Api-Key: %s"' "$apikey") \
+			-X POST "${base_url}/api/v3/notification" \
+			-H "Content-Type: application/json" \
+			-d "$payload" 2>/dev/null) || true
+
+		if [[ "$http_code" == "201" ]]; then
+			_verbose "Webhook added to ${name}"
+		else
+			echo_warn "Failed to add webhook to ${name} (HTTP ${http_code})"
+		fi
+	done
+
+	echo_progress_done "Arr webhooks configured"
+}
+
+# ==============================================================================
+# Optionally disable existing media server Connect entries
+# ==============================================================================
+_disable_arr_media_connects() {
+	if [[ ${#ARR_NAMES[@]} -eq 0 ]]; then
+		return 0
+	fi
+
+	if ! ask "Disable existing Emby/Jellyfin/Plex Connect entries in arr instances?\n(These trigger slow full library scans that Autopulse replaces)" Y; then
+		return 0
+	fi
+
+	local i
+	for ((i = 0; i < ${#ARR_NAMES[@]}; i++)); do
+		local name="${ARR_NAMES[$i]}"
+		local port="${ARR_PORTS[$i]}"
+		local apikey="${ARR_APIKEYS[$i]}"
+		local urlbase="${ARR_URLBASES[$i]}"
+		local base_url="http://127.0.0.1:${port}"
+		[[ -n "$urlbase" ]] && base_url="${base_url}/${urlbase#/}"
+
+		local notifications
+		notifications=$(curl -s --config <(printf 'header = "X-Api-Key: %s"' "$apikey") \
+			"${base_url}/api/v3/notification" 2>/dev/null) || continue
+
+		# Find Emby/Jellyfin/Plex connect entries and disable them
+		local ids_to_disable
+		ids_to_disable=$(echo "$notifications" | jq -r \
+			'.[] | select(.implementation == "Emby" or .implementation == "Jellyfin" or .implementation == "PlexServer" or .implementation == "Plex") | select(.enable == true) | .id' 2>/dev/null) || continue
+
+		for nid in $ids_to_disable; do
+			local existing_notification
+			existing_notification=$(echo "$notifications" | jq ".[] | select(.id == $nid)" 2>/dev/null) || continue
+
+			# Set enable=false
+			local updated
+			updated=$(echo "$existing_notification" | jq '.enable = false' 2>/dev/null) || continue
+
+			curl -s -o /dev/null \
+				--config <(printf 'header = "X-Api-Key: %s"' "$apikey") \
+				-X PUT "${base_url}/api/v3/notification/${nid}" \
+				-H "Content-Type: application/json" \
+				-d "$updated" 2>/dev/null || true
+
+			local impl_name
+			impl_name=$(echo "$existing_notification" | jq -r '.implementation' 2>/dev/null) || impl_name="unknown"
+			_verbose "Disabled ${impl_name} connect in ${name} (id=${nid})"
+		done
+	done
+
+	echo_info "Existing media server Connect entries disabled"
+}
