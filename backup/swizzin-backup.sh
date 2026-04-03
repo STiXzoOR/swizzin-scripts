@@ -228,6 +228,7 @@ declare -A SERVICE_STOP_CRITICAL=(
     ["stremthru"]=1 ["autopulse"]=1
     ["nzbdav"]=1
     ["rclone-nzbdav"]=1
+    ["decypharr"]=1
 )
 
 #===============================================================================
