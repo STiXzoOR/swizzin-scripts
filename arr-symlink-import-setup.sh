@@ -10,6 +10,9 @@
 
 set -euo pipefail
 
+# shellcheck source=lib/utils.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/utils.sh" 2>/dev/null || true
+
 # ==============================================================================
 # Signal Traps
 # ==============================================================================
