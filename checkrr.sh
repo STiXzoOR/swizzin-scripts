@@ -464,7 +464,7 @@ _nginx_checkrr() {
 			}
 
 			location ^~ /${app_baseurl}/api {
-			    auth_request off;
+			    auth_basic off;
 			    proxy_pass http://127.0.0.1:${app_port}/api;
 			    proxy_set_header Host \$host;
 			    proxy_set_header X-Real-IP \$remote_addr;

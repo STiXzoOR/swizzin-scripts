@@ -543,7 +543,8 @@ _nginx_posterizarr() {
 			}
 
 			location ^~ /${app_baseurl}/ {
-			        auth_request /organizr-auth/auth-0;
+			    auth_basic "What's the password?";
+			    auth_basic_user_file /etc/htpasswd.d/htpasswd.${user};
 			    proxy_pass http://127.0.0.1:${app_port}/;
 			    proxy_set_header Host \$host;
 			    proxy_set_header X-Real-IP \$remote_addr;
@@ -585,7 +586,7 @@ _nginx_posterizarr() {
 
 			# Webhook endpoints - no auth required (arr services call these)
 			location ^~ /${app_baseurl}/api/webhook/ {
-			    auth_request off;
+			    auth_basic off;
 			    proxy_pass http://127.0.0.1:${app_port}/api/webhook/;
 			    proxy_set_header Host \$host;
 			    proxy_set_header X-Real-IP \$remote_addr;
