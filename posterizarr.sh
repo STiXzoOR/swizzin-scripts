@@ -499,18 +499,51 @@ EOF
 # ==============================================================================
 # Nginx Configuration
 # ==============================================================================
+_detect_router_pattern() {
+    # Auto-detect the minified BrowserRouter JSX call pattern from the current build.
+    # Returns the sub_filter match string, e.g. "e.jsx(Tr,{children"
+    local index_js
+    index_js=$(curl -sf "http://127.0.0.1:${app_port}/" | grep -oP '/assets/index-[^"]+\.js' | head -1) || return 1
+    [[ -z "$index_js" ]] && return 1
+
+    local js_content
+    js_content=$(curl -sf "http://127.0.0.1:${app_port}${index_js}") || return 1
+
+    # Find the App root component (rendered inside StrictMode)
+    local app_var
+    app_var=$(echo "$js_content" | grep -oP 'StrictMode,\{children:e\.jsx\(\K\w+' | head -1)
+    [[ -z "$app_var" ]] && return 1
+
+    # The App component's first child in its return chain is BrowserRouter
+    local router_var
+    router_var=$(echo "$js_content" | grep -oP "function ${app_var}\(\)\{return e\.jsx\(\K\w+" | head -1)
+    [[ -z "$router_var" ]] && return 1
+
+    echo "e.jsx(${router_var},{children"
+}
+
 _nginx_posterizarr() {
     if [[ -f /install/.nginx.lock ]]; then
         echo_progress_start "Configuring nginx"
 
-        # Posterizarr has no base_url support, so we use sub_filter to rewrite
-        # asset paths and API endpoints for subfolder proxying.
+        # Auto-detect BrowserRouter JSX pattern for basename injection
+        local router_pattern=""
+        local basename_filter=""
+        router_pattern=$(_detect_router_pattern) || true
+        if [[ -n "$router_pattern" ]]; then
+            basename_filter="sub_filter '${router_pattern}' '${router_pattern%%,*},basename:\"/${app_baseurl}\",children';"
+            _verbose "Detected BrowserRouter pattern: ${router_pattern}"
+        else
+            echo_warn "Could not detect BrowserRouter pattern — client-side routing may not work under subfolder"
+        fi
+
         cat >"/etc/nginx/apps/${app_name}.conf" <<-NGX
 			location /${app_baseurl} {
 			    return 301 /${app_baseurl}/;
 			}
 
 			location ^~ /${app_baseurl}/ {
+			        auth_request /organizr-auth/auth-0;
 			    proxy_pass http://127.0.0.1:${app_port}/;
 			    proxy_set_header Host \$host;
 			    proxy_set_header X-Real-IP \$remote_addr;
@@ -521,34 +554,37 @@ _nginx_posterizarr() {
 			    proxy_set_header Upgrade \$http_upgrade;
 			    proxy_set_header Connection \$http_connection;
 
-			    # Disable upstream compression so sub_filter can rewrite
+			    # Rewrite paths in all response types
 			    proxy_set_header Accept-Encoding "";
-
-			    # Rewrite URLs in responses (Posterizarr has no base_url support)
 			    sub_filter_once off;
 			    sub_filter_types text/html text/css text/javascript application/javascript application/json;
+
+			    # Inject React Router basename (auto-detected, regenerated on --update)
+			    ${basename_filter}
+
+			    # API base URL constants (multiple per chunk, stable pattern across builds)
+			    sub_filter '="/api"' '="/${app_baseurl}/api"';
+
+			    # HTML attributes
 			    sub_filter 'href="/' 'href="/${app_baseurl}/';
 			    sub_filter 'src="/' 'src="/${app_baseurl}/';
+
+			    # JS fetch/string literals and backtick template literals
 			    sub_filter '"/api/' '"/${app_baseurl}/api/';
-			    sub_filter '"/assets' '"/${app_baseurl}/assets';
+			    sub_filter '\`/api/' '\`/${app_baseurl}/api/';
 
-			    auth_basic "What's the password?";
-			    auth_basic_user_file /etc/htpasswd.d/htpasswd.${user};
+			    # Static image/asset references
+			    sub_filter '"/images/' '"/${app_baseurl}/images/';
+			    sub_filter '"/logo.png' '"/${app_baseurl}/logo.png';
+			    sub_filter '"/favicon' '"/${app_baseurl}/favicon';
+			    sub_filter '\`/poster_assets/' '\`/${app_baseurl}/poster_assets/';
+
+			    # CSS url()
+			    sub_filter 'url(/' 'url(/${app_baseurl}/';
 			}
 
-			location ^~ /${app_baseurl}/api {
-			    proxy_pass http://127.0.0.1:${app_port}/api;
-			    proxy_set_header Host \$host;
-			    proxy_set_header X-Real-IP \$remote_addr;
-			    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-			    proxy_set_header X-Forwarded-Proto \$scheme;
-
-			    auth_basic "What's the password?";
-			    auth_basic_user_file /etc/htpasswd.d/htpasswd.${user};
-			}
-
+			# Webhook endpoints - no auth required (arr services call these)
 			location ^~ /${app_baseurl}/api/webhook/ {
-			    # Webhook endpoints for Sonarr/Radarr - no auth required
 			    auth_request off;
 			    proxy_pass http://127.0.0.1:${app_port}/api/webhook/;
 			    proxy_set_header Host \$host;
@@ -558,6 +594,7 @@ _nginx_posterizarr() {
 			}
 		NGX
 
+        _nginx_config_written="/etc/nginx/apps/${app_name}.conf"
         _reload_nginx
         echo_progress_done "Nginx configured"
     else
