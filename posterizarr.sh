@@ -229,37 +229,30 @@ _generate_config() {
 
     echo_progress_start "Generating default configuration"
 
-    # Auto-detect Emby
-    local use_emby="false"
+    # Download official example config (app's config checker is strict about structure)
+    if ! curl -sf "https://raw.githubusercontent.com/fscorrupt/Posterizarr/main/config.example.json" \
+            -o "${app_configdir}/config.json" 2>/dev/null; then
+        echo_error "Failed to download example config"
+        return 1
+    fi
+
+    # Auto-detect Emby and inject settings
     EMBY_URL=""
     EMBY_TOKEN=""
     if _detect_emby; then
-        use_emby="true"
+        python3 -c "
+import json, sys
+with open('${app_configdir}/config.json') as f:
+    d = json.load(f)
+d['EmbyPart']['UseEmby'] = 'true'
+d['EmbyPart']['EmbyUrl'] = '${EMBY_URL}'
+d['ApiPart']['EmbyAPIKey'] = '${EMBY_TOKEN}'
+d['PlexPart']['UsePlex'] = 'false'
+with open('${app_configdir}/config.json', 'w') as f:
+    json.dump(d, f, indent=2)
+" 2>/dev/null
         echo_info "Emby detected — API key configured automatically"
     fi
-
-    cat >"${app_configdir}/config.json" <<CONFIGJSON
-{
-    "WebUI": {
-        "enabled": false
-    },
-    "EmbyPart": {
-        "UseEmby": ${use_emby},
-        "EmbyUrl": "${EMBY_URL}",
-        "EmbyApiKey": "${EMBY_TOKEN}"
-    },
-    "PlexPart": {
-        "UsePlex": false,
-        "PlexUrl": "",
-        "PlexToken": ""
-    },
-    "JellyfinPart": {
-        "UseJellyfin": false,
-        "JellyfinUrl": "",
-        "JellyfinApiKey": ""
-    }
-}
-CONFIGJSON
 
     chmod 600 "${app_configdir}/config.json"
     echo_progress_done "Default configuration generated"
@@ -317,8 +310,6 @@ services:
       - TERM=xterm
       - RUN_TIME=disabled
       - APP_PORT=${app_port}
-      - PUID=${uid}
-      - PGID=${gid}
     volumes:
       - ${app_configdir}:/config
       - ${app_assetsdir}:/assets
