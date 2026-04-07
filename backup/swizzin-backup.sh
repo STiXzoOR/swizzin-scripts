@@ -182,6 +182,13 @@ declare -A SERVICE_TYPES=(
     ["nzbdav"]="system"
     ["rclone-nzbdav"]="system"
     ["newtarr"]="system"
+
+    # Media Management
+    ["checkrr"]="system"
+    ["posterizarr"]="system"
+
+    # Analytics
+    ["tracearr"]="system"
 )
 
 # Service name mappings (when systemd name differs from app name)
@@ -208,7 +215,7 @@ SERVICE_STOP_ORDER=(
     flood deluge deluged deluge-web qbittorrent rtorrent transmission
     nzbget sabnzbd
     # Utilities
-    filebrowser syncthing pyload netdata subgen lingarr libretranslate mdblistarr newtarr autopulse
+    filebrowser syncthing pyload netdata subgen lingarr libretranslate mdblistarr newtarr autopulse checkrr posterizarr tracearr
     # Real-Debrid (stop last, start first)
     zurg decypharr
     # Never stop: rclone-zurg, organizr, nextcloud, nginx, panel
@@ -229,6 +236,7 @@ declare -A SERVICE_STOP_CRITICAL=(
     ["nzbdav"]=1
     ["rclone-nzbdav"]=1
     ["decypharr"]=1
+    ["tracearr"]=1
 )
 
 #===============================================================================

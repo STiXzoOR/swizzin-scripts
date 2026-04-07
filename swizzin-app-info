@@ -366,6 +366,23 @@ APP_CONFIGS = {
         "format": "json",
         "keys": {},
     },
+    "checkrr": {
+        "config_paths": ["/opt/checkrr/config/checkrr.yaml"],
+        "format": "yaml",
+        "keys": {
+            "port": "webserver.port",
+        },
+    },
+    "tracearr": {
+        "config_paths": [],
+        "format": "docker_compose",
+        "keys": {},
+    },
+    "posterizarr": {
+        "config_paths": ["/opt/posterizarr/config/config.json"],
+        "format": "json",
+        "keys": {},
+    },
     "zurg": {
         "config_paths": ["/home/{user}/.config/zurg/config.yml"],
         "format": "yaml",

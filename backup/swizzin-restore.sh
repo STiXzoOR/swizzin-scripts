@@ -110,6 +110,13 @@ declare -A APP_PATHS=(
     ["nzbdav"]="opt/nzbdav/config"
     ["newtarr"]="opt/newtarr"
 
+    # Media Management
+    ["checkrr"]="opt/checkrr"
+    ["posterizarr"]="opt/posterizarr"
+
+    # Analytics
+    ["tracearr"]="opt/tracearr"
+
     # Additional
     ["wireguard"]="etc/wireguard"
     ["rutorrent"]="srv/rutorrent"

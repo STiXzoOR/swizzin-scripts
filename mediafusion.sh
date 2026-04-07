@@ -479,7 +479,7 @@ ${disabled_providers_env:+${disabled_providers_env}
       POSTGRES_PASSWORD: "${db_pass}"
       POSTGRES_DB: mediafusion
     volumes:
-      - ${app_dir}/pgdata:/var/lib/postgresql/data
+      - ${app_dir}/pgdata:/var/lib/postgresql/18/docker
     ports:
       - "127.0.0.1:${pg_port}:5432"
     healthcheck:

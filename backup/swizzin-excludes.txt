@@ -322,6 +322,17 @@ opt/newtarr/.venv/**
 opt/newtarr/frontend/node_modules
 opt/newtarr/frontend/node_modules/**
 
+# === CHECKRR ===
+opt/checkrr/docker-compose.yml
+
+# === TRACEARR ===
+opt/tracearr/docker-compose.yml
+
+# === POSTERIZARR ===
+opt/posterizarr/docker-compose.yml
+opt/posterizarr/assets/**
+opt/posterizarr/assetsbackup/**
+
 # === ORGANIZR ===
 srv/organizr/api/logs
 srv/organizr/api/logs/**
