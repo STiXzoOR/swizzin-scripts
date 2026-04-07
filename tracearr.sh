@@ -175,10 +175,17 @@ _install_docker() {
 # ==============================================================================
 _install_tracearr() {
     mkdir -p "${app_dir}/pgdata" "${app_dir}/redis" "${app_dir}/backups"
+    # TimescaleDB HA image runs as postgres (UID 1000)
+    chown 1000:1000 "${app_dir}/pgdata"
 
-    # Generate credentials
+    # Generate credentials (persist all in swizdb so updates reuse them)
     local db_pass jwt_secret cookie_secret
-    db_pass=$(openssl rand -base64 32 | tr -dc 'A-Za-z0-9' | cut -c -32)
+    if db_pass="$(swizdb get "${app_name}/db_pass" 2>/dev/null)" && [[ -n "$db_pass" ]]; then
+        _verbose "Reusing existing DB password from swizdb"
+    else
+        db_pass=$(openssl rand -base64 32 | tr -dc 'A-Za-z0-9' | cut -c -32)
+        swizdb set "${app_name}/db_pass" "$db_pass"
+    fi
 
     # Persist JWT_SECRET and COOKIE_SECRET in swizdb so they survive updates
     if jwt_secret="$(swizdb get "${app_name}/jwt_secret" 2>/dev/null)" && [[ -n "$jwt_secret" ]]; then
@@ -208,20 +215,29 @@ services:
     image: ghcr.io/connorgallopo/tracearr:latest
     container_name: tracearr
     restart: unless-stopped
-    network_mode: host
     environment:
-      PORT: "${app_port}"
+      PORT: "3000"
       BASE_PATH: "/tracearr"
       TRUST_PROXY: "true"
       JWT_SECRET: "${jwt_secret}"
       COOKIE_SECRET: "${cookie_secret}"
-      DATABASE_URL: "postgresql://tracearr:${db_pass}@127.0.0.1:${pg_port}/tracearr"
-      REDIS_URL: "redis://127.0.0.1:${redis_port}"
+      DATABASE_URL: "postgres://tracearr:${db_pass}@tracearr-postgres:5432/tracearr"
+      REDIS_URL: "redis://tracearr-redis:6379"
+    ports:
+      - "127.0.0.1:${app_port}:3000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:3000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
     depends_on:
       tracearr-postgres:
         condition: service_healthy
       tracearr-redis:
         condition: service_healthy
+    networks:
+      - tracearr-net
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -244,8 +260,6 @@ services:
       - timescaledb.telemetry_level=off
     volumes:
       - ${app_dir}/pgdata:/home/postgres/pgdata/data
-    ports:
-      - "127.0.0.1:${pg_port}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U tracearr"]
       interval: 10s
@@ -263,8 +277,6 @@ services:
     command: redis-server --appendonly yes
     volumes:
       - ${app_dir}/redis:/data
-    ports:
-      - "127.0.0.1:${redis_port}:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -379,12 +391,12 @@ _healthcheck_tracearr() {
     local retries=30
     local i=0
     while (( i < retries )); do
-        if curl -sf "http://127.0.0.1:${app_port}/tracearr/health" | grep -q '"ok"' 2>/dev/null; then
+        if curl -sf "http://127.0.0.1:${app_port}/health" | grep -q '"ok"' 2>/dev/null; then
             echo_progress_done "Tracearr is healthy"
             return 0
         fi
         sleep 2
-        ((i++))
+        (( i++ )) || true
     done
     echo_warn "Tracearr health check timed out - the app may still be starting"
 }
