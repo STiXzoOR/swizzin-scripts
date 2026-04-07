@@ -215,18 +215,17 @@ services:
     image: ghcr.io/connorgallopo/tracearr:latest
     container_name: tracearr
     restart: unless-stopped
+    network_mode: host
     environment:
-      PORT: "3000"
+      PORT: "${app_port}"
       BASE_PATH: "/tracearr"
       TRUST_PROXY: "true"
       JWT_SECRET: "${jwt_secret}"
       COOKIE_SECRET: "${cookie_secret}"
-      DATABASE_URL: "postgres://tracearr:${db_pass}@tracearr-postgres:5432/tracearr"
-      REDIS_URL: "redis://tracearr-redis:6379"
-    ports:
-      - "127.0.0.1:${app_port}:3000"
+      DATABASE_URL: "postgres://tracearr:${db_pass}@127.0.0.1:${pg_port}/tracearr"
+      REDIS_URL: "redis://127.0.0.1:${redis_port}"
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:3000/health || exit 1"]
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:${app_port}/health || exit 1"]
       interval: 30s
       timeout: 10s
       start_period: 30s
@@ -236,8 +235,6 @@ services:
         condition: service_healthy
       tracearr-redis:
         condition: service_healthy
-    networks:
-      - tracearr-net
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -248,6 +245,7 @@ services:
     container_name: tracearr-postgres
     restart: unless-stopped
     shm_size: 512m
+    network_mode: host
     environment:
       POSTGRES_USER: tracearr
       POSTGRES_PASSWORD: "${db_pass}"
@@ -258,15 +256,15 @@ services:
       - max_locks_per_transaction=4096
       - -c
       - timescaledb.telemetry_level=off
+      - -c
+      - port=${pg_port}
     volumes:
       - ${app_dir}/pgdata:/home/postgres/pgdata/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U tracearr"]
+      test: ["CMD-SHELL", "pg_isready -U tracearr -p ${pg_port}"]
       interval: 10s
       timeout: 5s
       retries: 5
-    networks:
-      - tracearr-net
     security_opt:
       - no-new-privileges:true
 
@@ -274,22 +272,17 @@ services:
     image: redis:8-alpine
     container_name: tracearr-redis
     restart: unless-stopped
-    command: redis-server --appendonly yes
+    network_mode: host
+    command: redis-server --appendonly yes --port ${redis_port}
     volumes:
       - ${app_dir}/redis:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-p", "${redis_port}", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
-    networks:
-      - tracearr-net
     security_opt:
       - no-new-privileges:true
-
-networks:
-  tracearr-net:
-    driver: bridge
 COMPOSE
 
     # Secure compose file (contains credentials)
