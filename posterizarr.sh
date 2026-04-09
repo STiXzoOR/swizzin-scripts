@@ -386,7 +386,7 @@ _remove_posterizarr() {
     # Remove nginx config
     if [[ -f "/etc/nginx/apps/${app_name}.conf" ]]; then
         echo_progress_start "Removing nginx configuration"
-        rm -f "/etc/nginx/apps/${app_name}.conf"
+        _remove_nginx_conf "$app_name"
         _reload_nginx 2>/dev/null || true
         echo_progress_done "Nginx configuration removed"
     fi
@@ -558,7 +558,7 @@ _nginx_posterizarr() {
 			    # Rewrite paths in all response types
 			    proxy_set_header Accept-Encoding "";
 			    sub_filter_once off;
-			    sub_filter_types text/html text/css text/javascript application/javascript application/json;
+			    sub_filter_types text/css text/javascript application/javascript application/json;
 
 			    # Inject React Router basename (auto-detected, regenerated on --update)
 			    ${basename_filter}

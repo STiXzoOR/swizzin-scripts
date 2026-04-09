@@ -348,7 +348,7 @@ _remove_newtarr() {
     # Remove nginx config
     if [ -f "/etc/nginx/apps/$app_name.conf" ]; then
         echo_progress_start "Removing nginx configuration"
-        rm -f "/etc/nginx/apps/$app_name.conf"
+        _remove_nginx_conf "$app_name"
         _reload_nginx 2>/dev/null || true
         echo_progress_done "Nginx configuration removed"
     fi
@@ -430,7 +430,7 @@ _nginx_newtarr() {
 			    proxy_set_header Connection \$http_connection;
 
 			    # Rewrite hardcoded absolute paths (upstream uses Docker-style root paths).
-			    sub_filter_types text/html application/javascript text/javascript;
+			    sub_filter_types application/javascript text/javascript;
 			    sub_filter_once off;
 			    sub_filter '"/api/'    '"/$app_baseurl/api/';
 			    sub_filter "'/api/"    "'/$app_baseurl/api/";

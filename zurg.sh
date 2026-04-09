@@ -1097,7 +1097,7 @@ _nginx_zurg() {
 
 			    # Rewrite URLs in responses (zurg has no base_url support)
 			    sub_filter_once off;
-			    sub_filter_types text/html text/css text/javascript application/javascript application/json;
+			    sub_filter_types text/css text/javascript application/javascript application/json;
 			    sub_filter 'href="/' 'href="/$app_name/';
 			    sub_filter 'src="/' 'src="/$app_name/';
 			    sub_filter 'action="/' 'action="/$app_name/';

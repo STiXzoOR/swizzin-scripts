@@ -941,7 +941,7 @@ _install_subdomain() {
             # Backup subfolder config before switching
             _backup_file "/etc/nginx/apps/$app_name.conf"
             # Remove subfolder config (subdomain replaces it)
-            rm -f "/etc/nginx/apps/$app_name.conf"
+            _remove_nginx_conf "$app_name"
 
             # Update docker-compose to remove URL prefix
             if [[ -f "$app_dir/docker-compose.yml" ]]; then
@@ -1124,7 +1124,7 @@ _remove_libretranslate() {
     # Remove subfolder nginx config
     if [[ -f "/etc/nginx/apps/$app_name.conf" ]]; then
         echo_progress_start "Removing nginx configuration"
-        rm -f "/etc/nginx/apps/$app_name.conf"
+        _remove_nginx_conf "$app_name"
         echo_progress_done "Nginx configuration removed"
     fi
 

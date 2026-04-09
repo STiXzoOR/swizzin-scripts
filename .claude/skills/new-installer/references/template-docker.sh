@@ -438,7 +438,7 @@ _nginx_myapp() {
         # If the app has no base_url support, add sub_filter directives to
         # rewrite asset paths (see lingarr.sh or zurg.sh for examples):
         #   sub_filter_once off;
-        #   sub_filter_types text/html text/css text/javascript application/javascript application/json;
+        #   sub_filter_types text/css text/javascript application/javascript application/json;
         #   sub_filter 'href="/' 'href="/${app_baseurl}/';
         #   sub_filter 'src="/' 'src="/${app_baseurl}/';
         #   etc.

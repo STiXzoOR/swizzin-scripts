@@ -968,7 +968,7 @@ _remove_autopulse() {
 	# Remove nginx config
 	if [[ -f "/etc/nginx/apps/${app_name}.conf" ]]; then
 		echo_progress_start "Removing nginx configuration"
-		rm -f "/etc/nginx/apps/${app_name}.conf"
+		_remove_nginx_conf "$app_name"
 		_reload_nginx 2>/dev/null || true
 		echo_progress_done "Nginx configuration removed"
 	fi

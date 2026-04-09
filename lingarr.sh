@@ -613,7 +613,7 @@ _nginx_lingarr() {
 
 			    # Rewrite URLs in responses (Lingarr has no base_url support)
 			    sub_filter_once off;
-			    sub_filter_types text/html text/css text/javascript application/javascript application/json;
+			    sub_filter_types text/css text/javascript application/javascript application/json;
 
 			    # HTML attributes (both quote styles)
 			    sub_filter 'href="/' 'href="/$app_baseurl/';
@@ -855,7 +855,7 @@ _install_subdomain() {
             # Backup subfolder config before switching
             _backup_file "/etc/nginx/apps/$app_name.conf"
             # Remove subfolder config (subdomain replaces it)
-            rm -f "/etc/nginx/apps/$app_name.conf"
+            _remove_nginx_conf "$app_name"
             _request_certificate "$domain"
             _create_subdomain_vhost "$domain" "$le_hostname"
             _add_panel_meta "$domain"
@@ -1014,7 +1014,7 @@ _remove_lingarr() {
     # Remove subfolder nginx config
     if [[ -f "/etc/nginx/apps/$app_name.conf" ]]; then
         echo_progress_start "Removing nginx configuration"
-        rm -f "/etc/nginx/apps/$app_name.conf"
+        _remove_nginx_conf "$app_name"
         echo_progress_done "Nginx configuration removed"
     fi
 

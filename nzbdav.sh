@@ -483,7 +483,7 @@ _nginx_nzbdav() {
 
 			    # Rewrite URLs in responses (NZBDav is a React Router SSR app with no base URL support)
 			    sub_filter_once off;
-			    sub_filter_types text/html text/css text/javascript application/javascript application/json;
+			    sub_filter_types text/css text/javascript application/javascript application/json;
 
 			    # React Router basename — controls all client-side routing
 			    sub_filter '"basename":"/"' '"basename":"/${app_baseurl}"';
@@ -907,7 +907,7 @@ _remove_nzbdav() {
     # 5. Remove nginx config
     if [[ -f "/etc/nginx/apps/${app_name}.conf" ]]; then
         echo_progress_start "Removing nginx configuration"
-        rm -f "/etc/nginx/apps/${app_name}.conf"
+        _remove_nginx_conf "$app_name"
         _reload_nginx 2>/dev/null || true
         echo_progress_done "Nginx configuration removed"
     fi

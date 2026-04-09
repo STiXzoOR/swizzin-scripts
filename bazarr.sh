@@ -359,7 +359,7 @@ _remove_instance() {
     # Remove nginx config
     if [[ -f "/etc/nginx/apps/${instance_name}.conf" ]]; then
         echo_progress_start "Removing nginx config"
-        rm -f "/etc/nginx/apps/${instance_name}.conf"
+        _remove_nginx_conf "$instance_name"
         _reload_nginx 2>/dev/null || true
         echo_progress_done
     fi

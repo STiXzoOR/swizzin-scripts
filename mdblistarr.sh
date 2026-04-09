@@ -426,7 +426,7 @@ _nginx_mdblistarr() {
 
 			    # Rewrite URLs in responses (Django has no FORCE_SCRIPT_NAME support)
 			    sub_filter_once off;
-			    sub_filter_types text/html text/javascript application/javascript;
+			    sub_filter_types text/javascript application/javascript;
 
 			    # Navigation links (layout.html)
 			    sub_filter 'href="/"' 'href="/$app_baseurl/"';
@@ -716,7 +716,7 @@ _install_subdomain() {
             # Backup subfolder config before switching
             _backup_file "/etc/nginx/apps/$app_name.conf"
             # Remove subfolder config (subdomain replaces it)
-            rm -f "/etc/nginx/apps/$app_name.conf"
+            _remove_nginx_conf "$app_name"
             _request_certificate "$domain"
             _create_subdomain_vhost "$domain" "$le_hostname"
             _add_panel_meta "$domain"
@@ -882,7 +882,7 @@ _remove_mdblistarr() {
     # Remove subfolder nginx config
     if [[ -f "/etc/nginx/apps/$app_name.conf" ]]; then
         echo_progress_start "Removing nginx configuration"
-        rm -f "/etc/nginx/apps/$app_name.conf"
+        _remove_nginx_conf "$app_name"
         echo_progress_done "Nginx configuration removed"
     fi
 
