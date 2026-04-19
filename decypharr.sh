@@ -750,8 +750,43 @@ _refresh_nginx_if_stale() {
         return 0
     fi
 
+    # If the current config is protected by Organizr SSO, capture the auth
+    # level so we can re-apply the swap after regenerating. Otherwise the
+    # regen falls back to plain auth_basic and the user silently loses SSO.
+    local organizr_auth_level=""
+    if grep -q "auth_request /organizr-auth/auth-" "$nginx_conf" 2>/dev/null; then
+        organizr_auth_level=$(grep -oE "auth_request /organizr-auth/auth-[0-9]+" "$nginx_conf" \
+            | grep -oE '[0-9]+$' | head -1 || true)
+        organizr_auth_level="${organizr_auth_level:-0}"
+        _verbose "Detected Organizr SSO (auth-level ${organizr_auth_level}) — will re-apply after regen"
+    fi
+
     echo_info "Refreshing nginx config (schema v${installed_schema} → v${DECYPHARR_NGINX_SCHEMA})"
     _nginx_decypharr
+
+    if [[ -n "$organizr_auth_level" ]]; then
+        _apply_organizr_swap "$organizr_auth_level"
+    fi
+}
+
+# ==============================================================================
+# Replicate organizr.sh's _protect_app swap on a freshly-generated nginx block:
+#   - comment out auth_basic + auth_basic_user_file
+#   - insert auth_request inside the top-level /decypharr/ UI location only
+#     (never inside the /api/ or /sabnzbd/api/ blocks — those stay open)
+# Called by _refresh_nginx_if_stale when the previous config was SSO-protected.
+# ==============================================================================
+_apply_organizr_swap() {
+    local auth_level="$1"
+    local nginx_conf="/etc/nginx/apps/$app_name.conf"
+    [[ -f "$nginx_conf" ]] || return 0
+
+    sed -i 's|^\([[:space:]]*auth_basic \)|#\1|g' "$nginx_conf"
+    sed -i 's|^\([[:space:]]*auth_basic_user_file\)|#\1|g' "$nginx_conf"
+    # Match the exact opening line of the UI block the installer emits.
+    sed -i "/^location \^~ \/${app_baseurl}\/ {\$/a\\    auth_request /organizr-auth/auth-${auth_level};" "$nginx_conf"
+    _reload_nginx 2>/dev/null || true
+    echo_info "Re-applied Organizr SSO (auth-level ${auth_level})"
 }
 
 # Parse global flags
