@@ -347,11 +347,16 @@ APP_CONFIGS = {
         },
     },
     "decypharr": {
-        "config_paths": ["/home/{user}/.config/decypharr/config.json"],
-        "format": "json",
+        # Decypharr stores port/url_base in config.json but the API token
+        # lives in a sibling auth.json (generated when use_auth=true).
+        # The "decypharr" parser reads port/url_base from config.json and
+        # apikey from ./auth.json in the same directory.
+        "config_paths": ["/home/{user}/.config/Decypharr/config.json"],
+        "format": "decypharr",
         "keys": {
             "port": "port",
-            "apikey": "apiKey",
+            "url_base": "url_base",
+            "apikey": "api_token",
         },
     },
     "huntarr": {
@@ -375,6 +380,11 @@ APP_CONFIGS = {
     },
     "tracearr": {
         "config_paths": [],
+        "format": "docker_compose",
+        "keys": {},
+    },
+    "swaparr": {
+        "config_paths": ["/opt/swaparr/docker-compose.yml"],
         "format": "docker_compose",
         "keys": {},
     },
@@ -610,6 +620,46 @@ def parse_json_config(path: str, keys: Dict[str, str]) -> Dict[str, Any]:
                 result[result_key] = data[json_key]
     except Exception as e:
         result["_error"] = str(e)
+    return result
+
+
+def parse_decypharr_config(path: str, keys: Dict[str, str]) -> Dict[str, Any]:
+    """Parse Decypharr config — port/url_base in config.json, apikey in
+    sibling auth.json. Handles the v2+ layout where the API token is split
+    into a separate file generated on first-run with use_auth=true."""
+    result = {}
+    auth_path = os.path.join(os.path.dirname(path), "auth.json")
+
+    def _lookup(data: Any, dotted: str) -> Any:
+        value = data
+        for part in dotted.split("."):
+            if isinstance(value, dict):
+                value = value.get(part)
+            else:
+                return None
+        return value
+
+    try:
+        with open(path, "r") as f:
+            cfg = json.load(f)
+    except Exception as e:
+        result["_error"] = f"config.json: {e}"
+        cfg = {}
+
+    auth: Dict[str, Any] = {}
+    if os.path.isfile(auth_path):
+        try:
+            with open(auth_path, "r") as f:
+                auth = json.load(f)
+        except Exception as e:
+            result["_error"] = f"{result.get('_error', '')}; auth.json: {e}".strip("; ")
+
+    for result_key, json_key in keys.items():
+        # Route apikey/api_token lookups to auth.json, others to config.json
+        source = auth if result_key == "apikey" or json_key == "api_token" else cfg
+        value = _lookup(source, json_key)
+        if value:
+            result[result_key] = value
     return result
 
 
@@ -1099,6 +1149,8 @@ def parse_app_config(
             parsed = parse_json_config(config_file, keys)
         elif fmt == "json_python":
             parsed = parse_json_python_config(config_file, keys)
+        elif fmt == "decypharr":
+            parsed = parse_decypharr_config(config_file, keys)
         elif fmt == "yaml":
             parsed = parse_yaml_config(config_file, keys)
         elif fmt == "ini":

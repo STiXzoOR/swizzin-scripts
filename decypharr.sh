@@ -3,6 +3,18 @@ set -euo pipefail
 # decypharr installer
 # STiXzoOR 2025
 # Usage: bash decypharr.sh [--update [--full] [--verbose]|--remove [--force]] [--register-panel] [--fix-mounts]
+#
+# --update also refreshes the nginx config automatically when the installer's
+# nginx schema version advances (tracked via "# decypharr-nginx-schema: N"
+# marker embedded in /etc/nginx/apps/decypharr.conf).
+#
+# Pinned to STiXzoOR/decypharr fork tag DECYPHARR_FORK_TAG (below) — the fork
+# tracks upstream sirrobot01/decypharr + a small set of Swizzin-specific
+# patches (URLBase reverse-proxy fix, DebridLink nil-map fix). Bump
+# DECYPHARR_FORK_TAG when a new upstream release is re-patched.
+
+DECYPHARR_FORK_TAG="v2.2-migration"
+DECYPHARR_NGINX_SCHEMA=2
 
 . /etc/swizzin/sources/globals.sh
 
@@ -86,7 +98,20 @@ user="$DECYPHARR_OWNER"
 swiz_configdir="/home/$user/.config"
 app_configdir="$swiz_configdir/${app_name^}"
 app_group="$user"
-app_port=$(port 10000 12000)
+# Preserve the port of an existing install — otherwise `port` allocates a
+# fresh one on --update / --register-panel / --fix-mounts, and the
+# regenerated nginx block points at a port the service isn't listening on.
+# Read order: config.json (authoritative) → nginx upstream line → fresh alloc.
+app_port=""
+if [[ -f "/home/$user/.config/${app_name^}/config.json" ]]; then
+    app_port=$(grep -oE '"port":[[:space:]]*"[0-9]+"' "/home/$user/.config/${app_name^}/config.json" 2>/dev/null \
+        | grep -oE '[0-9]+' | head -1 || true)
+fi
+if [[ -z "$app_port" && -f "/etc/nginx/apps/$app_name.conf" ]]; then
+    app_port=$(grep -oE '127\.0\.0\.1:[0-9]+' "/etc/nginx/apps/$app_name.conf" 2>/dev/null \
+        | grep -oE '[0-9]+' | head -1 || true)
+fi
+app_port="${app_port:-$(port 10000 12000)}"
 app_reqs=("curl" "fuse3")
 app_servicefile="$app_name.service"
 app_dir="/usr/bin"
@@ -219,18 +244,28 @@ _install_decypharr() {
     case "$(_os_arch)" in
         "amd64") arch='x86_64' ;;
         "arm64") arch="arm64" ;;
-        "armhf") arch="armv6" ;;
+        "armhf")
+            echo_error "armv6/armhf is not supported by Decypharr v2+"
+            echo_error "Upstream dropped the armv6 release build starting at v2.0"
+            exit 1
+            ;;
         *)
             echo_error "Arch not supported"
             exit 1
             ;;
     esac
 
-    # Using my fork of decypharr until original author fixes base URL issue
-    latest=$(curl -sL https://api.github.com/repos/STiXzoOR/decypharr/releases/latest | grep "Linux_$arch" | grep browser_download_url | grep ".tar.gz" | cut -d \" -f4) || {
-        echo_error "Failed to query GitHub for latest version"
+    # Pinned to STiXzoOR/decypharr fork tag (see header). Fork carries upstream
+    # + URLBase reverse-proxy fix + DebridLink nil-map fix.
+    latest=$(curl -sL "https://api.github.com/repos/STiXzoOR/decypharr/releases/tags/${DECYPHARR_FORK_TAG}" | grep "Linux_$arch" | grep browser_download_url | grep ".tar.gz" | cut -d \" -f4) || {
+        echo_error "Failed to query GitHub for tag ${DECYPHARR_FORK_TAG}"
         exit 1
     }
+
+    if [[ -z "${latest:-}" ]]; then
+        echo_error "No Linux_$arch asset found on release ${DECYPHARR_FORK_TAG}"
+        exit 1
+    fi
 
     if ! curl "$latest" -L -o "$_tmp_download" >>"$log" 2>&1; then
         echo_error "Download failed, exiting"
@@ -248,21 +283,46 @@ _install_decypharr() {
 
     chmod +x "$app_dir/$app_binary"
 
-    echo_progress_start "Creating default config"
+    echo_progress_start "Creating default config (v2 schema)"
 
-    # Build realdebrid folder path from zurg mount if available
+    # Build realdebrid folder path from zurg mount if available.
+    # With zurg, Decypharr does NOT mount anything itself — zurg's rclone
+    # mount is read directly via debrid.folder. mount.type = "none".
+    # Without zurg, Decypharr uses its embedded rclone mount.
     local rd_folder=""
     local rd_api_key=""
-    local zurg_url=""
-    local rclone_enabled="true"
-    local use_webdav="true"
+    local mount_type="rclone"
+    local mount_rclone_block
     if [ -n "$zurg_mount" ]; then
         rd_folder="${zurg_mount}/__all__/"
         rd_api_key="${zurg_api_key:-}"
-        zurg_url="http://127.0.0.1:9999"
-        rclone_enabled="false" # zurg handles rclone mount
-        use_webdav="false"     # use zurg's mount directly, not internal webdav
-        echo_info "Zurg detected - using zurg's mount directly (webdav and internal rclone disabled)"
+        mount_type="none"
+        echo_info "Zurg detected — mount.type=none, reading zurg mount directly"
+    fi
+
+    # Only emit the rclone mount block when rclone is actually used.
+    if [[ "$mount_type" == "rclone" ]]; then
+        read -r -d '' mount_rclone_block <<RCLONE || true
+,
+    "rclone": {
+      "port": "5572",
+      "vfs_cache_mode": "full",
+      "vfs_cache_max_size": "256G",
+      "vfs_cache_max_age": "72h",
+      "vfs_cache_poll_interval": "1m",
+      "vfs_read_ahead": "1G",
+      "vfs_fast_fingerprint": true,
+      "buffer_size": "256M",
+      "transfers": 8,
+      "dir_cache_time": "1h",
+      "attr_timeout": "15s",
+      "no_modtime": true,
+      "no_checksum": true,
+      "log_level": "INFO"
+    }
+RCLONE
+    else
+        mount_rclone_block=""
     fi
 
     cat >"$app_configdir/config.json" <<CFG
@@ -270,124 +330,43 @@ _install_decypharr() {
   "url_base": "/${app_baseurl}/",
   "port": "${app_port}",
   "log_level": "info",
+  "use_auth": false,
+
   "debrids": [
     {
+      "provider": "realdebrid",
       "name": "realdebrid",
       "api_key": "${rd_api_key}",
       "download_api_keys": ["${rd_api_key}"],
       "folder": "${rd_folder}",
       "rate_limit": "250/minute",
       "minimum_free_slot": 1,
-      "use_webdav": ${use_webdav},
       "torrents_refresh_interval": "15s",
       "download_links_refresh_interval": "40m",
       "workers": 600,
-      "auto_expire_links_after": "3d",
-      "folder_naming": "filename"
+      "auto_expire_links_after": "3d"
     }
   ],
-  "qbittorrent": {
-    "download_folder": "${app_mount_path}/symlinks/downloads",
-    "refresh_interval": 5
+
+  "download_folder": "${app_mount_path}/symlinks/downloads",
+  "refresh_interval": "5s",
+  "folder_naming": "filename",
+  "categories": ["sonarr", "radarr"],
+  "default_download_action": "symlink",
+
+  "mount": {
+    "type": "${mount_type}",
+    "mount_path": "${app_mount_path}"${mount_rclone_block}
   },
-  "repair": {
-    "interval": "12h",
-    "zurg_url": "${zurg_url}",
-    "workers": 1,
-    "strategy": "per_torrent"
-  },
-  "webdav": {},
-  "rclone": {
-    "enabled": ${rclone_enabled},
-    "mount_path": "${app_mount_path}",
-    "vfs_cache_mode": "full",
-    "vfs_cache_max_size": "256G",
-    "vfs_cache_max_age": "72h",
-    "vfs_cache_poll_interval": "1m",
-    "vfs_read_ahead": "1G",
-    "vfs_read_chunk_size": "off",
-    "vfs_read_chunk_size_limit": "512M",
-    "vfs_read_wait": "5ms",
-    "max_read_ahead": "1M",
-    "vfs_fast_fingerprint": true,
-    "buffer_size": "256M",
-    "async_read": false,
-    "transfers": 8,
-    "dir_cache_time": "1h",
-    "attr_timeout": "15s",
-    "no_modtime": true,
-    "no_checksum": true,
-    "log_level": "INFO"
-  },
+
   "allowed_file_types": [
-    "3gp",
-    "ac3",
-    "aiff",
-    "alac",
-    "amr",
-    "ape",
-    "asf",
-    "asx",
-    "avc",
-    "avi",
-    "bin",
-    "bivx",
-    "dat",
-    "divx",
-    "dts",
-    "dv",
-    "dvr-ms",
-    "flac",
-    "fli",
-    "flv",
-    "ifo",
-    "img",
-    "iso",
-    "m2ts",
-    "m2v",
-    "m3u",
-    "m4a",
-    "m4p",
-    "m4v",
-    "mid",
-    "midi",
-    "mk3d",
-    "mka",
-    "mkv",
-    "mov",
-    "mp2",
-    "mp3",
-    "mp4",
-    "mpa",
-    "mpeg",
-    "mpg",
-    "nrg",
-    "nsv",
-    "nuv",
-    "ogg",
-    "ogm",
-    "ogv",
-    "pva",
-    "qt",
-    "ra",
-    "rm",
-    "rmvb",
-    "strm",
-    "svq3",
-    "ts",
-    "ty",
-    "viv",
-    "vob",
-    "voc",
-    "vp3",
-    "wav",
-    "webm",
-    "wma",
-    "wmv",
-    "wpl",
-    "wtv",
-    "wv",
-    "xvid"
+    "3gp", "ac3", "aiff", "alac", "amr", "ape", "asf", "asx", "avc", "avi",
+    "bin", "bivx", "dat", "divx", "dts", "dv", "dvr-ms", "flac", "fli", "flv",
+    "ifo", "img", "iso", "m2ts", "m2v", "m3u", "m4a", "m4p", "m4v", "mid",
+    "midi", "mk3d", "mka", "mkv", "mov", "mp2", "mp3", "mp4", "mpa", "mpeg",
+    "mpg", "nrg", "nsv", "nuv", "ogg", "ogm", "ogv", "pva", "qt", "ra", "rm",
+    "rmvb", "strm", "svq3", "ts", "ty", "viv", "vob", "voc", "vp3", "wav",
+    "webm", "wma", "wmv", "wpl", "wtv", "wv", "xvid"
   ]
 }
 CFG
@@ -480,6 +459,9 @@ _update_decypharr() {
     # Patch service file if needed (prevents orphaned rclone)
     _patch_service
 
+    # Refresh nginx config if the schema version has advanced since last install
+    _refresh_nginx_if_stale
+
     # Full reinstall
     if [[ "$full_reinstall" == "true" ]]; then
         echo_info "Performing full reinstall of ${app_name^}..."
@@ -529,7 +511,11 @@ _update_decypharr() {
     case "$(_os_arch)" in
         "amd64") arch='x86_64' ;;
         "arm64") arch='arm64' ;;
-        "armhf") arch='armv6' ;;
+        "armhf")
+            echo_error "armv6/armhf is not supported by Decypharr v2+ (upstream dropped the build at v2.0)"
+            _rollback_decypharr
+            exit 1
+            ;;
         *)
             echo_error "Architecture not supported"
             _rollback_decypharr
@@ -538,20 +524,20 @@ _update_decypharr() {
     esac
 
     local github_repo="STiXzoOR/decypharr"
-    _verbose "Querying GitHub API: https://api.github.com/repos/${github_repo}/releases/latest"
+    _verbose "Querying GitHub API: https://api.github.com/repos/${github_repo}/releases/tags/${DECYPHARR_FORK_TAG}"
 
-    latest=$(curl -sL "https://api.github.com/repos/${github_repo}/releases/latest" \
+    latest=$(curl -sL "https://api.github.com/repos/${github_repo}/releases/tags/${DECYPHARR_FORK_TAG}" \
         | grep "Linux_$arch" \
         | grep "browser_download_url" \
         | grep ".tar.gz" \
         | cut -d\" -f4) || {
-        echo_error "Failed to query GitHub"
+        echo_error "Failed to query GitHub for tag ${DECYPHARR_FORK_TAG}"
         _rollback_decypharr
         exit 1
     }
 
     if [[ -z "$latest" ]]; then
-        echo_error "No matching release found"
+        echo_error "No Linux_$arch asset found on release ${DECYPHARR_FORK_TAG}"
         _rollback_decypharr
         exit 1
     fi
@@ -698,6 +684,10 @@ _nginx_decypharr() {
     if [[ -f /install/.nginx.lock ]]; then
         echo_progress_start "Configuring nginx"
         cat >/etc/nginx/apps/$app_name.conf <<-NGX
+			# decypharr-nginx-schema: ${DECYPHARR_NGINX_SCHEMA}
+			# Do not edit the schema line above — the installer uses it to detect
+			# outdated configs on --update and refresh this file automatically.
+
 			location /$app_baseurl {
 			  return 301 /$app_baseurl/;
 			}
@@ -717,17 +707,51 @@ _nginx_decypharr() {
 			    auth_basic_user_file /etc/htpasswd.d/htpasswd.${user};
 			}
 
-			location ^~ /$app_baseurl/api {
+			# qBittorrent-compatible API (Sonarr/Radarr download client path)
+			location ^~ /$app_baseurl/api/ {
 			    auth_request off;
-			    proxy_pass http://127.0.0.1:$app_port/$app_baseurl/api;
+			    proxy_pass http://127.0.0.1:$app_port/$app_baseurl/api/;
+			}
+
+			# Sabnzbd-compatible API (Usenet flow — v2). Harmless when unused.
+			location ^~ /$app_baseurl/sabnzbd/api {
+			    auth_request off;
+			    proxy_pass http://127.0.0.1:$app_port/$app_baseurl/sabnzbd/api;
 			}
 		NGX
 
         _reload_nginx
-        echo_progress_done "Nginx configured"
+        echo_progress_done "Nginx configured (schema v${DECYPHARR_NGINX_SCHEMA})"
     else
         echo_info "$app_name will run on port $app_port"
     fi
+}
+
+# ==============================================================================
+# Auto-refresh nginx config when the installer's schema version has advanced
+# past what's on disk. Called from _update_decypharr before the binary swap so
+# a new nginx block is picked up seamlessly.
+# ==============================================================================
+_refresh_nginx_if_stale() {
+    local nginx_conf="/etc/nginx/apps/$app_name.conf"
+    [[ -f "$nginx_conf" ]] || return 0
+    [[ -f /install/.nginx.lock ]] || return 0
+
+    local installed_schema=""
+    # Absorb grep's exit-1 when no schema marker is present (pre-v2 configs).
+    # pipefail would otherwise kill the script here under set -e.
+    installed_schema=$(grep -oE '# decypharr-nginx-schema:[[:space:]]*[0-9]+' "$nginx_conf" 2>/dev/null \
+        | grep -oE '[0-9]+$' \
+        | head -1 || true)
+    installed_schema="${installed_schema:-1}"
+
+    if [[ "$installed_schema" == "$DECYPHARR_NGINX_SCHEMA" ]]; then
+        _verbose "Nginx schema up to date (v${installed_schema})"
+        return 0
+    fi
+
+    echo_info "Refreshing nginx config (schema v${installed_schema} → v${DECYPHARR_NGINX_SCHEMA})"
+    _nginx_decypharr
 }
 
 # Parse global flags
@@ -854,6 +878,10 @@ touch "/install/.$app_lockname.lock"
 echo_success "${app_name^} installed"
 echo_info "Access at: https://your-server/${app_baseurl}/"
 echo_info "Port: ${app_port}"
+echo ""
+echo_info "v2 ships a first-run setup wizard — if you didn't pre-seed an API key"
+echo_info "via Zurg, Decypharr will redirect you to /${app_baseurl}/setup on first"
+echo_info "visit to finish configuration."
 
 # Hint about symlink import script if Sonarr/Radarr are installed
 if compgen -G "/install/.sonarr*.lock" >/dev/null 2>&1 || compgen -G "/install/.radarr*.lock" >/dev/null 2>&1; then
