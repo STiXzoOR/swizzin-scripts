@@ -38,6 +38,9 @@ set -euo pipefail
 # shellcheck source=lib/nginx-utils.sh
 . "$(dirname "${BASH_SOURCE[0]}")/../lib/nginx-utils.sh" 2>/dev/null || true
 
+# shellcheck source=lib/apt-utils.sh
+. "$(dirname "${BASH_SOURCE[0]}")/../lib/apt-utils.sh" 2>/dev/null || true
+
 # Log to Swizzin.log
 export log=/root/logs/swizzin.log
 touch "$log"

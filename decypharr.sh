@@ -27,6 +27,9 @@ DECYPHARR_NGINX_SCHEMA=2
 # shellcheck source=lib/nginx-utils.sh
 . "$(dirname "${BASH_SOURCE[0]}")/lib/nginx-utils.sh" 2>/dev/null || true
 
+# shellcheck source=lib/apt-utils.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/apt-utils.sh" 2>/dev/null || true
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PANEL_HELPER_CACHE="/opt/swizzin-extras/panel_helpers.sh"
 

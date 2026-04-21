@@ -175,6 +175,23 @@ fi
 chown "${user}:${user}" "$config_file"
 ```
 
+## apt_install Under `set -u`
+
+Swizzin's `apt_install` chains through `export -f`'d helpers that reference
+unset variables, which abort any caller running under `set -euo pipefail`
+the moment a dependency actually needs installing. Scripts get away with
+bare `apt_install` only when all their deps are already on the target box.
+
+Source `lib/apt-utils.sh` after `lib/nginx-utils.sh` to transparently override
+`apt_install` / `apt_update` / `apt_upgrade` with safe wrappers that toggle
+`set +u` for the duration of the swizzin call. No changes needed at call
+sites — existing `apt_install "${app_reqs[@]}"` lines continue to work.
+
+```bash
+# shellcheck source=lib/apt-utils.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/apt-utils.sh" 2>/dev/null || true
+```
+
 ## Nginx Reload
 
 Always validate before reloading:

@@ -15,6 +15,9 @@ set -euo pipefail
 # shellcheck source=lib/nginx-utils.sh
 . "$(dirname "${BASH_SOURCE[0]}")/lib/nginx-utils.sh" 2>/dev/null || true
 
+# shellcheck source=lib/apt-utils.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/apt-utils.sh" 2>/dev/null || true
+
 # shellcheck source=lib/debrid-utils.sh
 . "$(dirname "${BASH_SOURCE[0]}")/lib/debrid-utils.sh" 2>/dev/null || true
 
