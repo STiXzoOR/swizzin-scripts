@@ -28,7 +28,8 @@
 # STiXzoOR custom apps:
 #   Multi-instance sonarr/radarr, zurg, decypharr, notifiarr, byparr,
 #   flaresolverr, huntarr, subgen, lingarr, cleanuparr, seerr, overseerr, jellyseerr,
-#   mdblist-sync, mdblistarr, stremthru, mediafusion, zilean, nzbdav, newtarr
+#   mdblist-sync, mdblistarr, stremthru, mediafusion, zilean, nzbdav, newtarr,
+#   swaparr
 #===============================================================================
 
 set -euo pipefail
@@ -61,6 +62,7 @@ LOCKFILE="${LOCKFILE:-/var/run/swizzin-backup.lock}"
 LOGFILE="${LOGFILE:-/var/log/swizzin-backup.log}"
 EXCLUDES_FILE="${EXCLUDES_FILE:-/etc/swizzin-excludes.txt}"
 STOPPED_SERVICES_FILE="${STOPPED_SERVICES_FILE:-/var/run/swizzin-stopped-services.txt}"
+PAUSED_JOBS_FILE="${PAUSED_JOBS_FILE:-/var/run/swizzin-paused-jobs.txt}"
 
 # Service management
 STOP_MODE="${STOP_MODE:-critical}"
@@ -155,6 +157,7 @@ declare -A SERVICE_TYPES=(
     ["notifiarr"]="system"
     ["huntarr"]="system"
     ["cleanuparr"]="system"
+    ["swaparr"]="system"
 
     # Cloudflare Bypass
     ["byparr"]="system"
@@ -189,6 +192,9 @@ declare -A SERVICE_TYPES=(
 
     # Analytics
     ["tracearr"]="system"
+
+    # DNS
+    ["adguardhome"]="system"
 )
 
 # Service name mappings (when systemd name differs from app name)
@@ -201,7 +207,7 @@ declare -A SERVICE_NAME_MAP=(
 # Services are stopped in this order and started in reverse
 SERVICE_STOP_ORDER=(
     # Downstream first (API consumers)
-    huntarr cleanuparr notifiarr tautulli
+    swaparr huntarr cleanuparr notifiarr tautulli
     overseerr jellyseerr seerr ombi
     # Automation
     bazarr autobrr autodl
@@ -215,7 +221,7 @@ SERVICE_STOP_ORDER=(
     flood deluge deluged deluge-web qbittorrent rtorrent transmission
     nzbget sabnzbd
     # Utilities
-    filebrowser syncthing pyload netdata subgen lingarr libretranslate mdblistarr newtarr autopulse checkrr posterizarr tracearr
+    filebrowser syncthing pyload netdata adguardhome subgen lingarr libretranslate mdblistarr newtarr autopulse checkrr posterizarr tracearr
     # Real-Debrid (stop last, start first)
     zurg decypharr
     # Never stop: rclone-zurg, organizr, nextcloud, nginx, panel
@@ -406,6 +412,131 @@ kill_stray_arr_processes() {
     fi
 }
 
+pause_scheduled_jobs() {
+    log "=========================================="
+    log "Pausing scheduled jobs..."
+    log "=========================================="
+
+    local paused=()
+
+    # --- Systemd timers ---
+    local timers=(
+        arr-force-import.timer
+        arr-maintenance.timer
+        mdblist-sync.timer
+        mdblist-sync-cleanup.timer
+        swizzin-backup-verify.timer
+    )
+    for timer in "${timers[@]}"; do
+        if systemctl is-active --quiet "$timer" 2>/dev/null; then
+            systemctl stop "$timer" 2>/dev/null && {
+                log "  Paused timer: $timer"
+                paused+=("timer:$timer")
+            }
+        fi
+    done
+
+    # --- Cron files in /etc/cron.d ---
+    local cron_dir="/etc/cron.d"
+    local cron_pause_dir="/etc/cron.d/.backup-paused"
+    local cron_files=(
+        decypharr-watchdog
+        media-repair-links
+    )
+    if [[ ${#cron_files[@]} -gt 0 ]]; then
+        mkdir -p "$cron_pause_dir"
+        for cronfile in "${cron_files[@]}"; do
+            if [[ -f "$cron_dir/$cronfile" ]]; then
+                mv "$cron_dir/$cronfile" "$cron_pause_dir/$cronfile" && {
+                    log "  Paused cron: $cronfile"
+                    paused+=("cron:$cronfile")
+                }
+            fi
+        done
+    fi
+
+    # --- Root crontab ---
+    local root_crontab
+    root_crontab=$(crontab -l 2>/dev/null) || true
+    if [[ -n "$root_crontab" ]]; then
+        echo "$root_crontab" > "$cron_pause_dir/root-crontab.bak"
+        crontab -r 2>/dev/null && {
+            log "  Paused root crontab ($(echo "$root_crontab" | grep -c '^[^#]') entries)"
+            paused+=("crontab:root")
+        }
+    fi
+
+    # --- Docker containers that run scheduled tasks ---
+    local containers=(
+        swaparr-sonarr
+        swaparr-sonarr-4k
+        swaparr-sonarr-anime
+        swaparr-radarr
+        swaparr-radarr-4k
+    )
+    for container in "${containers[@]}"; do
+        if docker inspect --format='{{.State.Running}}' "$container" 2>/dev/null | grep -q true; then
+            docker pause "$container" 2>/dev/null && {
+                log "  Paused container: $container"
+                paused+=("container:$container")
+            }
+        fi
+    done
+
+    log "Paused ${#paused[@]} scheduled jobs"
+    printf '%s\n' "${paused[@]}" > "$PAUSED_JOBS_FILE"
+}
+
+resume_scheduled_jobs() {
+    log "=========================================="
+    log "Resuming scheduled jobs..."
+    log "=========================================="
+
+    [[ ! -f "$PAUSED_JOBS_FILE" ]] && {
+        log "  No paused jobs to resume"
+        return
+    }
+
+    local failed=()
+    while IFS= read -r entry; do
+        [[ -z "$entry" ]] && continue
+        local type="${entry%%:*}"
+        local name="${entry#*:}"
+        case "$type" in
+            timer)
+                systemctl start "$name" 2>/dev/null && log "  Resumed timer: $name" \
+                    || failed+=("$entry")
+                ;;
+            cron)
+                local src="/etc/cron.d/.backup-paused/$name"
+                if [[ -f "$src" ]]; then
+                    mv "$src" "/etc/cron.d/$name" && log "  Resumed cron: $name" \
+                        || failed+=("$entry")
+                fi
+                ;;
+            crontab)
+                local bak="/etc/cron.d/.backup-paused/root-crontab.bak"
+                if [[ -f "$bak" ]]; then
+                    crontab "$bak" && log "  Resumed root crontab" \
+                        || failed+=("$entry")
+                    rm -f "$bak"
+                fi
+                ;;
+            container)
+                docker unpause "$name" 2>/dev/null && log "  Resumed container: $name" \
+                    || failed+=("$entry")
+                ;;
+        esac
+    done < "$PAUSED_JOBS_FILE"
+
+    rm -f "$PAUSED_JOBS_FILE"
+    rmdir "/etc/cron.d/.backup-paused" 2>/dev/null || true
+
+    if [[ ${#failed[@]} -gt 0 ]]; then
+        log "WARNING: Failed to resume: ${failed[*]}"
+    fi
+}
+
 stop_services() {
     if [[ "$STOP_MODE" == "none" ]]; then
         log "STOP_MODE=none — skipping service stops"
@@ -572,6 +703,11 @@ cleanup() {
         done <"$STOPPED_SERVICES_FILE"
         start_services
     fi
+    # Resume any paused scheduled jobs
+    if [[ -f "$PAUSED_JOBS_FILE" ]]; then
+        log "TRAP: Resuming scheduled jobs after unexpected exit..."
+        resume_scheduled_jobs
+    fi
     # Send failure notification if backup was in progress and exited unexpectedly
     if [[ -n "$_backup_running" && $exit_code -ne 0 ]]; then
         log "TRAP: Backup exited unexpectedly (exit: ${exit_code})"
@@ -722,6 +858,7 @@ cmd_backup() {
         [[ -n "$svc" ]] && log "  - $svc"
     done < <(discover_multi_instance_services)
 
+    pause_scheduled_jobs
     stop_services
 
     #===========================================================================
@@ -815,6 +952,7 @@ cmd_backup() {
     log "Phase 1/3: Archive created ($(_format_duration $(($(date +%s) - phase1_start))))"
 
     start_services
+    resume_scheduled_jobs
 
     #===========================================================================
     # PRUNE & COMPACT (skip if borg create was interrupted by signal)

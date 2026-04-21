@@ -223,6 +223,24 @@ var/www/nextcloud/data/*/cache/**
 var/www/nextcloud/data/appdata_*/preview
 var/www/nextcloud/data/appdata_*/preview/**
 
+# === NETDATA ===
+# Historical metrics (regeneratable), cache, logs — only /etc/netdata config is preserved
+var/lib/netdata
+var/lib/netdata/**
+var/cache/netdata
+var/cache/netdata/**
+var/log/netdata
+var/log/netdata/**
+
+# === ADGUARD HOME ===
+# Query logs and stats databases are regeneratable; keep config + filter rules only.
+opt/AdGuardHome/data/querylog*
+opt/AdGuardHome/data/querylog*/**
+opt/AdGuardHome/data/stats.db
+opt/AdGuardHome/data/sessions.db
+opt/AdGuardHome/data/filters
+opt/AdGuardHome/data/filters/**
+
 #===============================================================================
 # STiXzoOR CUSTOM APPS
 #===============================================================================
@@ -324,6 +342,10 @@ opt/newtarr/frontend/node_modules/**
 
 # === CHECKRR ===
 opt/checkrr/docker-compose.yml
+
+# === SWAPARR ===
+# No persistent data — docker-compose.yml recreated by installer on --update
+opt/swaparr/docker-compose.yml
 
 # === TRACEARR ===
 opt/tracearr/docker-compose.yml

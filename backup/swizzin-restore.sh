@@ -83,6 +83,8 @@ declare -A APP_PATHS=(
     ["pyload"]="home/*/.config/pyload"
     ["organizr"]="srv/organizr"
     ["nextcloud"]="var/www/nextcloud"
+    ["netdata"]="etc/netdata"
+    ["adguardhome"]="opt/AdGuardHome"
 
     # STiXzoOR custom apps
     ["overseerr"]="home/*/.config/overseerr"
@@ -113,6 +115,9 @@ declare -A APP_PATHS=(
     # Media Management
     ["checkrr"]="opt/checkrr"
     ["posterizarr"]="opt/posterizarr"
+
+    # Stalled download manager
+    ["swaparr"]="opt/swaparr"
 
     # Analytics
     ["tracearr"]="opt/tracearr"
@@ -149,7 +154,7 @@ declare -A SERVICE_TYPES=(
     ["filebrowser"]="user" ["syncthing"]="user" ["pyload"]="user"
     ["overseerr"]="system" ["jellyseerr"]="system" ["seerr"]="system"
     ["decypharr"]="system" ["notifiarr"]="system" ["huntarr"]="system"
-    ["cleanuparr"]="system" ["byparr"]="system" ["flaresolverr"]="system"
+    ["cleanuparr"]="system" ["swaparr"]="system" ["byparr"]="system" ["flaresolverr"]="system"
     ["subgen"]="system" ["lingarr"]="system" ["libretranslate"]="system"
     ["mdblistarr"]="system"
     ["autopulse"]="system"
@@ -157,6 +162,7 @@ declare -A SERVICE_TYPES=(
     ["nzbdav"]="system" ["newtarr"]="system"
     ["zurg"]="system" ["rclone-zurg"]="system"
     ["netdata"]="system" ["organizr"]="system" ["nextcloud"]="system"
+    ["adguardhome"]="system"
 )
 
 declare -A SERVICE_NAME_MAP=(

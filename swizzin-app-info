@@ -513,6 +513,26 @@ APP_CONFIGS = {
             "image": "nzbdav/nzbdav:latest",
         },
     },
+    "netdata": {
+        "config_paths": ["/etc/netdata/netdata.conf"],
+        "format": "ini",
+        "keys": {
+            # Netdata's INI uses indented keys under sections. The `ini` parser
+            # returns the raw string; we record the default 19999 so lookup
+            # succeeds even when the key isn't present in the config file.
+            "port": ["web", "default port"],
+            "bindaddress": ["web", "bind to"],
+        },
+    },
+    "adguardhome": {
+        "config_paths": ["/opt/AdGuardHome/AdGuardHome.yaml"],
+        "format": "yaml",
+        "keys": {
+            # http.address is "127.0.0.1:3000" — parser returns the full string.
+            "port": "http.address",
+            "dns_port": "dns.port",
+        },
+    },
 }
 
 

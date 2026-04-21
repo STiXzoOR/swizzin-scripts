@@ -27,6 +27,8 @@ A collection of installer scripts for integrating additional applications into [
 | [zilean.sh](#zilean)                  | [Zilean](https://github.com/iPromKnight/zilean)              | DMM hashlist Torznab indexer for debrid content                  |
 | [nzbdav.sh](#nzbdav)                  | [NzbDav](https://github.com/nzbdav/nzbdav)                  | NZB-to-WebDAV bridge for debrid download clients                 |
 | [newtarr.sh](#newtarr)               | [Newtarr](https://github.com/plexguide/Newtarr)             | Media library search tool (ElfHosted Huntarr fork)               |
+| [netdata.sh](#netdata)                | [Netdata](https://github.com/netdata/netdata)                | Real-time performance and health monitoring (1s granularity)     |
+| [adguardhome.sh](#adguardhome)        | [AdGuard Home](https://github.com/AdguardTeam/AdGuardHome)   | Caching + ad-blocking DNS resolver (127.0.0.1:5353)              |
 | [dns-fix.sh](#dns-fix)                | -                                                            | Fix DNS issues for FlareSolverr/Byparr cookie validation         |
 | [watchdog/](#service-watchdog)        | -                                                            | Service watchdog with health checks and auto-restart             |
 | [backup/](#backup-system)             | -                                                            | BorgBackup-based backup system for any SSH borg server           |

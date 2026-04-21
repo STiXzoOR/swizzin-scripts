@@ -51,6 +51,8 @@ Each installer script follows this sequence:
 | `zilean.sh`         | DMM hashlist Torznab indexer for debrid content (Docker)     |
 | `nzbdav.sh`         | NZB-to-WebDAV bridge for debrid download clients (Docker)    |
 | `newtarr.sh`        | Media library search tool (uv + Python)                      |
+| `netdata.sh`        | Real-time monitoring via upstream kickstart (bound to 127.0.0.1) |
+| `adguardhome.sh`    | Caching ad-blocking DNS (127.0.0.1:5353, does not touch resolv.conf) |
 | `panel_helpers.sh`  | Shared panel registration utility                           |
 
 ## Shared Libraries
