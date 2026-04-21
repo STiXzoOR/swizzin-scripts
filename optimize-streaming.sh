@@ -151,10 +151,12 @@ configure_network() {
     echo_header "Network Tuning"
 
     # Write comprehensive streaming sysctl config
-    # Uses separate file from bootstrap/lib/tuning.sh (99-streaming.conf)
-    # to avoid conflicts. Loaded alphabetically, so optimizer values
-    # take precedence on overlapping keys.
-    local sysctl_file="/etc/sysctl.d/99-streaming-optimizer.conf"
+    # Uses separate file from bootstrap/lib/tuning.sh (99-streaming.conf).
+    # Name sorts AFTER 99-streaming.conf (`-` < `.` in ASCII would load us
+    # first and let bootstrap overwrite), so we use 99-zz- prefix to win.
+    local sysctl_file="/etc/sysctl.d/99-zz-streaming-optimizer.conf"
+    # Remove legacy name if present from older installs.
+    rm -f /etc/sysctl.d/99-streaming-optimizer.conf
 
     echo_info "Writing streaming sysctl configuration..."
     cat >"$sysctl_file" <<'SYSCTL'
@@ -365,10 +367,12 @@ show_status() {
     else
         echo "  Bootstrap tuning (99-streaming.conf): NOT FOUND"
     fi
-    if [[ -f /etc/sysctl.d/99-streaming-optimizer.conf ]]; then
-        echo "  Optimizer tuning (99-streaming-optimizer.conf): PRESENT"
+    if [[ -f /etc/sysctl.d/99-zz-streaming-optimizer.conf ]]; then
+        echo "  Optimizer tuning (99-zz-streaming-optimizer.conf): PRESENT"
+    elif [[ -f /etc/sysctl.d/99-streaming-optimizer.conf ]]; then
+        echo "  Optimizer tuning (legacy 99-streaming-optimizer.conf): PRESENT (will be renamed on next run)"
     else
-        echo "  Optimizer tuning (99-streaming-optimizer.conf): NOT FOUND"
+        echo "  Optimizer tuning: NOT FOUND"
     fi
 
     echo ""

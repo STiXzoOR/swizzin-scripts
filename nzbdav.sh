@@ -15,6 +15,9 @@ set -euo pipefail
 # shellcheck source=lib/nginx-utils.sh
 . "$(dirname "${BASH_SOURCE[0]}")/lib/nginx-utils.sh" 2>/dev/null || true
 
+# shellcheck source=lib/apt-utils.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/apt-utils.sh" 2>/dev/null || true
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PANEL_HELPER_CACHE="/opt/swizzin-extras/panel_helpers.sh"
 
@@ -393,11 +396,13 @@ ExecStart=/usr/bin/rclone mount nzbdav: ${app_mount_point} \
     --links \
     --use-cookies \
     --vfs-cache-mode full \
-    --buffer-size 0M \
+    --buffer-size 32M \
     --vfs-read-ahead 512M \
     --vfs-cache-max-size 20G \
     --vfs-cache-max-age 24h \
-    --dir-cache-time 20s
+    --dir-cache-time 5m \
+    --attr-timeout 1m \
+    --poll-interval 15s
 ExecStop=/bin/fusermount -uz ${app_mount_point}
 Restart=on-failure
 RestartSec=10
@@ -738,10 +743,14 @@ _update_nzbdav() {
 
     echo_info "Updating ${app_pretty}..."
 
-    # Back up config before update
+    # Back up config before update (keep only the newest backup)
     local backup_dir="${app_configdir}.bak.$(date +%Y%m%d%H%M%S)"
-    cp -a "${app_configdir}" "$backup_dir" 2>/dev/null && \
-        echo_info "Config backed up to ${backup_dir}" || true
+    if cp -a "${app_configdir}" "$backup_dir" 2>/dev/null; then
+        echo_info "Config backed up to ${backup_dir}"
+        find "$(dirname "${app_configdir}")" -maxdepth 1 -type d \
+            -name "$(basename "${app_configdir}").bak.*" \
+            ! -path "${backup_dir}" -exec rm -rf {} + 2>/dev/null || true
+    fi
 
     # Save rclone mount state before update
     local rclone_was_active
