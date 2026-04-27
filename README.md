@@ -29,6 +29,7 @@ A collection of installer scripts for integrating additional applications into [
 | [newtarr.sh](#newtarr)               | [Newtarr](https://github.com/plexguide/Newtarr)             | Media library search tool (ElfHosted Huntarr fork)               |
 | [netdata.sh](#netdata)                | [Netdata](https://github.com/netdata/netdata)                | Real-time performance and health monitoring (1s granularity)     |
 | [adguardhome.sh](#adguardhome)        | [AdGuard Home](https://github.com/AdguardTeam/AdGuardHome)   | Caching + ad-blocking DNS resolver (127.0.0.1:5353)              |
+| [mdblist-filter-proxy.sh](#mdblist-filter-proxy) | -                                                 | Local proxy that strips null tvdbid/tmdbid from mdblist.com lists so Sonarr CustomImport / Radarr lists don't crash |
 | [dns-fix.sh](#dns-fix)                | -                                                            | Fix DNS issues for FlareSolverr/Byparr cookie validation         |
 | [watchdog/](#service-watchdog)        | -                                                            | Service watchdog with health checks and auto-restart             |
 | [backup/](#backup-system)             | -                                                            | BorgBackup-based backup system for any SSH borg server           |
@@ -556,6 +557,49 @@ bash lingarr.sh --remove --force
 ---
 
 ## Utility Scripts
+
+### MDBList Filter Proxy
+
+Local HTTP proxy that strips `tvdbid: null` / `tmdbid: null` from mdblist.com list payloads before they reach Sonarr/Radarr. Sonarr's `CustomImport` deserializes those numeric IDs as `System.Int32` and fails the **entire list** the moment it sees a null, surfacing as:
+
+```
+Error converting value {null} to type 'System.Int32'
+```
+
+The proxy fetches upstream, removes null int fields per item (Sonarr then ignores them rather than crashing), and drops items with no usable id (no tvdbid/tmdbid/imdb_id at all).
+
+```bash
+# Install + enable + start (listens on 127.0.0.1:11550 by default)
+bash mdblist-filter-proxy.sh
+
+# Repoint every existing [mdblist-auto] list in Sonarr & Radarr at the proxy
+bash mdblist-filter-proxy.sh --rewrite-arr
+
+# Status / logs
+bash mdblist-filter-proxy.sh --status
+
+# Roll lists back to mdblist.com (do this BEFORE removing the proxy)
+bash mdblist-filter-proxy.sh --rewrite-arr-undo
+
+# Remove
+bash mdblist-filter-proxy.sh --remove
+```
+
+**What gets installed:**
+
+- `/usr/local/bin/mdblist-filter-proxy.py` — Python stdlib HTTP server
+- `/etc/systemd/system/mdblist-filter-proxy.service` — runs as the *arr user
+- Systemd hardening (ProtectSystem=strict, PrivateTmp, NoNewPrivileges, etc.)
+
+**Override defaults via env (set before install):**
+
+- `MDBLIST_PROXY_HOST` — bind host (default `127.0.0.1`)
+- `MDBLIST_PROXY_PORT` — bind port (default `11550`)
+- `MDBLIST_PROXY_TTL` — response cache seconds (default `300`)
+
+**To use a list manually:** replace `https://mdblist.com` with `http://127.0.0.1:11550` in the list URL field of any Sonarr `CustomImport` or Radarr `RadarrListImport` import list.
+
+---
 
 ### DNS Fix
 

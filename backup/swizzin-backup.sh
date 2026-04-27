@@ -28,8 +28,8 @@
 # STiXzoOR custom apps:
 #   Multi-instance sonarr/radarr, zurg, decypharr, notifiarr, byparr,
 #   flaresolverr, huntarr, subgen, lingarr, cleanuparr, seerr, overseerr, jellyseerr,
-#   mdblist-sync, mdblistarr, stremthru, mediafusion, zilean, nzbdav, newtarr,
-#   swaparr
+#   mdblist-sync, mdblist-filter-proxy, mdblistarr, stremthru, mediafusion,
+#   zilean, nzbdav, newtarr, swaparr
 #===============================================================================
 
 set -euo pipefail
@@ -170,6 +170,7 @@ declare -A SERVICE_TYPES=(
 
     # MDBList Integration
     ["mdblistarr"]="system"
+    ["mdblist-filter-proxy"]="system"
 
     # Real-Debrid
     ["zurg"]="system"
@@ -221,7 +222,7 @@ SERVICE_STOP_ORDER=(
     flood deluge deluged deluge-web qbittorrent rtorrent transmission
     nzbget sabnzbd
     # Utilities
-    filebrowser syncthing pyload netdata adguardhome subgen lingarr libretranslate mdblistarr newtarr autopulse checkrr posterizarr tracearr
+    filebrowser syncthing pyload netdata adguardhome subgen lingarr libretranslate mdblistarr mdblist-filter-proxy newtarr autopulse checkrr posterizarr tracearr
     # Real-Debrid (stop last, start first)
     zurg decypharr
     # Never stop: rclone-zurg, organizr, nextcloud, nginx, panel
@@ -238,6 +239,7 @@ declare -A SERVICE_STOP_CRITICAL=(
     ["emby"]=1 ["jellyfin"]=1
     ["huntarr"]=1
     ["mdblistarr"]=1
+    ["mdblist-filter-proxy"]=1
     ["stremthru"]=1 ["autopulse"]=1
     ["nzbdav"]=1
     ["rclone-nzbdav"]=1

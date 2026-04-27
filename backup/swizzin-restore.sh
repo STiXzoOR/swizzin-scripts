@@ -157,6 +157,7 @@ declare -A SERVICE_TYPES=(
     ["cleanuparr"]="system" ["swaparr"]="system" ["byparr"]="system" ["flaresolverr"]="system"
     ["subgen"]="system" ["lingarr"]="system" ["libretranslate"]="system"
     ["mdblistarr"]="system"
+    ["mdblist-filter-proxy"]="system"
     ["autopulse"]="system"
     ["stremthru"]="system" ["mediafusion"]="system" ["zilean"]="system"
     ["nzbdav"]="system" ["newtarr"]="system"
