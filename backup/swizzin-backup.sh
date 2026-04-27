@@ -657,19 +657,60 @@ start_services() {
     rm -f "$STOPPED_SERVICES_FILE"
     sleep 10
 
+    # Retry pass: some services (notably emby-server, radarr-4k, nzbdav) can
+    # transiently fail their first post-backup start with EADDRINUSE because a
+    # client process (autopulse, decypharr, NzbWebDAV) still holds the port
+    # in CLOSE_WAIT/FIN_WAIT_2 from before the stop. Without Restart=on-failure
+    # on the unit they would stay down silently.
+    # We re-check each stopped service and retry up to 3 times with backoff.
+    local not_running=()
+    for service in "${services[@]}"; do
+        is_service_active "$service" || not_running+=("$service")
+    done
+
+    if [[ ${#not_running[@]} -gt 0 ]]; then
+        log "Retry pass: ${#not_running[@]} service(s) not running after first start"
+        local attempt
+        for attempt in 1 2 3; do
+            local still_down=()
+            for service in "${not_running[@]}"; do
+                is_service_active "$service" && continue
+                log "  Retry $attempt/3: $service"
+                systemctl reset-failed "$service" 2>/dev/null || true
+                systemctl start "$service" 2>/dev/null || true
+                still_down+=("$service")
+            done
+            not_running=("${still_down[@]}")
+            [[ ${#not_running[@]} -eq 0 ]] && break
+            sleep $((attempt * 10))
+            # Re-filter: anything that came up during the sleep is no longer down
+            local check_again=()
+            for service in "${not_running[@]}"; do
+                is_service_active "$service" || check_again+=("$service")
+            done
+            not_running=("${check_again[@]}")
+            [[ ${#not_running[@]} -eq 0 ]] && break
+        done
+    fi
+
     log "Service status:"
+    local final_down=()
     for service in "${services[@]}"; do
         if is_service_active "$service"; then
             log "  Running: $service"
         else
             log "  NOT running: $service"
+            final_down+=("$service")
         fi
     done
 
-    if [[ ${#failed[@]} -gt 0 ]]; then
-        log "WARNING: Failed to start: ${failed[*]}"
+    if [[ ${#failed[@]} -gt 0 || ${#final_down[@]} -gt 0 ]]; then
+        # Merge initial start failures with services that never came up after retries.
+        local all_failed
+        all_failed=$(printf '%s\n' "${failed[@]}" "${final_down[@]}" | sort -u | tr '\n' ' ')
+        log "WARNING: Failed to start: $all_failed"
         _notify "Borg Backup - Service Restart Failed" \
-            "Failed to restart services on $(hostname): ${failed[*]}" "error"
+            "Failed to restart services on $(hostname): $all_failed" "error"
     fi
 }
 
